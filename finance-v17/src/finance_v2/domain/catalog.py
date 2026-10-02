@@ -43,10 +43,25 @@ def create_account(connection: sqlite3.Connection, name: str) -> int:
     with immediate_transaction(connection):
         return connection.execute("INSERT INTO accounts(name,active) VALUES(?,1)", (name.strip(),)).lastrowid
 
+def create_account_idempotent(connection: sqlite3.Connection, *, name: str, client_id: str, idempotency_key: str, clock: Clock) -> tuple[int, bool]:
+    def effect():
+        if not name.strip(): raise ValidationError("name cannot be blank")
+        resource_id=connection.execute("INSERT INTO accounts(name,active) VALUES(?,1)", (name.strip(),)).lastrowid
+        return "ACCOUNT",resource_id,{"id":resource_id}
+    response,replayed=execute_financial(connection,client_id=client_id,operation="create_account",key=idempotency_key,payload={"name":name.strip()},clock=clock,effect=effect)
+    return int(response.get("id",response.get("resource_id"))),replayed
+
 
 def create_category(connection: sqlite3.Connection, name: str) -> int:
     with immediate_transaction(connection):
         return connection.execute("INSERT INTO categories(name,normalized_name,active) VALUES(?,?,1)", (name.strip(), normalize_name(name))).lastrowid
+
+def create_category_idempotent(connection: sqlite3.Connection, *, name: str, client_id: str, idempotency_key: str, clock: Clock) -> tuple[int, bool]:
+    def effect():
+        resource_id=connection.execute("INSERT INTO categories(name,normalized_name,active) VALUES(?,?,1)", (name.strip(),normalize_name(name))).lastrowid
+        return "CATEGORY",resource_id,{"id":resource_id}
+    response,replayed=execute_financial(connection,client_id=client_id,operation="create_category",key=idempotency_key,payload={"name":name.strip()},clock=clock,effect=effect)
+    return int(response.get("id",response.get("resource_id"))),replayed
 
 
 def create_tag(connection: sqlite3.Connection, name: str) -> int:
@@ -81,6 +96,20 @@ def create_card(connection: sqlite3.Connection, name: str, payment_mode: str, pa
             (card_id, effective_from.isoformat(), closing_day, due_day),
         )
         return card_id
+
+def create_card_idempotent(connection: sqlite3.Connection, *, name: str, payment_mode: str, payment_account_id: int | None, effective_from: date, closing_day: int, due_day: int, client_id: str, idempotency_key: str, clock: Clock) -> tuple[int, bool]:
+    def effect():
+        if not name.strip() or payment_mode not in {"MANUAL","AUTO_DEBIT"}: raise ValidationError("invalid card")
+        if payment_mode=="AUTO_DEBIT":
+            if payment_account_id is None: raise ValidationError("auto debit requires account")
+            require_active(connection,"accounts",payment_account_id)
+        elif payment_account_id is not None: raise ValidationError("manual card cannot have payment account")
+        card_id=connection.execute("INSERT INTO cards(name,active,invoice_payment_mode,invoice_payment_account_id) VALUES(?,1,?,?)",(name.strip(),payment_mode,payment_account_id)).lastrowid
+        connection.execute("INSERT INTO card_calendar_versions(card_id,effective_from,effective_to,closing_day,due_day) VALUES(?,?,NULL,?,?)",(card_id,effective_from.isoformat(),closing_day,due_day))
+        return "CARD",card_id,{"id":card_id}
+    payload={"name":name.strip(),"payment_mode":payment_mode,"payment_account_id":payment_account_id,"effective_from":effective_from.isoformat(),"closing_day":closing_day,"due_day":due_day}
+    response,replayed=execute_financial(connection,client_id=client_id,operation="create_card",key=idempotency_key,payload=payload,clock=clock,effect=effect)
+    return int(response.get("id",response.get("resource_id"))),replayed
 
 
 def edit_card(connection: sqlite3.Connection, card_id: int, *, name: str | None = None,

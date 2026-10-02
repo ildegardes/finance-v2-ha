@@ -11,7 +11,7 @@ from urllib.parse import parse_qs
 
 from .config import Settings
 from .db import connect, database_is_healthy
-from .domain.catalog import add_card_calendar_version_idempotent, create_account, create_card, create_category, create_tag, edit_card, set_active
+from .domain.catalog import add_card_calendar_version_idempotent, create_account, create_account_idempotent, create_card, create_card_idempotent, create_category, create_category_idempotent, create_tag, edit_card, set_active
 from .domain.auto_debit import reactivate_auto_settlement_idempotent, reverse_auto_payment_idempotent
 from .domain.clock import SystemClock
 from .domain.errors import DomainError, InactiveAccount, InvalidState, NewDueDateRequired, NotFound, ValidationError
@@ -93,6 +93,8 @@ class Application:
     start_response("303 See Other",[("Location","/app/"),("Cache-Control","no-store")]);return [b""]
    if path.startswith("/app"):
     return self.app_request(environ,start_response,rid)
+   if path=="/mcp" and method=="POST":
+    return self.mcp_request(environ,start_response,rid)
    if environ.get("REQUEST_METHOD")=="OPTIONS":
     if origin not in self.settings.cors_origins:raise HttpError(403,"CORS_FORBIDDEN","origin is not allowed")
     return self.respond(start_response,204,{},rid,origin)
@@ -137,6 +139,89 @@ class Application:
   for configured,ident in ((self.settings.ui_token,Identity("UI:local","UI")),(self.settings.scheduler_token,Identity("SCHEDULER:internal","SCHEDULER")),(self.settings.hermes_token,Identity("CLIENT:hermes","EXTERNAL_CLIENT",capabilities=frozenset({"finance:read"})))):
    if configured and hmac.compare_digest(token,configured):return ident
   raise HttpError(401,"UNAUTHENTICATED","valid Bearer token required")
+ def mcp_request(self,e,start,rid):
+  try:
+   identity=self.identity(e,Route("POST","/mcp","mcp"))
+   if identity.role!="EXTERNAL_CLIENT":raise HttpError(403,"FORBIDDEN","MCP requires an external client")
+   request=self.body(e);method=request.get("method");request_id=request.get("id")
+   if not isinstance(method,str):raise HttpError(400,"INVALID_JSON","MCP method is required")
+   if method=="initialize":
+    result={"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":False}},"serverInfo":{"name":"Finance V2","version":"0.1.6"}}
+   elif method=="notifications/initialized":
+    return self.mcp_response(start,202,None,rid,e)
+   elif method=="tools/list":
+    result={"tools":self.mcp_tools()}
+   elif method=="tools/call":
+    params=request.get("params") or {};name=params.get("name");arguments=params.get("arguments") or {}
+    result=self.mcp_call(name,arguments,identity)
+   else:
+    raise HttpError(400,"MCP_METHOD_NOT_FOUND",f"unsupported MCP method: {method}")
+   return self.mcp_response(start,200,{"jsonrpc":"2.0","id":request_id,"result":result},rid,e)
+  except HttpError as exc:
+   return self.mcp_response(start,exc.status,{"jsonrpc":"2.0","id":request_id if 'request_id' in locals() else None,"error":{"code":exc.code,"message":exc.message}},rid,e)
+  except (IdempotencyConflict,InvalidIdempotencyKey,DomainError,NotFound) as exc:
+   code=getattr(exc,"code","DOMAIN_ERROR")
+   if "same scoped key" in str(exc) or "permanent key payload conflict" in str(exc):code="IDEMPOTENCY_CONFLICT"
+   return self.mcp_response(start,409,{"jsonrpc":"2.0","id":request_id if 'request_id' in locals() else None,"error":{"code":code,"message":str(exc)}},rid,e)
+  except Exception:
+   LOGGER.exception("MCP request failed request_id=%s",rid)
+   return self.mcp_response(start,500,{"jsonrpc":"2.0","id":request_id if 'request_id' in locals() else None,"error":{"code":"INTERNAL_ERROR","message":"internal server error"}},rid,e)
+ def mcp_tools(self):
+  read={"type":"object","additionalProperties":False}
+  expenses={"type":"object","additionalProperties":False,"properties":{"page":{"type":"integer","minimum":1},"page_size":{"type":"integer","enum":[25,50,100]},"search":{"type":"string"}}}
+  create={"type":"object","additionalProperties":False,"required":["idempotency_key","description","amount_cents","planned_payment_method","category_id"],"properties":{"idempotency_key":{"type":"string","minLength":16,"maxLength":128},"description":{"type":"string","minLength":1},"amount_cents":{"type":"integer","minimum":1},"expense_date":{"type":"string","format":"date"},"due_date":{"type":["string","null"],"format":"date"},"planned_payment_method":{"type":"string","enum":["CREDIT_CARD","AUTO_DEBIT","PIX","BANK_TRANSFER","CASH","BANK_SLIP","DEBIT"]},"category_id":{"type":"integer","minimum":1},"account_id":{"type":["integer","null"],"minimum":1},"card_id":{"type":["integer","null"],"minimum":1},"notes":{"type":["string","null"]},"tag_ids":{"type":"array","items":{"type":"integer","minimum":1}}}}
+  return [
+   {"name":"finance_get_context","description":"Return Finance V2 context and authorized capabilities.","inputSchema":read,"annotations":{"readOnlyHint":True,"destructiveHint":False,"idempotentHint":True}},
+   {"name":"finance_get_summary","description":"Return the current financial dashboard summary.","inputSchema":read,"annotations":{"readOnlyHint":True,"destructiveHint":False,"idempotentHint":True}},
+   {"name":"finance_list_categories","description":"List registered categories.","inputSchema":read,"annotations":{"readOnlyHint":True,"destructiveHint":False,"idempotentHint":True}},
+   {"name":"finance_list_accounts","description":"List registered accounts.","inputSchema":read,"annotations":{"readOnlyHint":True,"destructiveHint":False,"idempotentHint":True}},
+   {"name":"finance_list_cards","description":"List registered cards.","inputSchema":read,"annotations":{"readOnlyHint":True,"destructiveHint":False,"idempotentHint":True}},
+   {"name":"finance_list_expenses","description":"List expenses with optional pagination and search.","inputSchema":expenses,"annotations":{"readOnlyHint":True,"destructiveHint":False,"idempotentHint":True}},
+   {"name":"finance_create_expense","description":"Create an expense using permanent idempotency.","inputSchema":create,"annotations":{"readOnlyHint":False,"destructiveHint":False,"idempotentHint":True}},
+   {"name":"finance_create_category","description":"Create a category with permanent replay protection.","inputSchema":{"type":"object","additionalProperties":False,"required":["idempotency_key","name"],"properties":{"idempotency_key":{"type":"string","minLength":16,"maxLength":128},"name":{"type":"string","minLength":1}}},"annotations":{"readOnlyHint":False,"destructiveHint":False,"idempotentHint":True}},
+   {"name":"finance_create_account","description":"Create an account with permanent replay protection.","inputSchema":{"type":"object","additionalProperties":False,"required":["idempotency_key","name"],"properties":{"idempotency_key":{"type":"string","minLength":16,"maxLength":128},"name":{"type":"string","minLength":1}}},"annotations":{"readOnlyHint":False,"destructiveHint":False,"idempotentHint":True}},
+   {"name":"finance_create_card","description":"Create a card and its initial calendar with permanent replay protection.","inputSchema":{"type":"object","additionalProperties":False,"required":["idempotency_key","name","payment_mode","closing_day","due_day"],"properties":{"idempotency_key":{"type":"string","minLength":16,"maxLength":128},"name":{"type":"string","minLength":1},"payment_mode":{"type":"string","enum":["MANUAL","AUTO_DEBIT"]},"payment_account_id":{"type":["integer","null"],"minimum":1},"effective_from":{"type":"string","format":"date"},"closing_day":{"type":"integer","minimum":1,"maximum":31},"due_day":{"type":"integer","minimum":1,"maximum":31}}},"annotations":{"readOnlyHint":False,"destructiveHint":False,"idempotentHint":True}}
+  ]
+ def mcp_call(self,name,arguments,identity):
+  if not isinstance(name,str):raise HttpError(400,"VALIDATION_ERROR","tool name is required")
+  names={item["name"] for item in self.mcp_tools()}
+  if name not in names:raise HttpError(404,"NOT_FOUND","tool not found")
+  write=name in {"finance_create_expense","finance_create_category","finance_create_account","finance_create_card"}
+  if write and "finance:write" not in identity.capabilities:raise HttpError(403,"FORBIDDEN","identity lacks finance:write capability")
+  if not write and "finance:read" not in identity.capabilities:raise HttpError(403,"FORBIDDEN","identity lacks finance:read capability")
+  if name=="finance_get_context":payload,status=self.dispatch(Route("GET","/api/v2/assistant/context","assistant_context"),{},identity,{}, {},None)
+  elif name=="finance_get_summary":payload,status=self.dispatch(Route("GET","/api/v2/assistant/dashboard","assistant_dashboard"),{},identity,{}, {},None)
+  elif name.startswith("finance_list_") and name!="finance_list_expenses":
+   payload,status=self.dispatch(Route("GET","/api/v2/catalogs","catalogs"),{},identity,{}, {},None);payload={name.removeprefix("finance_list_"):payload.get(name.removeprefix("finance_list_"),[])}
+  elif name=="finance_list_expenses":
+   q={k:[str(v)] for k,v in arguments.items() if k in {"page","page_size","search"}}
+   payload,status=self.dispatch(Route("GET","/api/v2/assistant/expenses","assistant_expense_list"),{},identity,{},q,None)
+  elif name=="finance_create_expense":
+   key=arguments.get("idempotency_key");body={k:v for k,v in arguments.items() if k!="idempotency_key"}
+   payload,status=self.dispatch(Route("POST","/api/v2/assistant/expenses","assistant_expense_create",True,True),{},identity,body,{},key)
+  else:
+   key=arguments.get("idempotency_key");body={k:v for k,v in arguments.items() if k!="idempotency_key"}
+   c=self.db()
+   try:
+    if name=="finance_create_category":resource_id,replayed=create_category_idempotent(c,name=str(body.get("name","")),client_id=identity.client_id,idempotency_key=key,clock=self.clock)
+    elif name=="finance_create_account":resource_id,replayed=create_account_idempotent(c,name=str(body.get("name","")),client_id=identity.client_id,idempotency_key=key,clock=self.clock)
+    else:resource_id,replayed=create_card_idempotent(c,name=str(body.get("name","")),payment_mode=body.get("payment_mode"),payment_account_id=body.get("payment_account_id"),effective_from=civil(body.get("effective_from"),"effective_from",self.clock.today()),closing_day=integer(body.get("closing_day"),"closing_day",True),due_day=integer(body.get("due_day"),"due_day",True),client_id=identity.client_id,idempotency_key=key,clock=self.clock)
+    payload={"id":resource_id,"replayed":replayed};status=200 if replayed else 201
+   finally:c.close()
+   if status>=400:
+    error=payload.get("error",{})
+    code=error.get("code","MCP_ERROR")
+    if code=="DOMAIN_ERROR" and "same scoped key" in error.get("message",""):code="IDEMPOTENCY_CONFLICT"
+    raise HttpError(status,code,error.get("message","tool failed"))
+  return {"content":[{"type":"text","text":json.dumps(payload,ensure_ascii=False,separators=(",",":"),default=str)}],"structuredContent":payload,"isError":False}
+ def mcp_response(self,start,status,payload,rid,e):
+  if status==202:return self.respond(start,202,{},rid)
+  raw=json.dumps(payload,ensure_ascii=False,separators=(",",":"),default=str).encode()
+  if "text/event-stream" in e.get("HTTP_ACCEPT",""):
+   body=b"event: message\ndata: "+raw+b"\n\n";headers=[("Content-Type","text/event-stream"),("Content-Length",str(len(body))),("Cache-Control","no-cache")]
+  else: body=raw;headers=[("Content-Type","application/json"),("Content-Length",str(len(body))),("Cache-Control","no-store")]
+  headers.append(("Mcp-Session-Id",e.get("HTTP_MCP_SESSION_ID") or secrets.token_urlsafe(18)))
+  start(f"{status} OK",headers);return [body]
  def session(self,e):
   if not self.settings.ui_token:return None
   cookie=SimpleCookie();cookie.load(e.get("HTTP_COOKIE",""));m=cookie.get("finance_v2_session")
@@ -611,6 +696,6 @@ class Application:
   if isinstance(payload,dict):payload={**payload,"request_id":rid}
   raw=b"" if status==204 else json.dumps(payload,ensure_ascii=False,separators=(",",":"),default=str).encode();headers=[("Content-Type","application/json; charset=utf-8"),("Content-Length",str(len(raw))),("Cache-Control","no-store"),("X-Content-Type-Options","nosniff")]
   if origin in self.settings.cors_origins:headers += [("Access-Control-Allow-Origin",origin),("Vary","Origin"),("Access-Control-Allow-Headers","Authorization, Content-Type, Idempotency-Key, X-Request-ID"),("Access-Control-Allow-Methods","GET, POST, PATCH, OPTIONS")]
-  phrase={200:"OK",201:"Created",204:"No Content",400:"Bad Request",401:"Unauthorized",403:"Forbidden",404:"Not Found",409:"Conflict",413:"Payload Too Large",422:"Unprocessable Entity",500:"Internal Server Error",503:"Service Unavailable"}.get(status,"Error");start(f"{status} {phrase}",headers);return [raw]
+  phrase={200:"OK",201:"Created",202:"Accepted",204:"No Content",400:"Bad Request",401:"Unauthorized",403:"Forbidden",404:"Not Found",409:"Conflict",413:"Payload Too Large",422:"Unprocessable Entity",500:"Internal Server Error",503:"Service Unavailable"}.get(status,"Error");start(f"{status} {phrase}",headers);return [raw]
 
 def create_app(settings=None,clock=None):return Application(settings or Settings.from_env(),clock)
