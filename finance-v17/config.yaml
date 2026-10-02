@@ -1,5 +1,5 @@
 name: Finance V17
-version: "0.1.4"
+version: "0.1.5"
 slug: finance_v17
 description: Finance V17 local API and scheduler
 url: https://github.com/ildegardes/finance-v2-ha
@@ -16,9 +16,9 @@ ports_description:
 options:
   timezone: America/Sao_Paulo
   ui_token: ""
-  external_clients: {}
+  external_clients: "{}"
 schema:
   timezone: str
   ui_token: password
-  external_clients: map
+  external_clients: str
 stage: stable

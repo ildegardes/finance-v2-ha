@@ -3,7 +3,7 @@ set -eu
 if [ ! -f /data/options.json ]; then echo 'options.json is required' >&2; exit 1; fi
 APP_TIMEZONE=$(python -c 'import json; print(json.load(open("/data/options.json", encoding="utf-8")).get("timezone", "America/Sao_Paulo"))')
 FINANCE_V2_UI_TOKEN=$(python -c 'import json; print(json.load(open("/data/options.json", encoding="utf-8")).get("ui_token", ""))')
-FINANCE_V2_EXTERNAL_CLIENTS_JSON=$(python -c 'import json; print(json.dumps(json.load(open("/data/options.json", encoding="utf-8")).get("external_clients", {}), separators=(",", ":")))')
+FINANCE_V2_EXTERNAL_CLIENTS_JSON=$(python -c 'import json; value=json.load(open("/data/options.json", encoding="utf-8")).get("external_clients", "{}"); print(value if isinstance(value, str) else json.dumps(value, separators=(",", ":")))')
 : "${APP_TIMEZONE:=America/Sao_Paulo}"
 : "${FINANCE_V2_UI_TOKEN:?ui_token option is required}"
 export APP_TIMEZONE FINANCE_V2_UI_TOKEN FINANCE_V2_EXTERNAL_CLIENTS_JSON
