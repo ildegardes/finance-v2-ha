@@ -10,6 +10,9 @@ from typing import Callable, Iterable
 from urllib.parse import parse_qs
 
 from .config import Settings
+from .authorization import missing_capabilities
+from .oauth import AUTHORIZATION_METADATA_PATH, RESOURCE_METADATA_PATH, RESOURCE_METADATA_URL, protected_resource_metadata, authorization_server_contract, bearer_challenge
+from .oauth_server import OAuthService, TOKEN_PREFIX
 from .db import connect, database_is_healthy
 from .domain.catalog import add_card_calendar_version_idempotent, create_account, create_account_idempotent, create_card, create_card_idempotent, create_category, create_category_idempotent, create_tag, edit_card, set_active
 from .domain.auto_debit import reactivate_auto_settlement_idempotent, reverse_auto_payment_idempotent
@@ -84,16 +87,22 @@ def query_positive_int(value,field):
     return int(value)
 
 class Application:
- def __init__(self,settings,clock=None):self.settings=settings;self.clock=clock or SystemClock(settings.timezone)
+ def __init__(self,settings,clock=None):self.settings=settings;self.clock=clock or SystemClock(settings.timezone);self.oauth=OAuthService(settings,self.clock)
  def __call__(self,environ,start_response)->Iterable[bytes]:
   rid=environ.get("HTTP_X_REQUEST_ID","local");origin=environ.get("HTTP_ORIGIN")
   try:
    path=environ.get("PATH_INFO","");method=environ.get("REQUEST_METHOD","GET")
+   if method=="GET" and path in {RESOURCE_METADATA_PATH,"/.well-known/oauth-protected-resource"}:
+    return self.json_document_response(start_response,200,protected_resource_metadata())
+   if method=="GET" and path==AUTHORIZATION_METADATA_PATH:
+    return self.json_document_response(start_response,200,authorization_server_contract())
+   if path in {"/oauth/authorize","/oauth/token"}:
+    return self.oauth.http(environ,start_response)
    if path=="/" and method=="GET":
     start_response("303 See Other",[("Location","/app/"),("Cache-Control","no-store")]);return [b""]
    if path.startswith("/app"):
     return self.app_request(environ,start_response,rid)
-   if path=="/mcp" and method=="POST":
+   if path=="/mcp" and method in {"POST","GET"}:
     return self.mcp_request(environ,start_response,rid)
    if environ.get("REQUEST_METHOD")=="OPTIONS":
     if origin not in self.settings.cors_origins:raise HttpError(403,"CORS_FORBIDDEN","origin is not allowed")
@@ -102,9 +111,8 @@ class Application:
    assistant_operation=route.operation.startswith("assistant_")
    body=self.body(environ);key=environ.get("HTTP_IDEMPOTENCY_KEY")
    if route.idem and key is None:raise HttpError(400,"IDEMPOTENCY_KEY_REQUIRED","Idempotency-Key is required")
-   if identity.role=="EXTERNAL_CLIENT" and "finance:read" not in identity.capabilities:raise HttpError(403,"FORBIDDEN","identity lacks finance:read capability")
+   if identity.role=="EXTERNAL_CLIENT":self.require_capabilities(identity,write=assistant_operation and route.write)
    if assistant_operation and identity.role!="EXTERNAL_CLIENT":raise HttpError(403,"FORBIDDEN","assistant routes require an external client")
-   if assistant_operation and route.write and "finance:write" not in identity.capabilities:raise HttpError(403,"FORBIDDEN","identity lacks finance:write capability")
    if route.write and environ.get("finance_v2.cookie_auth") and environ.get("HTTP_X_CSRF_TOKEN")!=environ.get("finance_v2.csrf"):raise HttpError(403,"CSRF_INVALID","CSRF token is missing or invalid")
    if route.write and not (assistant_operation and identity.role=="EXTERNAL_CLIENT") and identity.role!="UI":raise HttpError(403,"FORBIDDEN","identity cannot execute this operation")
    payload,status=self.dispatch(route,params,identity,body,parse_qs(environ.get("QUERY_STRING","")),key)
@@ -127,11 +135,18 @@ class Application:
   if r.operation in {"health","openapi"}:return Identity("PUBLIC","PUBLIC")
   h=e.get("HTTP_AUTHORIZATION","")
   if not h.startswith("Bearer "):
+   if h:raise HttpError(401,"UNAUTHENTICATED","invalid authorization header")
    session=self.session(e)
    if session:
     e["finance_v2.cookie_auth"]=True;e["finance_v2.csrf"]=session;return Identity("UI:local","UI",session)
    raise HttpError(401,"UNAUTHENTICATED","valid session or Bearer token required")
   token=h[7:]
+  if not token or len(token)>4096 or any(ord(c)<=32 or ord(c)>=127 for c in token):raise HttpError(401,"UNAUTHENTICATED","invalid Bearer token")
+  if token.startswith(TOKEN_PREFIX):
+   resolved=self.oauth.resolve(token) if r.operation=="mcp" else None
+   if resolved is None:raise HttpError(401,"UNAUTHENTICATED","invalid OAuth token")
+   client_id,scopes=resolved
+   return Identity(client_id,"EXTERNAL_CLIENT",capabilities=scopes)
   for client in self.settings.external_clients:
    if not client.enabled:continue
    if hmac.compare_digest(token,client.token) or client.previous_token is not None and hmac.compare_digest(token,client.previous_token):
@@ -143,16 +158,21 @@ class Application:
   try:
    identity=self.identity(e,Route("POST","/mcp","mcp"))
    if identity.role!="EXTERNAL_CLIENT":raise HttpError(403,"FORBIDDEN","MCP requires an external client")
+   if e.get("REQUEST_METHOD")=="GET":
+    # No standalone SSE listener in the existing transport. Authentication
+    # still runs first so GET probes can discover the protected resource.
+    return self.mcp_response(start,405,{"error":"GET transport not supported"},rid,e)
    request=self.body(e);method=request.get("method");request_id=request.get("id")
    if not isinstance(method,str):raise HttpError(400,"INVALID_JSON","MCP method is required")
    if method=="initialize":
-    result={"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":False}},"serverInfo":{"name":"Finance V2","version":"0.1.6"}}
+    result={"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":False}},"serverInfo":{"name":"Finance V2","version":"0.1.7"}}
    elif method=="notifications/initialized":
     return self.mcp_response(start,202,None,rid,e)
    elif method=="tools/list":
     result={"tools":self.mcp_tools()}
    elif method=="tools/call":
     params=request.get("params") or {};name=params.get("name");arguments=params.get("arguments") or {}
+    e["finance_v2.required_scopes"]="finance:read finance:write" if isinstance(name,str) and name.startswith("finance_create_") else "finance:read"
     result=self.mcp_call(name,arguments,identity)
    else:
     raise HttpError(400,"MCP_METHOD_NOT_FOUND",f"unsupported MCP method: {method}")
@@ -187,8 +207,7 @@ class Application:
   names={item["name"] for item in self.mcp_tools()}
   if name not in names:raise HttpError(404,"NOT_FOUND","tool not found")
   write=name in {"finance_create_expense","finance_create_category","finance_create_account","finance_create_card"}
-  if write and "finance:write" not in identity.capabilities:raise HttpError(403,"FORBIDDEN","identity lacks finance:write capability")
-  if not write and "finance:read" not in identity.capabilities:raise HttpError(403,"FORBIDDEN","identity lacks finance:read capability")
+  self.require_capabilities(identity,write=write)
   if name=="finance_get_context":payload,status=self.dispatch(Route("GET","/api/v2/assistant/context","assistant_context"),{},identity,{}, {},None)
   elif name=="finance_get_summary":payload,status=self.dispatch(Route("GET","/api/v2/assistant/dashboard","assistant_dashboard"),{},identity,{}, {},None)
   elif name.startswith("finance_list_") and name!="finance_list_expenses":
@@ -214,14 +233,21 @@ class Application:
     if code=="DOMAIN_ERROR" and "same scoped key" in error.get("message",""):code="IDEMPOTENCY_CONFLICT"
     raise HttpError(status,code,error.get("message","tool failed"))
   return {"content":[{"type":"text","text":json.dumps(payload,ensure_ascii=False,separators=(",",":"),default=str)}],"structuredContent":payload,"isError":False}
+ def require_capabilities(self,identity,*,write=False):
+  missing=missing_capabilities(identity.capabilities,write=write)
+  if missing:raise HttpError(403,"FORBIDDEN","identity lacks "+" and ".join(sorted(missing))+" capability")
  def mcp_response(self,start,status,payload,rid,e):
   if status==202:return self.respond(start,202,{},rid)
   raw=json.dumps(payload,ensure_ascii=False,separators=(",",":"),default=str).encode()
   if "text/event-stream" in e.get("HTTP_ACCEPT",""):
    body=b"event: message\ndata: "+raw+b"\n\n";headers=[("Content-Type","text/event-stream"),("Content-Length",str(len(body))),("Cache-Control","no-cache")]
   else: body=raw;headers=[("Content-Type","application/json"),("Content-Length",str(len(body))),("Cache-Control","no-store")]
+  if status==401:headers.append(("WWW-Authenticate",bearer_challenge(invalid_token=bool(e.get("HTTP_AUTHORIZATION")))))
+  if status==403 and e.get("HTTP_AUTHORIZATION","").startswith("Bearer "+TOKEN_PREFIX):headers.append(("WWW-Authenticate",f'Bearer error="insufficient_scope", resource_metadata="{RESOURCE_METADATA_URL}", scope="{e.get("finance_v2.required_scopes","finance:read")}"'))
+  if status==405:headers.append(("Allow","POST"))
   headers.append(("Mcp-Session-Id",e.get("HTTP_MCP_SESSION_ID") or secrets.token_urlsafe(18)))
-  start(f"{status} OK",headers);return [body]
+  phrase={200:"OK",400:"Bad Request",401:"Unauthorized",403:"Forbidden",405:"Method Not Allowed",409:"Conflict",500:"Internal Server Error"}.get(status,"Error")
+  start(f"{status} {phrase}",headers);return [body]
  def session(self,e):
   if not self.settings.ui_token:return None
   cookie=SimpleCookie();cookie.load(e.get("HTTP_COOKIE",""));m=cookie.get("finance_v2_session")
@@ -694,6 +720,9 @@ class Application:
   return {"openapi":"3.1.0","info":{"title":"Finance V2 Assistant API","version":"1.0.0"},"paths":paths,"components":{"securitySchemes":{"bearerAuth":{"type":"http","scheme":"bearer","bearerFormat":"token"}},"schemas":{"Error":error}}}
  def respond(self,start,status,payload,rid,origin=None):
   if isinstance(payload,dict):payload={**payload,"request_id":rid}
+  return self.json_document_response(start,status,payload,origin)
+ def json_document_response(self,start,status,payload,origin=None):
+  """Serialize a protocol document without the Finance API envelope."""
   raw=b"" if status==204 else json.dumps(payload,ensure_ascii=False,separators=(",",":"),default=str).encode();headers=[("Content-Type","application/json; charset=utf-8"),("Content-Length",str(len(raw))),("Cache-Control","no-store"),("X-Content-Type-Options","nosniff")]
   if origin in self.settings.cors_origins:headers += [("Access-Control-Allow-Origin",origin),("Vary","Origin"),("Access-Control-Allow-Headers","Authorization, Content-Type, Idempotency-Key, X-Request-ID"),("Access-Control-Allow-Methods","GET, POST, PATCH, OPTIONS")]
   phrase={200:"OK",201:"Created",202:"Accepted",204:"No Content",400:"Bad Request",401:"Unauthorized",403:"Forbidden",404:"Not Found",409:"Conflict",413:"Payload Too Large",422:"Unprocessable Entity",500:"Internal Server Error",503:"Service Unavailable"}.get(status,"Error");start(f"{status} {phrase}",headers);return [raw]

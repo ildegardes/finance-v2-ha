@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 import re
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from .authorization import FINANCE_SCOPES
+from .oauth import OAuthClient
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -53,7 +55,7 @@ def _external_clients_from_env(raw: str | None) -> tuple[ExternalClientCredentia
         if not isinstance(capabilities, list) or not all(isinstance(item, str) for item in capabilities):
             raise ConfigurationError(f"external client {client_id} capabilities must be a string array")
         capability_set = frozenset(capabilities)
-        if not capability_set <= {"finance:read", "finance:write"}:
+        if not capability_set <= FINANCE_SCOPES:
             raise ConfigurationError(f"external client {client_id} has unsupported capabilities")
         for candidate in (token, previous):
             if candidate is not None:
@@ -62,6 +64,24 @@ def _external_clients_from_env(raw: str | None) -> tuple[ExternalClientCredentia
                 seen_tokens.add(candidate)
         clients.append(ExternalClientCredential(client_id, token, capability_set, enabled, previous))
     return tuple(clients)
+
+
+def _oauth_clients_from_env(raw: str | None) -> tuple[OAuthClient, ...]:
+    try:
+        payload = json.loads(raw or "{}")
+        if not isinstance(payload, dict):raise ValueError("object required")
+        clients = []
+        identities = set()
+        for client_id, value in payload.items():
+            if not isinstance(value, dict) or set(value) != {"identity_client_id", "redirect_uris"}:raise ValueError("invalid client fields")
+            if not isinstance(value["redirect_uris"], list):raise ValueError("redirect list required")
+            client = OAuthClient(client_id, value["identity_client_id"], tuple(value["redirect_uris"]))
+            if client.identity_client_id in identities:raise ValueError("duplicate internal identity")
+            identities.add(client.identity_client_id)
+            clients.append(client)
+        return tuple(clients)
+    except (ValueError, TypeError, KeyError):
+        raise ConfigurationError("invalid explicit OAuth client registry") from None
 
 
 @dataclass(frozen=True)
@@ -77,6 +97,14 @@ class Settings:
     cors_origins: tuple[str, ...] = ()
     scheduler_interval_seconds: int = 3600
     external_clients: tuple[ExternalClientCredential, ...] = ()
+    oauth_clients: tuple[OAuthClient, ...] = ()
+
+    def __post_init__(self):
+        identities=[c.identity_client_id for c in self.oauth_clients]
+        client_ids=[c.oauth_client_id for c in self.oauth_clients]
+        legacy={"CLIENT:"+c.client_id for c in self.external_clients} | {"CLIENT:hermes"}
+        if len(set(identities))!=len(identities) or len(set(client_ids))!=len(client_ids) or legacy & set(identities):
+            raise ConfigurationError("OAuth identities must be unique and separate from legacy clients")
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -115,4 +143,5 @@ class Settings:
             hermes_token=os.environ.get("FINANCE_V2_HERMES_TOKEN"),
             cors_origins=tuple(origin.strip() for origin in os.environ.get("FINANCE_V2_CORS_ORIGINS", "").split(",") if origin.strip()),
             external_clients=_external_clients_from_env(os.environ.get("FINANCE_V2_EXTERNAL_CLIENTS_JSON")),
+            oauth_clients=_oauth_clients_from_env(os.environ.get("FINANCE_V2_OAUTH_CLIENTS_JSON")),
         )

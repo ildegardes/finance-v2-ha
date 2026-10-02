@@ -33,6 +33,7 @@ MIGRATIONS = (
     Migration(4, "v17_multimethod_installments", MIGRATIONS_DIR / "004_v17_multimethod_installments.sql", "500b389c804c259e5953b7e4719e07ff543e65d0edf5d4c8ccb0b908f92620c8", True),
     Migration(5, "v17_expense_tombstone", MIGRATIONS_DIR / "005_v17_expense_tombstone.sql", "7d29c5151ad4703001f2c1f76482a48650efd2d92e8976d7b93c3c54282b2f86", True),
     Migration(6, "v17_revenue_recurrence_versions", MIGRATIONS_DIR / "006_v17_revenue_recurrence_versions.sql", "e7daa63b8b8174d416368062832efc9ef57fbd841958311b3dbd3bc4ac8fc421"),
+    Migration(7, "v17_oauth_foundation", MIGRATIONS_DIR / "007_v17_oauth_foundation.sql", "a7d135cfd7dda6f11a6d5a28317c24d7fb8b7476e73f70d3e0005bacfc5dd924"),
 )
 
 
@@ -69,6 +70,10 @@ def migrate(database_path: Path, busy_timeout_ms: int = 5000) -> list[int]:
         unknown = set(applied) - known_versions
         if unknown:
             raise MigrationError(f"database contains unknown migration versions: {sorted(unknown)}")
+        expected_history = [item.version for item in MIGRATIONS[:len(applied)]]
+        current_version = connection.execute("PRAGMA user_version").fetchone()[0]
+        if sorted(applied) != expected_history or current_version != (expected_history[-1] if expected_history else 0):
+            raise MigrationError("database version and migration history are inconsistent")
         for migration in MIGRATIONS:
             actual_hash = _digest(migration.path)
             if actual_hash != migration.expected_sha256:
@@ -127,8 +132,19 @@ def migration_status(connection: sqlite3.Connection) -> dict[str, object]:
         "expected_version": MIGRATIONS[-1].version if MIGRATIONS else 0,
         "applied_count": len(rows),
         "expected_count": expected,
-        "up_to_date": len(rows) == expected and all(
-            row["version"] == migration.version and row["sha256"] == migration.expected_sha256
+        "up_to_date": connection.execute("PRAGMA user_version").fetchone()[0] == (MIGRATIONS[-1].version if MIGRATIONS else 0) and len(rows) == expected and all(
+            row["version"] == migration.version and row["name"] == migration.name and row["sha256"] == migration.expected_sha256
             for row, migration in zip(rows, MIGRATIONS)
         ),
     }
+
+
+def require_current_schema(database_path: Path) -> None:
+    """Read-only startup gate; upgrades remain an explicit migrate operation."""
+    connection = sqlite3.connect(database_path.resolve().as_uri() + "?mode=ro", uri=True)
+    connection.row_factory = sqlite3.Row
+    try:
+        if not migration_status(connection)["up_to_date"]:
+            raise MigrationError("unsupported database schema; run explicit migration")
+    finally:
+        connection.close()
