@@ -1,0 +1,24 @@
+// Read-only human projections. Raw audit evidence remains available separately.
+export function financialDirection(kind){const incoming=String(kind).toUpperCase()==='REVENUE';return {kind:incoming?'revenue':'expense',label:incoming?'Entrada':'Saída',arrow:incoming?'↑':'↓',sign:incoming?'+':'−'};}
+export function financialAmount(kind,value,money){const d=financialDirection(kind);return `<span class="financial-flow ${d.kind}" aria-label="${d.label}: ${money(value)}">${d.sign} ${money(value)}</span>`;}
+export function errorText(error){
+ const messages={CARD_CALENDAR_NOT_COVERED:'A data da compra não está coberta pelo calendário deste cartão. Confira a vigência em Cartões.',IDEMPOTENCY_CONFLICT:'Esta solicitação já foi utilizada com dados diferentes. Atualize a tela antes de tentar novamente.',CONFLICT:'A operação não é permitida no estado atual. Confira pagamentos, proteções e vigências.',VALIDATION_ERROR:'Confira os campos informados e as regras de pagamento e vencimento.',NOT_FOUND:'O registro não foi encontrado. Atualize a tela.',FORBIDDEN:'Você não tem permissão para esta operação.'};
+ if(error?.code==='CONFLICT'&&/existing invoice/i.test(error.message||''))return 'O novo calendário conflita com uma fatura protegida existente. Escolha uma vigência posterior.';
+ if(error?.code==='CONFLICT'&&/calendar version must start/i.test(error.message||''))return 'A vigência precisa começar depois do calendário atual.';
+ return messages[error?.code]||'Não foi possível concluir a operação. Confira os dados e tente novamente.';
+}
+export function humanAudit(event,context,fmt){
+ const {money,dateBR,label}=fmt, titles={CREATE:'Cadastro criado',EDIT:'Cadastro atualizado',PAY:'Pagamento registrado',PAYMENT_CREATED:'Pagamento registrado',AUTO_PAYMENT_CREATED:'Pagamento automático registrado',PAYMENT_REVERSED:'Pagamento revertido',PAYMENT_REPLACED:'Pagamento substituído',RECEIVE:'Recebimento registrado',REVERSE:'Pagamento revertido',CANCEL:'Ocorrência cancelada',REACTIVATE:'Registro reativado',END:'Recorrência encerrada',CLOSE:'Fatura fechada',REPLACE:'Pagamento substituído',OVERRIDE_CREATED:'Ocorrência protegida',OVERRIDE_REMOVED:'Proteção removida',THIS_AND_FUTURE:'Nova versão da recorrência',CANCEL_THIS_AND_FUTURE:'Esta e futuras canceladas'};
+ let metadata={};try{metadata=JSON.parse(event.metadata_json||'{}')}catch{}
+ const occurrence=(context.occurrences||[]).find(x=>x.id===event.entity_id&&event.entity_type==='EXPENSE'),v=(context.versions||[]).find(x=>x.id===(metadata.new_version_id||metadata.version_id)),old=(context.versions||[]).find(x=>(metadata.old_version_ids||[]).includes(x.id)),catalogs=context.catalogs||{};
+ const parts=[];
+ if(v){parts.push(`Válida a partir de ${dateBR(v.effective_from)}.`);parts.push(old?`Valor alterado de ${money(old.amount_cents)} para ${money(v.amount_cents)}.`:`Valor: ${money(v.amount_cents)}.`);parts.push(`Frequência: ${label(v.frequency)}. Forma: ${label(v.planned_payment_method)}.`);if(v.base_day)parts.push(`Dia base: ${v.base_day}.`);const link=(catalogs.cards||[]).find(x=>x.id===v.card_id)||(catalogs.accounts||[]).find(x=>x.id===v.account_id),category=(catalogs.categories||[]).find(x=>x.id===v.category_id);if(link)parts.push(`Vínculo: ${link.name}.`);if(category)parts.push(`Categoria: ${category.name}.`);if(old)parts.push('Versão anterior e ocorrências protegidas preservadas.');}
+ if(context.series&&event.entity_type==='INSTALLMENT_SERIES'){parts.push(`${context.series.installment_count} parcelas; total original ${money(context.series.original_total_cents)}.`);parts.push(`Forma: ${label(context.series.payment_method)}.`);if(metadata.from_installment)parts.push(`Cancelamento a partir da parcela ${metadata.from_installment}; anteriores preservadas.`);}
+ if(occurrence)parts.push(`Ocorrência de ${dateBR(occurrence.expense_date)}: ${occurrence.description} · ${money(occurrence.amount_cents)}.`);
+ if(event.amount_cents!=null)parts.push(`Valor: ${money(event.amount_cents)}.`);
+ if(event.previous_total_cents!=null&&event.new_total_cents!=null)parts.push(`Total corrigido de ${money(event.previous_total_cents)} para ${money(event.new_total_cents)}.`);
+ if(metadata.reason||event.reason){const reason=metadata.reason||event.reason;parts.push(`Motivo: ${{SERIES_ENDED:'encerramento da série',THIS_AND_FUTURE:'alteração desta e das futuras'}[reason]||reason}.`);}
+ if(metadata.cut_date)parts.push(`A partir de ${dateBR(metadata.cut_date)}.`);
+ if(!parts.length)parts.push(event.event_type==='CREATE'?'Cadastro registrado; o histórico original permanece preservado.':'Operação registrada no histórico imutável.');
+ return {title:event.entity_type==='INSTALLMENT_SERIES'&&event.event_type==='END'?'Parcelas restantes canceladas':titles[event.event_type]||(event.payment_method?'Pagamento · '+label(event.payment_method):'Evento de auditoria'),description:parts.join(' '),date:event.created_at||event.paid_on||event.reversed_at};
+}

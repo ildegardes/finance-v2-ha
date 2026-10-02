@@ -1,0 +1,26 @@
+name: Finance V17
+version: "0.1.3"
+slug: finance_v17
+description: Finance V17 local API and scheduler
+url: https://github.com/ildegardes/finance-v2
+arch:
+  - aarch64
+  - amd64
+startup: services
+boot: auto
+init: false
+map:
+  - data:rw
+ports:
+  8766/tcp: 8766
+ports_description:
+  8766/tcp: Finance V17 HTTP API
+options:
+  timezone: America/Sao_Paulo
+  ui_token: ""
+  external_clients: {}
+schema:
+  timezone: str
+  ui_token: password
+  external_clients: map
+stage: stable

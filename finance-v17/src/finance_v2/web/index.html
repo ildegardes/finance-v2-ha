@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#087f69">
+  <title>Finance V2</title>
+<link rel="stylesheet" href="/app/assets/styles.css"><link rel="stylesheet" href="/app/assets/forms.css"><link rel="stylesheet" href="/app/assets/completion.css">
+</head>
+<body>
+  <a class="skip" href="#content">Pular para o conteúdo</a>
+  <header class="app-header">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">F</span><div><p class="eyebrow">Finance V2</p><strong>Minha vida financeira</strong></div></div>
+    <div class="actions"><button id="menu-toggle" class="menu-toggle" type="button" aria-label="Abrir menu" aria-expanded="false" data-icon="menu"></button><form method="post" action="/app/logout"><button class="quiet" type="submit">Sair</button></form></div>
+  </header>
+  <div class="layout" id="layout">
+    <nav aria-label="Principal">
+      <a href="#dashboard"><span class="nav-icon" data-icon="dashboard"></span>Visão geral</a>
+      <a href="#expenses"><span class="nav-icon" data-icon="expense"></span>Despesas</a>
+      <a href="#revenues"><span class="nav-icon" data-icon="revenue"></span>Receitas</a>
+      <a href="#cards"><span class="nav-icon" data-icon="card"></span>Cartões</a>
+      <a href="#invoices"><span class="nav-icon" data-icon="invoice"></span>Faturas</a>
+      <a href="#recurring"><span class="nav-icon" data-icon="recurring"></span>Recorrências</a>
+      <a href="#installments"><span class="nav-icon" data-icon="installments"></span>Parcelamentos</a>
+      <a href="#catalogs"><span class="nav-icon" data-icon="catalogs"></span>Cadastros</a>
+    </nav>
+    <main id="content" tabindex="-1"><div id="competence" class="competence-shell" aria-label="Competência global"></div><div id="status" role="status" aria-live="polite"></div><div id="view"></div></main>
+  </div>
+  <script type="module" src="/app/assets/app.js"></script>
+</body>
+</html>

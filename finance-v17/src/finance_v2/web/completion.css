@@ -1,0 +1,27 @@
+/* Shared finishing layer; dashboard composition remains unchanged. */
+[hidden]{display:none!important}
+main{align-self:start;margin:0 auto;width:100%;min-width:0}
+svg.ui-icon{width:1.2rem;height:1.2rem;display:inline-block;flex:0 0 auto;vertical-align:middle;border:0;border-radius:0;background:none;padding:0;margin:0;box-shadow:none}
+.toolbar .checkbox{display:flex;align-items:center;gap:.5rem;flex:0 0 auto;padding:.7rem 0}.toolbar .checkbox input{width:auto}
+.ui-icon::before,.ui-icon::after{content:none!important;display:none!important}
+.nav-icon{display:inline-flex;align-items:center;justify-content:center}
+.nav-icon .ui-icon{width:1.25rem;height:1.25rem}
+.table-panel{padding:0;overflow:visible}.table-scroll{overflow:visible}.finance-table .money{font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+.pagination{display:flex;justify-content:flex-end;align-items:center;gap:1rem;padding:.8rem}
+.tabs{display:flex;gap:.45rem;margin-bottom:1rem}.tabs .selected{background:var(--brand);color:white}
+.action-menu>summary svg{pointer-events:none}.action-menu button{width:100%;text-align:left}
+.action-menu>summary{color:var(--ink);background:var(--surface-2);border:1px solid var(--line)}
+.panel+.panel{margin-top:1rem}.detail-grid strong{overflow-wrap:anywhere}
+dialog{max-width:min(700px,calc(100vw - 2rem));max-height:90vh;overflow:auto}
+dialog .form-card{margin:0;padding:1.25rem}dialog h2{margin-top:0}
+.icon-list .ui-icon.expense{color:#b74724}.icon-list .ui-icon.revenue{color:#18764b}
+.audit p{max-width:75ch;line-height:1.6}.audit details{font-size:.85rem;color:var(--muted)}
+button,a.button{gap:.45rem}.invoice-card .detail-grid{grid-template-columns:1fr 1fr;margin:.8rem 0}
+@media(max-width:760px){.table-scroll{overflow:visible}.pagination{justify-content:space-between}.tabs{flex-wrap:wrap}}
+.financial-flow{display:inline-flex;gap:.22em;align-items:center;white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:650}
+.financial-flow.revenue,.ui-icon.revenue{color:#087f69}
+.financial-flow.expense,.ui-icon.expense{color:#ad543d}
+.icon-list .financial-flow,.visual-row .financial-flow,.donut-legend .financial-flow,.summary-card .financial-flow{display:inline-flex}
+.financial-flow .financial-arrow{display:inline;color:inherit;font:inherit}
+.icon-list .ui-icon.expense,.summary-icon .ui-icon.expense{color:#ad543d}
+.icon-list .ui-icon.revenue,.summary-icon .ui-icon.revenue{color:#087f69}
