@@ -1,5 +1,5 @@
 name: Finance V17
-version: "0.1.7"
+version: "0.1.8"
 slug: finance_v17
 description: Finance V17 local API and scheduler
 url: https://github.com/ildegardes/finance-v2-ha

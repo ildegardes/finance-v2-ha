@@ -13,11 +13,8 @@ export FINANCE_V2_HOST=0.0.0.0
 export FINANCE_V2_PORT=8766
 export FINANCE_V2_SCHEDULER_INTERVAL_SECONDS=3600
 if [ ! -d /data ]; then echo '/data is required' >&2; exit 1; fi
-if [ ! -f "$FINANCE_V2_DATABASE_PATH" ]; then
-  python -m finance_v2 migrate
-else
-  python -c 'from pathlib import Path; from finance_v2.migrations import require_current_schema; require_current_schema(Path("/data/finance_v2.sqlite3"))'
-fi
+python -m finance_v2 migrate
+python -c 'from pathlib import Path; from finance_v2.migrations import require_current_schema; require_current_schema(Path("/data/finance_v2.sqlite3"))'
 python -m finance_v2 serve &
 api_pid=$!
 python -m finance_v2 scheduler &
