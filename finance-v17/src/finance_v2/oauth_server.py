@@ -369,7 +369,7 @@ class OAuthService:
             if path=="/oauth/token":
                 status,payload=self.exchange(parameters(raw,TOKEN_FIELDS))
                 return http_response(start,status,payload)
-            if environ.get("HTTP_ORIGIN") not in (None,ISSUER):raise OAuthFailure("access_denied",403)
+            if environ.get("HTTP_ORIGIN") not in (None,"null",ISSUER):raise OAuthFailure("access_denied",403)
             binding=self.browser_binding(environ)
             result,payload=self.act(parameters(raw,{"request_id","csrf","action","ui_token"}),binding)
             if result=="consent":return http_response(start,200,self.page(payload,binding,consent=True),html=True)

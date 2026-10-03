@@ -1,5 +1,9 @@
 # Finance V17
 
+## 0.1.10
+
+- Accept OAuth authorization POST requests from opaque browser origins (`Origin: null`) while preserving CSRF, binding, and exact-origin protections.
+
 ## 0.1.9
 
 - Improve OAuth/MCP compatibility with legitimate optional request parameters, including ChatGPT's `ui_locales`.
