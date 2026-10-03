@@ -1,5 +1,10 @@
 # Finance V17
 
+## 0.1.12
+
+- Allow the exact validated OAuth callback in the consent document's CSP so Chromium can follow the authorization redirect.
+- Preserve the strict login CSP, other security directives, redirect validation, PKCE, CSRF, browser binding, and single-use authorization codes.
+
 ## 0.1.11
 
 - Add an isolated MCP Inspector OAuth client with an exact loopback callback.

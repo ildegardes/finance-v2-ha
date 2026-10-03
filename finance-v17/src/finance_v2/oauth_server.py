@@ -16,7 +16,7 @@ import logging
 import re
 import secrets
 from threading import Lock
-from urllib.parse import parse_qsl, urlencode, urlsplit
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit
 
 from oauthlib.oauth2 import AuthorizationCodeGrant, AuthorizationEndpoint, TokenEndpoint, BearerToken, RequestValidator
 from oauthlib.oauth2.rfc6749.errors import OAuth2Error
@@ -372,7 +372,7 @@ class OAuthService:
             if environ.get("HTTP_ORIGIN") not in (None,"null",ISSUER):raise OAuthFailure("access_denied",403)
             binding=self.browser_binding(environ)
             result,payload=self.act(parameters(raw,{"request_id","csrf","action","ui_token"}),binding)
-            if result=="consent":return http_response(start,200,self.page(payload,binding,consent=True),html=True)
+            if result=="consent":return http_response(start,200,self.page(payload,binding,consent=True),html=True,form_action_redirect=payload["redirect_uri"])
             return http_response(start,302,None,location=payload,cookie=f"{COOKIE_NAME}=; Path={COOKIE_PATH}; Secure; HttpOnly; SameSite=Lax; Max-Age=0")
         except OAuthFailure as error:return http_response(start,error.status,{"error":error.error})
         except OAuth2Error:return http_response(start,400,{"error":"invalid_request"})
@@ -382,9 +382,22 @@ class OAuthService:
             return http_response(start,500,{"error":"server_error"})
 
 
-def http_response(start, status, payload, *, html=False, location=None, cookie=None, allow="GET, POST"):
+def oauth_content_security_policy(form_action_redirect=None):
+    form_action="'self'"
+    if form_action_redirect is not None:
+        # Only the persisted, exact-match validated callback of this consent is
+        # added. Chromium applies the document's form-action to redirect hops.
+        # CSP cannot express a query constraint; the OAuth validator still does.
+        # Quote delimiters so registry URI data can never inject CSP directives.
+        uri=urlsplit(form_action_redirect)
+        source=uri.scheme+"://"+quote(uri.netloc,safe=":[]")+quote(uri.path or "/",safe="/%")
+        form_action+=" "+source
+    return "default-src 'none'; form-action "+form_action+"; frame-ancestors 'none'; base-uri 'none'"
+
+
+def http_response(start, status, payload, *, html=False, location=None, cookie=None, allow="GET, POST", form_action_redirect=None):
     body=b"" if payload is None else payload.encode("utf-8") if html else json.dumps(payload,separators=(",",":")).encode("utf-8")
-    headers=[("Content-Type","text/html; charset=utf-8" if html else "application/json; charset=utf-8"),("Content-Length",str(len(body))),("Cache-Control","no-store"),("Pragma","no-cache"),("Referrer-Policy","no-referrer"),("X-Content-Type-Options","nosniff"),("Content-Security-Policy","default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")]
+    headers=[("Content-Type","text/html; charset=utf-8" if html else "application/json; charset=utf-8"),("Content-Length",str(len(body))),("Cache-Control","no-store"),("Pragma","no-cache"),("Referrer-Policy","no-referrer"),("X-Content-Type-Options","nosniff"),("Content-Security-Policy",oauth_content_security_policy(form_action_redirect))]
     if location:headers.append(("Location",location))
     if cookie:headers.append(("Set-Cookie",cookie))
     if status==405:headers.append(("Allow",allow))
