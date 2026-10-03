@@ -13,6 +13,15 @@ RESOURCE_METADATA_PATH = "/.well-known/oauth-protected-resource/mcp"
 RESOURCE_METADATA_URL = ISSUER + RESOURCE_METADATA_PATH
 AUTHORIZATION_METADATA_PATH = "/.well-known/oauth-authorization-server"
 PKCE_METHODS = ("S256",)
+INSPECTOR_CLIENT_ID = "mcp-inspector"
+INSPECTOR_REDIRECT_URI = "http://127.0.0.1:6274/oauth/callback"
+
+def validate_redirect_uri_for_client(client_id: str, uri: str) -> str:
+    if client_id == INSPECTOR_CLIENT_ID:
+        if uri != INSPECTOR_REDIRECT_URI:
+            raise ValueError("invalid MCP Inspector redirect URI")
+        return uri
+    return validate_https_uri(uri)
 
 
 def validate_scopes(scopes: frozenset[str]) -> frozenset[str]:
@@ -74,8 +83,12 @@ class OAuthClient:
             raise ValueError("Finance supports public clients only")
         if not isinstance(self.redirect_uris, tuple) or not self.redirect_uris or len(set(self.redirect_uris)) != len(self.redirect_uris):
             raise ValueError("invalid redirect allowlist")
-        for uri in self.redirect_uris:
-            validate_https_uri(uri)
+        if self.oauth_client_id == INSPECTOR_CLIENT_ID:
+            if self.redirect_uris != (INSPECTOR_REDIRECT_URI,):
+                raise ValueError("invalid MCP Inspector redirect allowlist")
+        else:
+            for uri in self.redirect_uris:
+                validate_redirect_uri_for_client(self.oauth_client_id, uri)
 
     def allows_redirect(self, uri: str) -> bool:
         return uri in self.redirect_uris
@@ -104,7 +117,7 @@ class AuthorizationRequest:
     def __post_init__(self):
         if not self.request_id or self.state is not None and (not isinstance(self.state, str) or not self.state):
             raise ValueError("request identity and state required")
-        validate_https_uri(self.redirect_uri)
+        validate_redirect_uri_for_client(self.client.oauth_client_id, self.redirect_uri)
         if not self.client.allows_redirect(self.redirect_uri):
             raise ValueError("redirect URI is not an exact registered match")
         validate_scopes(self.requested_scopes)
