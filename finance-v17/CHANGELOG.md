@@ -1,5 +1,12 @@
 # Finance V17
 
+## 0.1.14
+
+- Add a clear planned-payment scope selector for recurring expenses: only this entry or this and eligible future entries, using the existing protected-history contracts.
+- Keep prospective series edits separate, require the card when applicable, and normalize unused payment associations without recording payments.
+- Keep the recurring-origin indicator inline with the entry name, with accessible expense/revenue tooltips.
+- Preserve schema 7, scheduler, realized-flow semantics, and OAuth security; no new migration.
+
 ## 0.1.13
 
 - Materialize recurring expenses on every scheduler cycle, preserving annual catch-up, slot identity, retries, and protected history.

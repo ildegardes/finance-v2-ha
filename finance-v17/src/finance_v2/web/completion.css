@@ -25,3 +25,4 @@ button,a.button{gap:.45rem}.invoice-card .detail-grid{grid-template-columns:1fr 
 .financial-flow .financial-arrow{display:inline;color:inherit;font:inherit}
 .icon-list .ui-icon.expense,.summary-icon .ui-icon.expense{color:#ad543d}
 .icon-list .ui-icon.revenue,.summary-icon .ui-icon.revenue{color:#087f69}
+.icon-list .recurrence-origin{display:inline;white-space:nowrap;font-size:.85em;color:var(--muted)}
