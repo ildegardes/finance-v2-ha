@@ -179,6 +179,69 @@ def create_occurrence_override(connection: sqlite3.Connection, *, expense_id: in
         return override_id
 
 
+def change_occurrence_payment_method(connection, *, expense_id, payment_method, account_id,
+                                     card_id, due_date, actor, correlation_id, clock,
+                                     client_id, idempotency_key):
+    """Change only an unpaid occurrence and protect it from future reconciliation."""
+    payload = {"expense_id": expense_id, "payment_method": payment_method,
+               "account_id": account_id, "card_id": card_id,
+               "due_date": due_date.isoformat() if due_date else None}
+    def effect():
+        expense = require_row(connection, "SELECT * FROM expenses WHERE id=?", (expense_id,), "expense")
+        if not isinstance(payment_method, str):
+            raise ValidationError("payment method must be a string")
+        if expense["recurring_version_id"] is None:
+            raise ValidationError("only recurring occurrences support payment-method override")
+        if expense["lifecycle_state"] != "ACTIVE":
+            raise InvalidState("only active occurrence can be changed")
+        if connection.execute("SELECT 1 FROM expense_payments WHERE expense_id=? AND reversed_at IS NULL", (expense_id,)).fetchone():
+            raise Conflict("reverse active payment before changing planned method")
+        version = require_row(connection, "SELECT * FROM recurring_series_versions WHERE id=?", (expense["recurring_version_id"],), "version")
+        rule = "INVOICE" if payment_method == "CREDIT_CARD" else "SAME_DAY"
+        _validate_version(connection, version["frequency"], version["base_day"], payment_method,
+                          account_id, card_id, rule, None, None)
+        if payment_method == "BANK_SLIP" and account_id is not None:
+            require_active(connection, "accounts", account_id)
+        if payment_method == "CREDIT_CARD" and due_date is not None:
+            raise ValidationError("credit card has no individual due date")
+        if payment_method != "CREDIT_CARD" and due_date is None:
+            raise ValidationError("non-card occurrence requires due date")
+        source = connection.execute("SELECT * FROM invoices WHERE id=?", (expense["invoice_id"],)).fetchone() if expense["invoice_id"] else None
+        if source and (source["state"] not in {"OPEN", "CLOSED"} or paid_cents(connection, source["id"]) > 0):
+            raise Conflict("paid or terminal invoice protects its occurrence")
+        target_id = None
+        if payment_method == "CREDIT_CARD":
+            cycle = resolve_cycle(connection, card_id, date.fromisoformat(expense["expense_date"]))
+            existing = connection.execute("SELECT id FROM invoices WHERE card_id=? AND closing_date=?", (card_id, cycle["closing_date"].isoformat())).fetchone()
+            target_id = existing["id"] if existing else get_or_create_open_invoice(connection, card_id, date.fromisoformat(expense["expense_date"]), clock)
+        target = connection.execute("SELECT * FROM invoices WHERE id=?", (target_id,)).fetchone() if target_id else None
+        if target and target["state"] not in {"OPEN", "CLOSED"}:
+            raise Conflict("target invoice is terminal")
+        if source and source["state"] == "CLOSED" and source["id"] != target_id:
+            before = effective_total(connection, source["id"])
+            connection.execute("INSERT INTO invoice_total_revisions(invoice_id,previous_total_cents,new_total_cents,reason_code,correlation_id,actor,created_at) VALUES(?,?,?,?,?,?,?)",
+                (source["id"], before, before-expense["amount_cents"], "RECURRENCE_MOVED_OUT", correlation_id, actor, utc_text(clock.now_utc())))
+        if target and target["state"] == "CLOSED" and target_id != expense["invoice_id"]:
+            before = effective_total(connection, target_id)
+            connection.execute("INSERT INTO invoice_total_revisions(invoice_id,previous_total_cents,new_total_cents,reason_code,correlation_id,actor,created_at) VALUES(?,?,?,?,?,?,?)",
+                (target_id, before, before+expense["amount_cents"], "RECURRENCE_MOVED_IN", correlation_id, actor, utc_text(clock.now_utc())))
+        if not connection.execute("SELECT 1 FROM occurrence_overrides WHERE expense_id=? AND removed_at IS NULL", (expense_id,)).fetchone():
+            override_id = connection.execute(
+                "INSERT INTO occurrence_overrides(expense_id,originating_recurring_version_id,reason_code,correlation_id,created_at,created_by_actor) VALUES(?,?,?,?,?,?)",
+                (expense_id, expense["recurring_version_id"], "PAYMENT_METHOD_ONLY_THIS", correlation_id, utc_text(clock.now_utc()), actor)).lastrowid
+            audit_event(connection, "EXPENSE", expense_id, "OVERRIDE_CREATED", actor, correlation_id, clock, {"override_id":override_id})
+        connection.execute("UPDATE expenses SET planned_payment_method=?,account_id=?,card_id=?,invoice_id=?,due_date=?,updated_at=? WHERE id=?",
+            (payment_method, account_id, card_id, target_id, due_date.isoformat() if due_date else None, utc_text(clock.now_utc()), expense_id))
+        for invoice in (source, target):
+            if invoice: normalize_invoice_state(connection, invoice["id"], clock)
+        audit_event(connection, "EXPENSE", expense_id, "PLANNED_PAYMENT_METHOD_CHANGED", actor, correlation_id, clock,
+            {"scope":"ONLY_THIS", "previous_method":expense["planned_payment_method"], "payment_method":payment_method})
+        return "EXPENSE", expense_id, {"expense_id":expense_id}
+    response, replayed = execute_financial(connection, client_id=client_id,
+        operation="occurrence_payment_method", key=idempotency_key, payload=payload, clock=clock, effect=effect)
+    return int(response.get("expense_id", response.get("resource_id"))), replayed
+
+
 def remove_occurrence_override(connection: sqlite3.Connection, *, override_id: int, reason: str, actor: str, correlation_id: str, clock: Clock) -> None:
     with immediate_transaction(connection):
         override = require_row(connection, "SELECT * FROM occurrence_overrides WHERE id=?", (override_id,), "override")
@@ -312,6 +375,17 @@ def change_series_from_date(connection: sqlite3.Connection, *, series_id: int, e
             raise InvalidState("ended series is terminal")
         if effective_from < date.fromisoformat(series["start_date"]):
             raise ValidationError("effective date precedes series")
+        if connection.execute("SELECT 1 FROM expenses WHERE recurring_series_id=? AND expense_date>=?", (series_id, effective_from.isoformat())).fetchone():
+            raise Conflict("materialized occurrences require this-and-future reconciliation")
+        versions = connection.execute("SELECT * FROM recurring_series_versions WHERE recurring_series_id=? ORDER BY (lifecycle_state='ACTIVE'),effective_from,id", (series_id,)).fetchall()
+        anchor_ordinal = 0
+        for ordinal in range(10001):
+            candidate, _ = resolve_logical_slot(versions, ordinal)
+            if candidate is not None and candidate >= effective_from:
+                anchor_ordinal = ordinal
+                break
+        else:
+            raise Conflict("prospective anchor could not be resolved")
         require_positive_cents(amount_cents)
         normalized_base_day = effective_from.day if frequency not in {"WEEKLY", "BIWEEKLY"} and base_day is None else base_day
         _validate_version(connection, frequency, normalized_base_day, payment_method, account_id, card_id, due_rule, due_offset_days, due_day)
@@ -323,7 +397,7 @@ def change_series_from_date(connection: sqlite3.Connection, *, series_id: int, e
             connection.execute("UPDATE recurring_series_versions SET effective_to=? WHERE id=?", ((effective_from - timedelta(days=1)).isoformat(), active["id"]))
         anchor = str(uuid4())
         require_active(connection, "categories", category_id)
-        version = connection.execute("INSERT INTO recurring_series_versions(recurring_series_id,lifecycle_state,description,category_id,created_at,effective_from,effective_to,anchor_occurrence_key,anchor_logical_date,anchor_logical_ordinal,frequency,base_day,amount_cents,planned_payment_method,account_id,card_id,due_rule,due_offset_days,due_day) VALUES(?,'ACTIVE',?,?,?, ?,NULL,?,?,0,?,?,?,?,?,?,?,?,?)", (series_id, description.strip(), category_id, utc_text(clock.now_utc()), effective_from.isoformat(), anchor, effective_from.isoformat(), frequency, normalized_base_day, amount_cents, payment_method, account_id, card_id, due_rule, due_offset_days, due_day)).lastrowid
+        version = connection.execute("INSERT INTO recurring_series_versions(recurring_series_id,lifecycle_state,description,category_id,created_at,effective_from,effective_to,anchor_occurrence_key,anchor_logical_date,anchor_logical_ordinal,frequency,base_day,amount_cents,planned_payment_method,account_id,card_id,due_rule,due_offset_days,due_day) VALUES(?,'ACTIVE',?,?,?, ?,NULL,?,?,?,?,?,?,?,?,?,?,?,?)", (series_id, description.strip(), category_id, utc_text(clock.now_utc()), effective_from.isoformat(), anchor, effective_from.isoformat(), anchor_ordinal, frequency, normalized_base_day, amount_cents, payment_method, account_id, card_id, due_rule, due_offset_days, due_day)).lastrowid
         for tag_id in tags:
             require_active(connection, "tags", tag_id)
             connection.execute("INSERT INTO recurring_version_tags(recurring_version_id,tag_id) VALUES(?,?)", (version, tag_id))

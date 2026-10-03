@@ -1,5 +1,13 @@
 # Finance V17
 
+## 0.1.13
+
+- Materialize recurring expenses on every scheduler cycle, preserving annual catch-up, slot identity, retries, and protected history.
+- Use net payment/receipt flows by event date in the realized six-month chart, including reversals and invoice payments without double counting.
+- Show current competence entries with a discreet recurring-origin indicator and links to the existing expense and revenue lists.
+- Allow the six existing planned payment methods for only one recurring occurrence or this and future occurrences; preserve protected and paid history.
+- Preserve prospective recurrence slot ordinals before materialization; no schema change or new migration.
+
 ## 0.1.12
 
 - Allow the exact validated OAuth callback in the consent document's CSP so Chromium can follow the authorization redirect.

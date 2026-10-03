@@ -12,6 +12,15 @@ def revenue_received(connection, start: date, end: date) -> int:
     return connection.execute("SELECT COALESCE(SUM(amount_cents),0) FROM revenue_receipts WHERE reversed_at IS NULL AND received_on BETWEEN ? AND ?", (start.isoformat(), end.isoformat())).fetchone()[0]
 
 
+def revenue_realized(connection, start: date, end: date) -> int:
+    """Cash flow by receipt/reversal date, not by current receipt status."""
+    return connection.execute(
+        "SELECT COALESCE(SUM(CASE WHEN received_on BETWEEN ? AND ? THEN amount_cents ELSE 0 END),0) "
+        "- COALESCE(SUM(CASE WHEN reversed_on BETWEEN ? AND ? THEN amount_cents ELSE 0 END),0) FROM revenue_receipts",
+        (start.isoformat(), end.isoformat(), start.isoformat(), end.isoformat()),
+    ).fetchone()[0]
+
+
 def recognized_expenses(connection: sqlite3.Connection, start: date, end: date, *, include_cancelled: bool = False) -> int:
     states = ("ACTIVE", "CANCELLED") if include_cancelled else ("ACTIVE",)
     marks = ",".join("?" for _ in states)

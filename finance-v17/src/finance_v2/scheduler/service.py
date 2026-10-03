@@ -59,7 +59,9 @@ class SchedulerService:
         return date(self.clock.today().year, 12, 31)
 
     def run_startup(self) -> TickSummary:
-        summary = TickSummary("startup")
+        return self.run_tick(kind="startup")
+
+    def _materialize_expenses(self, summary: TickSummary) -> None:
         connection = self._connect()
         try:
             series_ids = [row[0] for row in connection.execute("SELECT id FROM recurring_series ORDER BY id")]
@@ -68,18 +70,13 @@ class SchedulerService:
         for series_id in series_ids:
             connection = self._connect()
             try:
-                materialize(connection, series_id=series_id, through=self._year_end(), actor="SCHEDULER:internal", correlation_id=f"scheduler:startup:{self.clock.today().isoformat()}:series:{series_id}", clock=self.clock)
+                materialize(connection, series_id=series_id, through=self._year_end(), actor="SCHEDULER:internal", correlation_id=f"scheduler:{summary.kind}:{self.clock.today().isoformat()}:series:{series_id}", clock=self.clock)
                 summary.series += 1
             except Exception:
                 summary.failures += 1
-                LOGGER.exception("scheduler startup catch-up failed series_id=%s", series_id)
+                LOGGER.exception("scheduler expense catch-up failed series_id=%s", series_id)
             finally:
                 connection.close()
-        financial = self.run_tick(kind="startup-financial")
-        for field in ("series", "candidates", "success", "retryable", "attention", "skipped", "failures"):
-            setattr(summary, field, getattr(summary, field) + getattr(financial, field))
-        self._log(summary)
-        return summary
 
     def _candidates(self):
         today = self.clock.today().isoformat()
@@ -146,6 +143,7 @@ class SchedulerService:
 
     def run_tick(self, *, kind: str = "hourly") -> TickSummary:
         summary = TickSummary(kind)
+        self._materialize_expenses(summary)
         connection = self._connect()
         try:
             revenue_series_ids = [row[0] for row in connection.execute(
