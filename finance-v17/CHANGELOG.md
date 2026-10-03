@@ -1,5 +1,10 @@
 # Finance V17
 
+## 0.1.9
+
+- Improve OAuth/MCP compatibility with legitimate optional request parameters, including ChatGPT's `ui_locales`.
+- Preserve strict redirect, PKCE, scope, resource, CSRF, consent, and authorization-code validation.
+
 ## 0.1.8
 
 - Automatically upgrade existing Finance V2 databases before startup.

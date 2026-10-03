@@ -58,14 +58,21 @@ def pkce_challenge(verifier: str) -> str:
     return base64.urlsafe_b64encode(sha256(verifier.encode("ascii")).digest()).rstrip(b"=").decode("ascii")
 
 
-def parameters(raw: str, allowed: set[str]) -> dict[str, str]:
+def parameters(raw: str, allowed: set[str], *, ignore_unknown: bool = False) -> dict[str, str]:
     if len(raw)>16384 or re.search(r"%(?![0-9a-fA-F]{2})", raw):raise OAuthFailure()
     try:
         pairs = parse_qsl(raw, keep_blank_values=True, encoding="utf-8", errors="strict", max_num_fields=20)
     except (ValueError, UnicodeError):raise OAuthFailure() from None
-    result = dict(pairs)
-    if len(result)!=len(pairs) or not set(result)<=allowed:raise OAuthFailure()
-    if any(len(v)>4096 or any(ord(c)<32 or ord(c)==127 for c in v) for v in result.values()):raise OAuthFailure()
+    # OAuth clients may send registered extension/request metadata parameters.
+    # Parse and validate all values for bounded input, but only expose fields
+    # understood by this endpoint to security-sensitive code and HTML.
+    if any(len(v)>4096 or any(ord(c)<32 or ord(c)==127 for c in v) for _, v in pairs):raise OAuthFailure()
+    forbidden_unknown = {"code", "access_token", "refresh_token", "token", "client_secret", "ui_token"}
+    if any(k in forbidden_unknown for k, _ in pairs if k not in allowed):raise OAuthFailure()
+    if not ignore_unknown and any(k not in allowed for k, _ in pairs):raise OAuthFailure()
+    known = [(k, v) for k, v in pairs if k in allowed]
+    result = dict(known)
+    if len(result)!=len(known):raise OAuthFailure()
     return result
 
 
@@ -336,7 +343,7 @@ class OAuthService:
         method=environ.get("REQUEST_METHOD","")
         try:
             if path=="/oauth/authorize" and method=="GET":
-                params=parameters(environ.get("QUERY_STRING",""),AUTHORIZE_FIELDS)
+                params=parameters(environ.get("QUERY_STRING",""),AUTHORIZE_FIELDS,ignore_unknown=True)
                 try:row,binding=self.begin(params)
                 except OAuthFailure as failure:
                     # Redirect protocol errors only after exact client/callback
