@@ -1,5 +1,12 @@
 # Finance V17
 
+## 0.1.16
+
+- Add explicit MCP recurring-expense list/get/create, prospective change, this-and-future, individual planned-payment override and terminal end tools using canonical API/domain operations.
+- Create one rule, not manual monthly expenses; keep materialization in the domain/scheduler and preserve paid/protected history, six methods and month-end calendar rules.
+- Reuse permanent transactional identities for creation and all exposed writes; bind category in the new prospective external identity scope without changing legacy UI replay keys.
+- Preserve OAuth authorization/refresh rotation, bearer capabilities and schema 8. BANK_TRANSFER recurrence support remains deferred; no migration or deployment is implied.
+
 ## 0.1.15
 
 - Add durable public-client OAuth refresh tokens with schema migration 008.

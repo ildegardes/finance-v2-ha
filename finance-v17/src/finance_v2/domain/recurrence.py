@@ -41,11 +41,11 @@ def _validate_version(connection, frequency, base_day, method, account_id, card_
         raise ValidationError("invalid payment method")
 
 
-def create_series(connection: sqlite3.Connection, *, start_date: date, description: str, category_id: int, frequency: str, base_day: int | None, amount_cents: int, payment_method: str, account_id: int | None, card_id: int | None, due_rule: str, due_offset_days: int | None, due_day: int | None, tags: tuple[int, ...], actor: str, correlation_id: str, clock: Clock, end_date: date | None = None) -> tuple[int, int]:
+def create_series(connection: sqlite3.Connection, *, start_date: date, description: str, category_id: int, frequency: str, base_day: int | None, amount_cents: int, payment_method: str, account_id: int | None, card_id: int | None, due_rule: str, due_offset_days: int | None, due_day: int | None, tags: tuple[int, ...], actor: str, correlation_id: str, clock: Clock, end_date: date | None = None, client_id: str | None = None, idempotency_key: str | None = None) -> tuple[int, int]:
     require_positive_cents(amount_cents)
     if frequency not in {"WEEKLY", "BIWEEKLY"} and base_day is None:
         base_day = start_date.day
-    with immediate_transaction(connection):
+    def effect():
         require_active(connection, "categories", category_id)
         _validate_version(connection, frequency, base_day, payment_method, account_id, card_id, due_rule, due_offset_days, due_day)
         epoch = str(uuid4())
@@ -59,7 +59,24 @@ def create_series(connection: sqlite3.Connection, *, start_date: date, descripti
             require_active(connection, "tags", tag_id)
             connection.execute("INSERT INTO recurring_version_tags(recurring_version_id,tag_id) VALUES(?,?)", (version_id, tag_id))
         audit_event(connection, "RECURRING_SERIES", series_id, "CREATE", actor, correlation_id, clock, {"version_id": version_id})
-        return series_id, version_id
+        return "RECURRING_SERIES", series_id, {"id": series_id, "version_id": version_id}
+    if client_id is None and idempotency_key is None:
+        with immediate_transaction(connection):
+            _, series_id, response = effect()
+            return series_id, response["version_id"]
+    payload = {"start_date": start_date.isoformat(), "end_date": end_date.isoformat() if end_date else None,
+               "description": description.strip(), "category_id": category_id, "frequency": frequency,
+               "base_day": base_day, "amount_cents": amount_cents, "payment_method": payment_method,
+               "account_id": account_id, "card_id": card_id, "due_rule": due_rule,
+               "due_offset_days": due_offset_days, "due_day": due_day, "tags": sorted(tags)}
+    response, _ = execute_financial(connection, client_id=client_id or "", operation="create_recurring_series",
+                                    key=idempotency_key, payload=payload, clock=clock, effect=effect)
+    series_id = int(response.get("id", response.get("resource_id")))
+    # The permanent identity outlives the response cache; retain the original version.
+    version_id = response.get("version_id")
+    if version_id is None:
+        version_id = connection.execute("SELECT id FROM recurring_series_versions WHERE recurring_series_id=? ORDER BY id LIMIT 1", (series_id,)).fetchone()[0]
+    return series_id, int(version_id)
 
 
 def _version_for(connection, series_id: int, logical_date: date):
@@ -363,7 +380,7 @@ def change_series_from_date(connection: sqlite3.Connection, *, series_id: int, e
                             payment_method: str, account_id: int | None, card_id: int | None,
                             due_rule: str, due_offset_days: int | None, due_day: int | None,
                             tags: tuple[int, ...], actor: str, correlation_id: str, clock: Clock,
-                            client_id: str, idempotency_key: str) -> tuple[int, bool]:
+                            client_id: str, idempotency_key: str, bind_category_identity: bool = False) -> tuple[int, bool]:
     """Version an active series from an explicit date, even before materialization."""
     payload = {"series_id": series_id, "effective_from": effective_from.isoformat(), "description": description,
                "amount_cents": amount_cents, "frequency": frequency, "base_day": base_day,
@@ -403,7 +420,10 @@ def change_series_from_date(connection: sqlite3.Connection, *, series_id: int, e
             connection.execute("INSERT INTO recurring_version_tags(recurring_version_id,tag_id) VALUES(?,?)", (version, tag_id))
         audit_event(connection, "RECURRING_SERIES", series_id, "EDIT", actor, correlation_id, clock, {"version_id": version, "effective_from": effective_from.isoformat()})
         return "RECURRING_VERSION", version, {"version_id": version, "correlation_id": correlation_id}
-    response, replayed = execute_financial(connection, client_id=client_id, operation="change_series_from_date", key=idempotency_key, payload=payload, clock=clock, effect=effect)
+    # Preserve the existing UI key scope; new external contracts bind every effect field.
+    if bind_category_identity: payload["category_id"] = category_id
+    operation = "change_series_from_date_v2" if bind_category_identity else "change_series_from_date"
+    response, replayed = execute_financial(connection, client_id=client_id, operation=operation, key=idempotency_key, payload=payload, clock=clock, effect=effect)
     return int(response.get("version_id", response.get("resource_id"))), replayed
 
 

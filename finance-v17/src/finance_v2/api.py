@@ -29,6 +29,7 @@ from .domain.recurrence_projection import expense_forecast, revenue_forecast
 from .domain.reports import net_paid, overdue_total, pending_total, recognized_expenses, requires_attention, requires_manual_action, revenue_expected, revenue_received, revenue_realized
 from .idempotency import IdempotencyConflict, InvalidIdempotencyKey
 from .migrations import migration_status
+from .mcp_recurring import OPERATIONS as RECURRING_MCP_OPERATIONS, tools as recurring_mcp_tools, validate_arguments as validate_recurring_arguments, PAYMENT_METHODS as RECURRING_PAYMENT_METHODS, FREQUENCIES as RECURRING_FREQUENCIES, DUE_RULES as RECURRING_DUE_RULES
 
 LOGGER=logging.getLogger(__name__)
 
@@ -166,14 +167,14 @@ class Application:
    request=self.body(e);method=request.get("method");request_id=request.get("id")
    if not isinstance(method,str):raise HttpError(400,"INVALID_JSON","MCP method is required")
    if method=="initialize":
-    result={"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":False}},"serverInfo":{"name":"Finance V2","version":"0.1.15"}}
+    result={"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":False}},"serverInfo":{"name":"Finance V2","version":"0.1.16"}}
    elif method=="notifications/initialized":
     return self.mcp_response(start,202,None,rid,e)
    elif method=="tools/list":
     result={"tools":self.mcp_tools()}
    elif method=="tools/call":
     params=request.get("params") or {};name=params.get("name");arguments=params.get("arguments") or {}
-    e["finance_v2.required_scopes"]="finance:read finance:write" if isinstance(name,str) and name.startswith("finance_create_") else "finance:read"
+    e["finance_v2.required_scopes"]="finance:read finance:write" if any(t["name"]==name and not t["annotations"]["readOnlyHint"] for t in self.mcp_tools()) else "finance:read"
     result=self.mcp_call(name,arguments,identity)
    else:
     raise HttpError(400,"MCP_METHOD_NOT_FOUND",f"unsupported MCP method: {method}")
@@ -191,7 +192,7 @@ class Application:
   read={"type":"object","additionalProperties":False}
   expenses={"type":"object","additionalProperties":False,"properties":{"page":{"type":"integer","minimum":1},"page_size":{"type":"integer","enum":[25,50,100]},"search":{"type":"string"}}}
   create={"type":"object","additionalProperties":False,"required":["idempotency_key","description","amount_cents","planned_payment_method","category_id"],"properties":{"idempotency_key":{"type":"string","minLength":16,"maxLength":128},"description":{"type":"string","minLength":1},"amount_cents":{"type":"integer","minimum":1},"expense_date":{"type":"string","format":"date"},"due_date":{"type":["string","null"],"format":"date"},"planned_payment_method":{"type":"string","enum":["CREDIT_CARD","AUTO_DEBIT","PIX","BANK_TRANSFER","CASH","BANK_SLIP","DEBIT"]},"category_id":{"type":"integer","minimum":1},"account_id":{"type":["integer","null"],"minimum":1},"card_id":{"type":["integer","null"],"minimum":1},"notes":{"type":["string","null"]},"tag_ids":{"type":"array","items":{"type":"integer","minimum":1}}}}
-  return [
+  return recurring_mcp_tools()+[
    {"name":"finance_get_context","description":"Return Finance V2 context and authorized capabilities.","inputSchema":read,"annotations":{"readOnlyHint":True,"destructiveHint":False,"idempotentHint":True}},
    {"name":"finance_get_summary","description":"Return the current financial dashboard summary.","inputSchema":read,"annotations":{"readOnlyHint":True,"destructiveHint":False,"idempotentHint":True}},
    {"name":"finance_list_categories","description":"List registered categories.","inputSchema":read,"annotations":{"readOnlyHint":True,"destructiveHint":False,"idempotentHint":True}},
@@ -207,9 +208,18 @@ class Application:
   if not isinstance(name,str):raise HttpError(400,"VALIDATION_ERROR","tool name is required")
   names={item["name"] for item in self.mcp_tools()}
   if name not in names:raise HttpError(404,"NOT_FOUND","tool not found")
-  write=name in {"finance_create_expense","finance_create_category","finance_create_account","finance_create_card"}
+  write=next(t for t in self.mcp_tools() if t["name"]==name)["annotations"]["readOnlyHint"] is False
   self.require_capabilities(identity,write=write)
-  if name=="finance_get_context":payload,status=self.dispatch(Route("GET","/api/v2/assistant/context","assistant_context"),{},identity,{}, {},None)
+  if name in RECURRING_MCP_OPERATIONS:
+   validate_recurring_arguments(name,arguments)
+   method,path,operation,identifier=RECURRING_MCP_OPERATIONS[name]
+   p={"id":arguments[identifier]} if identifier else {}
+   body={k:v for k,v in arguments.items() if k not in {identifier,"idempotency_key"}}
+   q={"month":[body.pop("month")]} if operation=="series_list" and "month" in body else {}
+   payload,status=self.dispatch(Route(method,path,operation,write,write),p,identity,body,q,arguments.get("idempotency_key"))
+  elif name=="finance_get_context":
+   payload,status=self.dispatch(Route("GET","/api/v2/assistant/context","assistant_context"),{},identity,{}, {},None)
+   payload["recurring_expense_contract"]={"payment_methods":RECURRING_PAYMENT_METHODS,"frequencies":RECURRING_FREQUENCIES,"due_rules":RECURRING_DUE_RULES,"calendar":"Monthly base_day 1..31 clamps to month end; 31 represents last day. Resolve IDs from catalog tools; materialization belongs to domain/scheduler."}
   elif name=="finance_get_summary":payload,status=self.dispatch(Route("GET","/api/v2/assistant/dashboard","assistant_dashboard"),{},identity,{}, {},None)
   elif name.startswith("finance_list_") and name!="finance_list_expenses":
    payload,status=self.dispatch(Route("GET","/api/v2/catalogs","catalogs"),{},identity,{}, {},None);payload={name.removeprefix("finance_list_"):payload.get(name.removeprefix("finance_list_"),[])}
@@ -410,7 +420,7 @@ class Application:
    if r.operation=="revenue_series_materialize":ids,replay=materialize_revenue_series_idempotent(c,series_id=p["id"],through=civil(b.get("through"),"through",self.clock.today()),actor=i.client_id,correlation_id=str(b.get("correlation_id","api-revenue-materialize")),clock=self.clock,client_id=i.client_id,idempotency_key=key);return {"series_id":p["id"],"revenue_ids":ids,"replayed":replay},200
    if r.operation=="revenue_series_end":sid,replay=end_revenue_series_idempotent(c,series_id=p["id"],actor=i.client_id,correlation_id=str(b.get("correlation_id","api-revenue-end")),clock=self.clock,client_id=i.client_id,idempotency_key=key);return {"id":sid,"replayed":replay},200
    if r.operation=="revenue_series_change_from":vid,replay=change_revenue_series_from_date(c,series_id=p["id"],effective_from=civil(b.get("effective_from"),"effective_from",self.clock.today()),description=str(b.get("description","")),amount_cents=integer(b.get("amount_cents"),"amount_cents",True),frequency=b.get("frequency"),expected_day=integer(b.get("expected_day"),"expected_day",True),category_id=integer(b.get("category_id"),"category_id",True),account_id=b.get("account_id"),actor=i.client_id,correlation_id=str(b.get("correlation_id","api-revenue-series-change")),clock=self.clock,client_id=i.client_id,idempotency_key=key);return {"version_id":vid,"replayed":replay},200
-   if r.operation=="series_create":sid,vid=create_series(c,start_date=civil(b.get("start_date"),"start_date",self.clock.today()),description=str(b.get("description","")),category_id=integer(b.get("category_id"),"category_id",True),frequency=b.get("frequency"),base_day=b.get("base_day"),amount_cents=integer(b.get("amount_cents"),"amount_cents",True),payment_method=b.get("payment_method"),account_id=b.get("account_id"),card_id=b.get("card_id"),due_rule=b.get("due_rule"),due_offset_days=b.get("due_offset_days"),due_day=b.get("due_day"),tags=tuple(b.get("tag_ids",())),actor=i.client_id,correlation_id=str(b.get("correlation_id","api-series")),clock=self.clock,end_date=civil(b["end_date"],"end_date") if b.get("end_date") else None);return {"id":sid,"version_id":vid},201
+   if r.operation=="series_create":sid,vid=create_series(c,start_date=civil(b.get("start_date"),"start_date",self.clock.today()),description=str(b.get("description","")),category_id=integer(b.get("category_id"),"category_id",True),frequency=b.get("frequency"),base_day=b.get("base_day"),amount_cents=integer(b.get("amount_cents"),"amount_cents",True),payment_method=b.get("payment_method"),account_id=b.get("account_id"),card_id=b.get("card_id"),due_rule=b.get("due_rule"),due_offset_days=b.get("due_offset_days"),due_day=b.get("due_day"),tags=tuple(b.get("tag_ids",())),actor=i.client_id,correlation_id=str(b.get("correlation_id","api-series")),clock=self.clock,end_date=civil(b["end_date"],"end_date") if b.get("end_date") else None,**({"client_id":i.client_id,"idempotency_key":key} if key is not None else {}));return {"id":sid,"version_id":vid},201
    if r.operation=="series_materialize":return {"expense_ids":materialize(c,series_id=p["id"],through=civil(b.get("through"),"through",date(self.clock.today().year,12,31)),actor=i.client_id,correlation_id=str(b.get("correlation_id","api-materialize")),clock=self.clock)},200
    if r.operation=="series_end":sid,replay=end_series_idempotent(c,series_id=p["id"],cut_date=civil(b.get("cut_date"),"cut_date",self.clock.today()),actor=i.client_id,correlation_id=str(b.get("correlation_id","api-end")),clock=self.clock,client_id=i.client_id,idempotency_key=key);return {"series_id":sid,"replayed":replay},200
    if r.operation=="occurrence_payment_method":
@@ -424,7 +434,7 @@ class Application:
    if r.operation=="occurrence_cancel_future":sid,replay=cancel_this_and_future(c,anchor_expense_id=p["id"],actor=i.client_id,correlation_id=str(b.get("correlation_id","api-cut")),clock=self.clock,client_id=i.client_id,idempotency_key=key);return {"series_id":sid,"replayed":replay},200
    if r.operation=="occurrence_change_future":vid,replay=change_this_and_future(c,anchor_expense_id=p["id"],description=str(b.get("description","")),amount_cents=integer(b.get("amount_cents"),"amount_cents",True),frequency=b.get("frequency"),base_day=b.get("base_day"),payment_method=b.get("payment_method"),account_id=b.get("account_id"),card_id=b.get("card_id"),due_rule=b.get("due_rule"),due_offset_days=b.get("due_offset_days"),due_day=b.get("due_day"),tags=tuple(b.get("tag_ids",())),actor=i.client_id,correlation_id=str(b.get("correlation_id","api-tf")),clock=self.clock,client_id=i.client_id,idempotency_key=key);return {"version_id":vid,"replayed":replay},200
    if r.operation=="series_change_from":
-    vid,replay=change_series_from_date(c,series_id=p["id"],effective_from=civil(b.get("effective_from"),"effective_from",self.clock.today()),description=str(b.get("description","")),amount_cents=integer(b.get("amount_cents"),"amount_cents",True),category_id=integer(b.get("category_id"),"category_id",True),frequency=b.get("frequency"),base_day=b.get("base_day"),payment_method=b.get("payment_method"),account_id=b.get("account_id"),card_id=b.get("card_id"),due_rule=b.get("due_rule"),due_offset_days=b.get("due_offset_days"),due_day=b.get("due_day"),tags=tuple(b.get("tag_ids",())),actor=i.client_id,correlation_id=str(b.get("correlation_id","api-series-change")),clock=self.clock,client_id=i.client_id,idempotency_key=key);return {"version_id":vid,"replayed":replay},200
+    vid,replay=change_series_from_date(c,series_id=p["id"],effective_from=civil(b.get("effective_from"),"effective_from",self.clock.today()),description=str(b.get("description","")),amount_cents=integer(b.get("amount_cents"),"amount_cents",True),category_id=integer(b.get("category_id"),"category_id",True),frequency=b.get("frequency"),base_day=b.get("base_day"),payment_method=b.get("payment_method"),account_id=b.get("account_id"),card_id=b.get("card_id"),due_rule=b.get("due_rule"),due_offset_days=b.get("due_offset_days"),due_day=b.get("due_day"),tags=tuple(b.get("tag_ids",())),actor=i.client_id,correlation_id=str(b.get("correlation_id","api-series-change")),clock=self.clock,client_id=i.client_id,idempotency_key=key,bind_category_identity=i.role=="EXTERNAL_CLIENT");return {"version_id":vid,"replayed":replay},200
    if r.operation=="installments_create":
     method=b.get("payment_method","CREDIT_CARD")
     if not isinstance(method,str):raise ValidationError("payment_method must be a string")
