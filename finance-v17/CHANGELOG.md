@@ -1,5 +1,12 @@
 # Finance V17
 
+## 0.1.17
+
+- Guarantee eligible recurring expense occurrences immediately after canonical HTTP/UI/MCP creation, using the shared domain materializer and scheduler year-end horizon.
+- Commit new series, occurrences, invoice effects and permanent creation identity atomically; preserve replay and unique logical slots under concurrent scheduler/manual catch-up.
+- Default the recurring expense UI materialization dialog to year end instead of today; explicit earlier limits remain supported and may legitimately create zero occurrences.
+- Preserve OAuth refresh, seven recurring MCP tools, protected history, schema 8 and all existing migrations. Real-host scheduler/log status is not inferred from local fixtures.
+
 ## 0.1.16
 
 - Add explicit MCP recurring-expense list/get/create, prospective change, this-and-future, individual planned-payment override and terminal end tools using canonical API/domain operations.

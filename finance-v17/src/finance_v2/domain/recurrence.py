@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 import sqlite3
 from uuid import uuid4
+from contextlib import nullcontext
 
 from ..db import immediate_transaction
 from .calendar import due_date_for, lineage_key, occurrence_date
@@ -41,7 +42,12 @@ def _validate_version(connection, frequency, base_day, method, account_id, card_
         raise ValidationError("invalid payment method")
 
 
-def create_series(connection: sqlite3.Connection, *, start_date: date, description: str, category_id: int, frequency: str, base_day: int | None, amount_cents: int, payment_method: str, account_id: int | None, card_id: int | None, due_rule: str, due_offset_days: int | None, due_day: int | None, tags: tuple[int, ...], actor: str, correlation_id: str, clock: Clock, end_date: date | None = None, client_id: str | None = None, idempotency_key: str | None = None) -> tuple[int, int]:
+def materialization_horizon(clock: Clock) -> date:
+    """The shared API creation/scheduler catch-up horizon."""
+    return date(clock.today().year, 12, 31)
+
+
+def create_series(connection: sqlite3.Connection, *, start_date: date, description: str, category_id: int, frequency: str, base_day: int | None, amount_cents: int, payment_method: str, account_id: int | None, card_id: int | None, due_rule: str, due_offset_days: int | None, due_day: int | None, tags: tuple[int, ...], actor: str, correlation_id: str, clock: Clock, end_date: date | None = None, client_id: str | None = None, idempotency_key: str | None = None, materialize_through: date | None = None) -> tuple[int, int]:
     require_positive_cents(amount_cents)
     if frequency not in {"WEEKLY", "BIWEEKLY"} and base_day is None:
         base_day = start_date.day
@@ -59,6 +65,9 @@ def create_series(connection: sqlite3.Connection, *, start_date: date, descripti
             require_active(connection, "tags", tag_id)
             connection.execute("INSERT INTO recurring_version_tags(recurring_version_id,tag_id) VALUES(?,?)", (version_id, tag_id))
         audit_event(connection, "RECURRING_SERIES", series_id, "CREATE", actor, correlation_id, clock, {"version_id": version_id})
+        if materialize_through is not None:
+            materialize(connection, series_id=series_id, through=materialize_through,
+                        actor=actor, correlation_id=correlation_id, clock=clock, _within_transaction=True)
         return "RECURRING_SERIES", series_id, {"id": series_id, "version_id": version_id}
     if client_id is None and idempotency_key is None:
         with immediate_transaction(connection):
@@ -69,13 +78,18 @@ def create_series(connection: sqlite3.Connection, *, start_date: date, descripti
                "base_day": base_day, "amount_cents": amount_cents, "payment_method": payment_method,
                "account_id": account_id, "card_id": card_id, "due_rule": due_rule,
                "due_offset_days": due_offset_days, "due_day": due_day, "tags": sorted(tags)}
-    response, _ = execute_financial(connection, client_id=client_id or "", operation="create_recurring_series",
+    response, replayed = execute_financial(connection, client_id=client_id or "", operation="create_recurring_series",
                                     key=idempotency_key, payload=payload, clock=clock, effect=effect)
     series_id = int(response.get("id", response.get("resource_id")))
     # The permanent identity outlives the response cache; retain the original version.
     version_id = response.get("version_id")
     if version_id is None:
         version_id = connection.execute("SELECT id FROM recurring_series_versions WHERE recurring_series_id=? ORDER BY id LIMIT 1", (series_id,)).fetchone()[0]
+    if replayed and materialize_through is not None:
+        # Old durable identities may predate immediate materialization. Catch up
+        # their existing series without repeating creation or rewriting history.
+        materialize(connection, series_id=series_id, through=materialize_through,
+                    actor=actor, correlation_id=correlation_id, clock=clock)
     return series_id, int(version_id)
 
 
@@ -98,8 +112,10 @@ def resolve_logical_slot(versions, ordinal):
     return candidate, version
 
 
-def materialize(connection: sqlite3.Connection, *, series_id: int, through: date, actor: str, correlation_id: str, clock: Clock) -> list[int]:
-    with immediate_transaction(connection):
+def materialize(connection: sqlite3.Connection, *, series_id: int, through: date, actor: str, correlation_id: str, clock: Clock, _within_transaction: bool = False) -> list[int]:
+    if _within_transaction and not connection.in_transaction:
+        raise RuntimeError("materialization requires the caller's active transaction")
+    with nullcontext(connection) if _within_transaction else immediate_transaction(connection):
         series = require_row(connection, "SELECT * FROM recurring_series WHERE id=?", (series_id,), "series")
         timeline_versions = connection.execute("SELECT * FROM recurring_series_versions WHERE recurring_series_id=? ORDER BY effective_from,id", (series_id,)).fetchall()
         if not timeline_versions or not any(v["effective_from"] <= series["start_date"] and (v["effective_to"] is None or v["effective_to"] >= series["start_date"]) for v in timeline_versions):

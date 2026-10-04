@@ -12,7 +12,7 @@ from ..db import connect
 from ..domain.auto_debit import execute_expense_auto_debit, execute_invoice_auto_debit
 from ..domain.automation import create_settlement, record_execution
 from ..domain.clock import Clock
-from ..domain.recurrence import materialize
+from ..domain.recurrence import materialize, materialization_horizon
 from ..domain.revenue_recurrence import materialize_revenue_series
 
 
@@ -56,7 +56,7 @@ class SchedulerService:
         return connect(self.database_path, self.busy_timeout_ms)
 
     def _year_end(self) -> date:
-        return date(self.clock.today().year, 12, 31)
+        return materialization_horizon(self.clock)
 
     def run_startup(self) -> TickSummary:
         return self.run_tick(kind="startup")
