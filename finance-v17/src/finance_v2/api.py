@@ -167,7 +167,7 @@ class Application:
    request=self.body(e);method=request.get("method");request_id=request.get("id")
    if not isinstance(method,str):raise HttpError(400,"INVALID_JSON","MCP method is required")
    if method=="initialize":
-    result={"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":False}},"serverInfo":{"name":"Finance V2","version":"0.1.17"}}
+    result={"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":False}},"serverInfo":{"name":"Finance V2","version":"0.1.18"}}
    elif method=="notifications/initialized":
     return self.mcp_response(start,202,None,rid,e)
    elif method=="tools/list":
@@ -190,15 +190,16 @@ class Application:
    return self.mcp_response(start,500,{"jsonrpc":"2.0","id":request_id if 'request_id' in locals() else None,"error":{"code":"INTERNAL_ERROR","message":"internal server error"}},rid,e)
  def mcp_tools(self):
   read={"type":"object","additionalProperties":False}
-  expenses={"type":"object","additionalProperties":False,"properties":{"page":{"type":"integer","minimum":1},"page_size":{"type":"integer","enum":[25,50,100]},"search":{"type":"string"}}}
+  expenses={"type":"object","additionalProperties":False,"properties":{"page":{"type":"integer","minimum":1},"page_size":{"type":"integer","enum":[25,50,100]},"search":{"type":"string"},"start":{"type":"string","format":"date","description":"Inclusive lower bound on expense_date (competence), YYYY-MM-DD; may be used alone."},"end":{"type":"string","format":"date","description":"Inclusive upper bound on expense_date (competence), YYYY-MM-DD; may be used alone. start > end returns an empty list, matching the canonical API."}}}
+  summary={"type":"object","additionalProperties":False,"properties":{"month":{"type":"string","pattern":"^[0-9]{4}-[0-9]{2}$","description":"Dashboard competence YYYY-MM. Omitted: current month of the configured Finance clock/timezone."}}}
   create={"type":"object","additionalProperties":False,"required":["idempotency_key","description","amount_cents","planned_payment_method","category_id"],"properties":{"idempotency_key":{"type":"string","minLength":16,"maxLength":128},"description":{"type":"string","minLength":1},"amount_cents":{"type":"integer","minimum":1},"expense_date":{"type":"string","format":"date"},"due_date":{"type":["string","null"],"format":"date"},"planned_payment_method":{"type":"string","enum":["CREDIT_CARD","AUTO_DEBIT","PIX","BANK_TRANSFER","CASH","BANK_SLIP","DEBIT"]},"category_id":{"type":"integer","minimum":1},"account_id":{"type":["integer","null"],"minimum":1},"card_id":{"type":["integer","null"],"minimum":1},"notes":{"type":["string","null"]},"tag_ids":{"type":"array","items":{"type":"integer","minimum":1}}}}
   return recurring_mcp_tools()+[
    {"name":"finance_get_context","description":"Return Finance V2 context and authorized capabilities.","inputSchema":read,"annotations":{"readOnlyHint":True,"destructiveHint":False,"idempotentHint":True}},
-   {"name":"finance_get_summary","description":"Return the current financial dashboard summary.","inputSchema":read,"annotations":{"readOnlyHint":True,"destructiveHint":False,"idempotentHint":True}},
+   {"name":"finance_get_summary","description":"Return the canonical Dashboard for month YYYY-MM; omitted month uses the current Finance clock/timezone month. Recognized expenses use expense_date competence; pending obligations use due dates, and realized totals use financial event dates. These are distinct measures.","inputSchema":summary,"annotations":{"readOnlyHint":True,"destructiveHint":False,"idempotentHint":True}},
    {"name":"finance_list_categories","description":"List registered categories.","inputSchema":read,"annotations":{"readOnlyHint":True,"destructiveHint":False,"idempotentHint":True}},
    {"name":"finance_list_accounts","description":"List registered accounts.","inputSchema":read,"annotations":{"readOnlyHint":True,"destructiveHint":False,"idempotentHint":True}},
    {"name":"finance_list_cards","description":"List registered cards.","inputSchema":read,"annotations":{"readOnlyHint":True,"destructiveHint":False,"idempotentHint":True}},
-   {"name":"finance_list_expenses","description":"List expenses with optional pagination and search.","inputSchema":expenses,"annotations":{"readOnlyHint":True,"destructiveHint":False,"idempotentHint":True}},
+   {"name":"finance_list_expenses","description":"List canonical API expense records. For expenses of a requested competence month, send its first/last dates as start/end: inclusive expense_date bounds, NOT due_date or invoice due dates. Card/invoice-linked records remain included. Omitted bounds retain the existing all-period listing; cancelled/superseded history remains included, deleted records excluded. Combine search/page/page_size; follow has_more to retrieve all pages. start > end returns empty. Never interpret an unfiltered page as a monthly total.","inputSchema":expenses,"annotations":{"readOnlyHint":True,"destructiveHint":False,"idempotentHint":True}},
    {"name":"finance_create_expense","description":"Create an expense using permanent idempotency.","inputSchema":create,"annotations":{"readOnlyHint":False,"destructiveHint":False,"idempotentHint":True}},
    {"name":"finance_create_category","description":"Create a category with permanent replay protection.","inputSchema":{"type":"object","additionalProperties":False,"required":["idempotency_key","name"],"properties":{"idempotency_key":{"type":"string","minLength":16,"maxLength":128},"name":{"type":"string","minLength":1}}},"annotations":{"readOnlyHint":False,"destructiveHint":False,"idempotentHint":True}},
    {"name":"finance_create_account","description":"Create an account with permanent replay protection.","inputSchema":{"type":"object","additionalProperties":False,"required":["idempotency_key","name"],"properties":{"idempotency_key":{"type":"string","minLength":16,"maxLength":128},"name":{"type":"string","minLength":1}}},"annotations":{"readOnlyHint":False,"destructiveHint":False,"idempotentHint":True}},
@@ -210,6 +211,13 @@ class Application:
   if name not in names:raise HttpError(404,"NOT_FOUND","tool not found")
   write=next(t for t in self.mcp_tools() if t["name"]==name)["annotations"]["readOnlyHint"] is False
   self.require_capabilities(identity,write=write)
+  if name in {"finance_list_expenses","finance_get_summary"}:
+   allowed={"page","page_size","search","start","end"} if name=="finance_list_expenses" else {"month"}
+   if not isinstance(arguments,dict) or set(arguments)-allowed:raise HttpError(422,"VALIDATION_ERROR","unsupported read tool arguments")
+   for field,value in arguments.items():
+    if field in {"page","page_size"}:integer(value,field,True)
+    elif not isinstance(value,str):raise HttpError(422,"VALIDATION_ERROR",f"{field} must be a string")
+    if field=="month" and not re.fullmatch(r"[0-9]{4}-[0-9]{2}",value):raise HttpError(422,"VALIDATION_ERROR","month must be YYYY-MM")
   if name in RECURRING_MCP_OPERATIONS:
    validate_recurring_arguments(name,arguments)
    method,path,operation,identifier=RECURRING_MCP_OPERATIONS[name]
@@ -220,11 +228,11 @@ class Application:
   elif name=="finance_get_context":
    payload,status=self.dispatch(Route("GET","/api/v2/assistant/context","assistant_context"),{},identity,{}, {},None)
    payload["recurring_expense_contract"]={"payment_methods":RECURRING_PAYMENT_METHODS,"frequencies":RECURRING_FREQUENCIES,"due_rules":RECURRING_DUE_RULES,"calendar":"Monthly base_day 1..31 clamps to month end; 31 represents last day. Resolve IDs from catalog tools; materialization belongs to domain/scheduler."}
-  elif name=="finance_get_summary":payload,status=self.dispatch(Route("GET","/api/v2/assistant/dashboard","assistant_dashboard"),{},identity,{}, {},None)
+  elif name=="finance_get_summary":payload,status=self.dispatch(Route("GET","/api/v2/assistant/dashboard","assistant_dashboard"),{},identity,{}, {"month":[arguments["month"]]} if "month" in arguments else {},None)
   elif name.startswith("finance_list_") and name!="finance_list_expenses":
    payload,status=self.dispatch(Route("GET","/api/v2/catalogs","catalogs"),{},identity,{}, {},None);payload={name.removeprefix("finance_list_"):payload.get(name.removeprefix("finance_list_"),[])}
   elif name=="finance_list_expenses":
-   q={k:[str(v)] for k,v in arguments.items() if k in {"page","page_size","search"}}
+   q={k:[str(v)] for k,v in arguments.items() if k in {"page","page_size","search","start","end"}}
    payload,status=self.dispatch(Route("GET","/api/v2/assistant/expenses","assistant_expense_list"),{},identity,{},q,None)
   elif name=="finance_create_expense":
    key=arguments.get("idempotency_key");body={k:v for k,v in arguments.items() if k!="idempotency_key"}

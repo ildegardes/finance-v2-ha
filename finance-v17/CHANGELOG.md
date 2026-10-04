@@ -1,5 +1,11 @@
 # Finance V17
 
+## 0.1.18
+
+- Add inclusive start/end expense_date competence bounds to finance_list_expenses, reusing the canonical expense API with existing search, pagination and lifecycle behavior.
+- Add explicit Dashboard month selection to finance_get_summary; omitted month keeps the configured Finance clock/timezone's current month.
+- Clarify tool schemas and descriptions: competence differs from due dates, invoice obligations and realized cash flow. Preserve the HTTP current_month due-date preset and schema 8 without migrations.
+
 ## 0.1.17
 
 - Guarantee eligible recurring expense occurrences immediately after canonical HTTP/UI/MCP creation, using the shared domain materializer and scheduler year-end horizon.
