@@ -166,7 +166,7 @@ class Application:
    request=self.body(e);method=request.get("method");request_id=request.get("id")
    if not isinstance(method,str):raise HttpError(400,"INVALID_JSON","MCP method is required")
    if method=="initialize":
-    result={"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":False}},"serverInfo":{"name":"Finance V2","version":"0.1.14"}}
+    result={"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":False}},"serverInfo":{"name":"Finance V2","version":"0.1.15"}}
    elif method=="notifications/initialized":
     return self.mcp_response(start,202,None,rid,e)
    elif method=="tools/list":

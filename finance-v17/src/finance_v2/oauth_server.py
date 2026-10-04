@@ -1,4 +1,4 @@
-"""Public-client OAuthLib integration. All persistence uses schema 7.
+"""Public-client OAuthLib integration. All persistence uses schema 8.
 
 This module owns protocol/login/grant lifecycle, not financial authorization.
 Token resolution returns the existing client's identity and capabilities.
@@ -27,14 +27,17 @@ from .oauth import ISSUER, RESOURCE, OAuthClient, AuthorizationRequest, validate
 
 CODE_TTL = 120
 ACCESS_TOKEN_TTL = 900
+REFRESH_TOKEN_TTL = 30 * 24 * 60 * 60
 CONSENT_TTL = 600
 OWNER = "OWNER:local"
 TOKEN_PREFIX = "fv2_oauth_"
 CODE_PREFIX = "fv2_code_"
+REFRESH_PREFIX = "fv2_refresh_"
 COOKIE_NAME = "finance_v2_oauth"
 COOKIE_PATH = "/oauth/authorize"
 AUTHORIZE_FIELDS = {"response_type", "client_id", "redirect_uri", "scope", "state", "resource", "code_challenge", "code_challenge_method"}
 TOKEN_FIELDS = {"grant_type", "client_id", "code", "redirect_uri", "code_verifier", "resource"}
+REFRESH_FIELDS = {"grant_type", "client_id", "refresh_token", "scope", "resource"}
 
 
 # OAuthLib's diagnostic request reprs can contain codes/verifiers/tokens.
@@ -100,7 +103,7 @@ class RateLimit:
 
 
 class FinanceCodeGrant(AuthorizationCodeGrant):
-    refresh_token = False
+    refresh_token = True
 
     def create_authorization_code(self, request):
         grant = {"code":CODE_PREFIX+secrets.token_urlsafe(32)}
@@ -116,7 +119,8 @@ class FinanceCodeGrant(AuthorizationCodeGrant):
 class FinanceServer(AuthorizationEndpoint, TokenEndpoint):
     def __init__(self, validator):
         grant=FinanceCodeGrant(validator)
-        bearer=BearerToken(validator,token_generator=lambda request:TOKEN_PREFIX+secrets.token_urlsafe(32),expires_in=ACCESS_TOKEN_TTL)
+        bearer=BearerToken(validator,token_generator=lambda request:TOKEN_PREFIX+secrets.token_urlsafe(32),expires_in=ACCESS_TOKEN_TTL,
+                           refresh_token_generator=lambda request:REFRESH_PREFIX+secrets.token_urlsafe(32))
         AuthorizationEndpoint.__init__(self,default_response_type="code",response_types={"code":grant},default_token_type=bearer)
         TokenEndpoint.__init__(self,default_grant_type="authorization_code",grant_types={"authorization_code":grant},default_token_type=bearer)
 
@@ -162,6 +166,8 @@ class FinanceValidator(RequestValidator):
             # Only a replay proving the same PKCE possession can revoke a grant.
             if FinanceCodeGrant(self).validate_code_challenge(row["pkce_challenge"],row["pkce_method"],request.code_verifier):
                 self.connection.execute("UPDATE oauth_access_tokens SET revoked_at=? WHERE request_id=? AND revoked_at IS NULL",(self.now,row["request_id"]))
+                family=self.connection.execute("SELECT family_id FROM oauth_refresh_token_families WHERE request_id=?",(row["request_id"],)).fetchone()
+                if family is not None:self.service.revoke_family(self.connection,family["family_id"],self.now,"code_replay")
             return False
         if row["code_expires_at"]<=self.now or row["code_revoked_at"] is not None or row["revoked_at"] is not None or row["completed_at"] is None or row["owner_subject"]!=OWNER:return False
         try:scopes=scopes_from_text(row["granted_scopes"])
@@ -177,7 +183,10 @@ class FinanceValidator(RequestValidator):
     def confirm_redirect_uri(self, client_id, code, redirect_uri, client, request, *args, **kwargs):return self.code_row["redirect_uri"]==redirect_uri
 
     def save_bearer_token(self, token, request, *args, **kwargs):
-        self.connection.execute("INSERT INTO oauth_access_tokens(token_hash,request_id,issuer,created_at,expires_at) VALUES(?,?,?,?,?)",(digest(token["access_token"]),self.code_row["request_id"],ISSUER,self.now,self.now+ACCESS_TOKEN_TTL))
+        family=secrets.token_urlsafe(24)
+        self.connection.execute("INSERT INTO oauth_refresh_token_families(family_id,request_id,created_at,expires_at) VALUES(?,?,?,?)",
+                                (family,self.code_row["request_id"],self.now,self.now+REFRESH_TOKEN_TTL))
+        self.service.store_tokens(self.connection,token,self.code_row["request_id"],family,self.now,self.now+REFRESH_TOKEN_TTL)
 
     def invalidate_authorization_code(self, client_id, code, request, *args, **kwargs):
         count=self.connection.execute("UPDATE oauth_authorization_codes SET consumed_at=? WHERE code_hash=? AND consumed_at IS NULL",(self.now,digest(code))).rowcount
@@ -290,7 +299,9 @@ class OAuthService:
     def exchange(self, params):
         now=self.now()
         self.limiter.check("token",now)
+        if params.get("grant_type")=="refresh_token":return self.refresh(params,now)
         if params.get("grant_type")!="authorization_code":raise OAuthFailure("unsupported_grant_type")
+        if set(params)-TOKEN_FIELDS:raise OAuthFailure()
         if any(not params.get(key) for key in TOKEN_FIELDS):raise OAuthFailure()
         if re.fullmatch(r"[A-Za-z0-9._~-]{43,128}",params["code_verifier"]) is None:raise OAuthFailure("invalid_grant")
         try:params={**params,"resource":validate_resource(params["resource"])}
@@ -309,16 +320,75 @@ class OAuthService:
                 return status,payload
         finally:connection.close()
 
+    def store_tokens(self, connection, token, request_id, family, now, expires, parent=None):
+        scopes=" ".join(sorted(scopes_from_text(token["scope"])))
+        connection.execute("INSERT INTO oauth_refresh_tokens(token_hash,family_id,parent_hash,scopes,created_at,expires_at) VALUES(?,?,?,?,?,?)",
+                           (digest(token["refresh_token"]),family,parent,scopes,now,expires))
+        connection.execute("INSERT INTO oauth_access_tokens(token_hash,request_id,issuer,created_at,expires_at,family_id,scopes) VALUES(?,?,?,?,?,?,?)",
+                           (digest(token["access_token"]),request_id,ISSUER,now,now+token["expires_in"],family,scopes))
+
+    def revoke_family(self, connection, family, now, reason):
+        connection.execute("UPDATE oauth_refresh_token_families SET revoked_at=?,revocation_reason=? WHERE family_id=? AND revoked_at IS NULL",(now,reason,family))
+        connection.execute("UPDATE oauth_refresh_tokens SET revoked_at=? WHERE family_id=? AND revoked_at IS NULL",(now,family))
+        connection.execute("UPDATE oauth_access_tokens SET revoked_at=? WHERE family_id=? AND revoked_at IS NULL",(now,family))
+
+    def refresh(self, params, now):
+        # Separate public-client grant contract: PKCE belongs to code exchange,
+        # not refresh. An omitted resource inherits the immutable grant binding.
+        if set(params)-REFRESH_FIELDS or any(not params.get(k) for k in ("client_id","refresh_token")):raise OAuthFailure()
+        value=params["refresh_token"]
+        if re.fullmatch(re.escape(REFRESH_PREFIX)+r"[A-Za-z0-9_-]{43}",value) is None:raise OAuthFailure("invalid_grant")
+        client=self.client(params["client_id"])
+        resource=RESOURCE
+        if "resource" in params:
+            try:resource=validate_resource(params["resource"])
+            except (TypeError,ValueError):raise OAuthFailure("invalid_target") from None
+        requested=scopes_from_text(params["scope"]) if "scope" in params else None
+        connection=self.db()
+        try:
+            with immediate_transaction(connection):
+                self.client_row(connection,client,now)
+                row=connection.execute("""SELECT r.*,f.family_id,f.created_at AS family_created_at,f.expires_at AS family_expires_at,
+                    f.revoked_at AS family_revoked_at,t.token_hash,t.scopes AS refresh_scopes,t.created_at AS refresh_created_at,
+                    t.expires_at AS refresh_expires_at,t.consumed_at AS refresh_consumed_at,t.revoked_at AS refresh_revoked_at,
+                    code.consumed_at AS code_consumed_at,code.revoked_at AS code_revoked_at
+                    FROM oauth_refresh_tokens t JOIN oauth_refresh_token_families f ON f.family_id=t.family_id
+                    JOIN oauth_authorization_requests r ON r.request_id=f.request_id
+                    JOIN oauth_authorization_codes code ON code.request_id=r.request_id WHERE t.token_hash=?""",(digest(value),)).fetchone()
+                # Prove immutable bindings before any revocation: foreign clients
+                # or an invalid target must not gain a family-revocation oracle.
+                if row is None or row["oauth_client_id"]!=client.client_id or row["resource"]!=resource or not client.allows_redirect(row["redirect_uri"]):raise OAuthFailure("invalid_grant")
+                if row["owner_subject"]!=OWNER or row["completed_at"] is None or row["revoked_at"] is not None or row["code_consumed_at"] is None or row["code_revoked_at"] is not None:raise OAuthFailure("invalid_grant")
+                if row["family_revoked_at"] is not None or row["refresh_revoked_at"] is not None or row["family_created_at"]>now or row["refresh_created_at"]>now or row["family_expires_at"]<=now or row["refresh_expires_at"]<=now:raise OAuthFailure("invalid_grant")
+                original=scopes_from_text(row["granted_scopes"])
+                current=scopes_from_text(row["refresh_scopes"])
+                if not current<=original or not original<=scopes_from_text(row["requested_scopes"]):raise OAuthFailure("invalid_grant")
+                if row["refresh_consumed_at"] is not None:
+                    self.revoke_family(connection,row["family_id"],now,"reuse")
+                    # Return inside the transaction to COMMIT revocation, rather
+                    # than raising and accidentally rolling the evidence back.
+                    return 400,{"error":"invalid_grant"}
+                scopes=current if requested is None else requested
+                if not scopes<=current:raise OAuthFailure("invalid_scope")
+                count=connection.execute("UPDATE oauth_refresh_tokens SET consumed_at=? WHERE token_hash=? AND consumed_at IS NULL AND revoked_at IS NULL",(now,row["token_hash"])).rowcount
+                if count!=1:raise OAuthFailure("invalid_grant")
+                token={"access_token":TOKEN_PREFIX+secrets.token_urlsafe(32),"refresh_token":REFRESH_PREFIX+secrets.token_urlsafe(32),
+                       "token_type":"Bearer","expires_in":min(ACCESS_TOKEN_TTL,row["family_expires_at"]-now),"scope":" ".join(sorted(scopes))}
+                self.store_tokens(connection,token,row["request_id"],row["family_id"],now,row["family_expires_at"],row["token_hash"])
+                return 200,token
+        finally:connection.close()
+
     def resolve(self, token):
         if re.fullmatch(re.escape(TOKEN_PREFIX)+r"[A-Za-z0-9_-]{43}",token) is None:return None
         connection=self.db()
         try:
-            row=connection.execute("SELECT r.*,t.issuer,t.created_at AS token_created_at,t.expires_at AS token_expires_at,t.revoked_at AS token_revoked_at,c.identity_client_id,c.disabled_at,code.consumed_at,code.revoked_at AS code_revoked_at FROM oauth_access_tokens t JOIN oauth_authorization_requests r ON r.request_id=t.request_id JOIN oauth_clients c ON c.oauth_client_id=r.oauth_client_id JOIN oauth_authorization_codes code ON code.request_id=r.request_id WHERE t.token_hash=?",(digest(token),)).fetchone()
+            row=connection.execute("SELECT r.*,t.issuer,t.created_at AS token_created_at,t.expires_at AS token_expires_at,t.revoked_at AS token_revoked_at,t.family_id,t.scopes AS token_scopes,f.revoked_at AS family_revoked_at,f.expires_at AS family_expires_at,f.request_id AS family_request_id,c.identity_client_id,c.disabled_at,code.consumed_at,code.revoked_at AS code_revoked_at FROM oauth_access_tokens t JOIN oauth_authorization_requests r ON r.request_id=t.request_id JOIN oauth_clients c ON c.oauth_client_id=r.oauth_client_id JOIN oauth_authorization_codes code ON code.request_id=r.request_id LEFT JOIN oauth_refresh_token_families f ON f.family_id=t.family_id WHERE t.token_hash=?",(digest(token),)).fetchone()
             if row is None or row["issuer"]!=ISSUER or row["resource"]!=RESOURCE or row["token_created_at"]>self.now() or row["token_expires_at"]<=self.now() or row["token_revoked_at"] is not None or row["revoked_at"] is not None or row["disabled_at"] is not None or row["code_revoked_at"] is not None or row["consumed_at"] is None or row["owner_subject"]!=OWNER:return None
             try:
                 client=self.client(row["oauth_client_id"])
-                scopes=scopes_from_text(row["granted_scopes"])
-                if not scopes<=scopes_from_text(row["requested_scopes"]):return None
+                if row["family_id"] is not None and (row["family_request_id"]!=row["request_id"] or row["family_revoked_at"] is not None or row["family_expires_at"]<=self.now() or row["token_scopes"] is None):return None
+                scopes=scopes_from_text(row["granted_scopes"] if row["token_scopes"] is None else row["token_scopes"])
+                if not scopes<=scopes_from_text(row["granted_scopes"]) or not scopes<=scopes_from_text(row["requested_scopes"]):return None
             except OAuthFailure:return None
             if client.identity_client_id!=row["identity_client_id"] or not client.allows_redirect(row["redirect_uri"]):return None
             return client.identity_client_id,scopes
@@ -331,7 +401,7 @@ class OAuthService:
         if consent:
             labels={"finance:read":"consultar seus dados financeiros","finance:write":"criar/alterar registros permitidos pelas tools autorizadas"}
             scopes="".join("<li>"+labels[scope]+"</li>" for scope in row["requested_scopes"].split(" "))
-            fields=f'<p>O aplicativo {client} solicita acesso ao Finance V2:</p><ul>{scopes}</ul><button name="action" value="allow">AUTORIZAR</button> <button name="action" value="deny">CANCELAR</button>'
+            fields=f'<p>O aplicativo {client} solicita acesso ao Finance V2:</p><ul>{scopes}</ul><p>A autorização pode ser renovada automaticamente por até 30 dias, sem novo login.</p><button name="action" value="allow">AUTORIZAR</button> <button name="action" value="deny">CANCELAR</button>'
             title="Autorizar acesso"
         else:
             fields=f'<p>Identifique-se como proprietário da Finance V2 para continuar com {client}.</p><label>Credencial do proprietário <input type="password" name="ui_token" required autocomplete="current-password"></label><button name="action" value="login">Entrar</button>'
@@ -367,7 +437,8 @@ class OAuthService:
             try:raw=raw.decode("utf-8",errors="strict")
             except UnicodeError:raise OAuthFailure() from None
             if path=="/oauth/token":
-                status,payload=self.exchange(parameters(raw,TOKEN_FIELDS))
+                params=parameters(raw,TOKEN_FIELDS | REFRESH_FIELDS)
+                status,payload=self.exchange(params)
                 return http_response(start,status,payload)
             if environ.get("HTTP_ORIGIN") not in (None,"null",ISSUER):raise OAuthFailure("access_denied",403)
             binding=self.browser_binding(environ)

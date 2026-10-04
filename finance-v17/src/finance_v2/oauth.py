@@ -177,10 +177,10 @@ def protected_resource_metadata() -> dict[str, object]:
 
 
 def authorization_server_contract() -> dict[str, object]:
-    """RFC 8414 metadata for the implemented authorization-code server."""
+    """RFC 8414 metadata for the implemented code and refresh grants."""
     return {"issuer": ISSUER, "authorization_endpoint": ISSUER + "/oauth/authorize",
             "token_endpoint": ISSUER + "/oauth/token", "response_types_supported": ["code"],
-            "grant_types_supported": ["authorization_code"], "scopes_supported": sorted(FINANCE_SCOPES),
+            "grant_types_supported": ["authorization_code", "refresh_token"], "scopes_supported": sorted(FINANCE_SCOPES),
             "code_challenge_methods_supported": list(PKCE_METHODS),
             "token_endpoint_auth_methods_supported": ["none"]}
 

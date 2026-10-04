@@ -1,5 +1,13 @@
 # Finance V17
 
+## 0.1.15
+
+- Add durable public-client OAuth refresh tokens with schema migration 008.
+- Keep access tokens short-lived (15 minutes); rotate single-use refresh tokens within a 30-day absolute authorization family lifetime.
+- Store only token hashes; atomically rotate tokens and revoke a family on proven reuse, including its access tokens.
+- Preserve client/resource binding, non-escalating scopes, legacy access tokens, PKCE, exact callbacks, consent, CSRF and browser CSP.
+- Advertise the refresh_token grant and explain automatic renewal in the consent page. No deployment or real-client validation is implied by this local release.
+
 ## 0.1.14
 
 - Add a clear planned-payment scope selector for recurring expenses: only this entry or this and eligible future entries, using the existing protected-history contracts.

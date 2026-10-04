@@ -34,6 +34,7 @@ MIGRATIONS = (
     Migration(5, "v17_expense_tombstone", MIGRATIONS_DIR / "005_v17_expense_tombstone.sql", "7d29c5151ad4703001f2c1f76482a48650efd2d92e8976d7b93c3c54282b2f86", True),
     Migration(6, "v17_revenue_recurrence_versions", MIGRATIONS_DIR / "006_v17_revenue_recurrence_versions.sql", "e7daa63b8b8174d416368062832efc9ef57fbd841958311b3dbd3bc4ac8fc421"),
     Migration(7, "v17_oauth_foundation", MIGRATIONS_DIR / "007_v17_oauth_foundation.sql", "a7d135cfd7dda6f11a6d5a28317c24d7fb8b7476e73f70d3e0005bacfc5dd924"),
+    Migration(8, "v17_oauth_refresh", MIGRATIONS_DIR / "008_v17_oauth_refresh.sql", "3b2d818b0bceba9c57cb882e149a546e781dee7dcb21f6ce0c4e9e006b6b111a"),
 )
 
 
