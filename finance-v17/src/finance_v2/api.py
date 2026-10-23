@@ -9,7 +9,11 @@ from pathlib import Path
 from typing import Callable, Iterable
 from urllib.parse import parse_qs
 
+from . import __version__
 from .config import Settings
+from . import open_finance_http
+from .open_finance import SyncError
+from .unicode13_f06 import verify_profile as verify_unicode13_profile
 from .authorization import missing_capabilities
 from .oauth import AUTHORIZATION_METADATA_PATH, RESOURCE_METADATA_PATH, RESOURCE_METADATA_URL, protected_resource_metadata, authorization_server_contract, bearer_challenge
 from .oauth_server import OAuthService, TOKEN_PREFIX
@@ -47,6 +51,7 @@ class Route:
         return re.match("^"+re.sub(r"\{([a-z_]+)\}",r"(?P<\1>[0-9]+)",self.path)+"$",path)
 
 ROUTES=(
+ *(Route(method,open_finance_http.PREFIX+path,'open_finance_'+operation,method=='POST') for method,path,operation in open_finance_http.OPERATIONS),
  Route("GET","/api/v2/health","health"),Route("GET","/api/v2/openapi.json","openapi"),
  Route("GET","/api/v2/assistant/context","assistant_context"),Route("GET","/api/v2/assistant/dashboard","assistant_dashboard"),Route("GET","/api/v2/assistant/expenses","assistant_expense_list"),Route("POST","/api/v2/assistant/expenses","assistant_expense_create",True,True),Route("GET","/api/v2/assistant/openapi.json","assistant_openapi"),
  Route("GET","/api/v2/context","context"),Route("GET","/api/v2/catalogs","catalogs"),Route("GET","/api/v2/recurring-series","series_list"),Route("GET","/api/v2/recurring-series/{id}","series_detail"),Route("GET","/api/v2/installment-series","installments_list"),Route("GET","/api/v2/installment-series/{id}","installments_detail"),
@@ -89,7 +94,9 @@ def query_positive_int(value,field):
     return int(value)
 
 class Application:
- def __init__(self,settings,clock=None):self.settings=settings;self.clock=clock or SystemClock(settings.timezone);self.oauth=OAuthService(settings,self.clock)
+ def __init__(self,settings,clock=None):
+  verify_unicode13_profile()
+  self.settings=settings;self.clock=clock or SystemClock(settings.timezone);self.oauth=OAuthService(settings,self.clock)
  def __call__(self,environ,start_response)->Iterable[bytes]:
   rid=environ.get("HTTP_X_REQUEST_ID","local");origin=environ.get("HTTP_ORIGIN")
   try:
@@ -110,6 +117,14 @@ class Application:
     if origin not in self.settings.cors_origins:raise HttpError(403,"CORS_FORBIDDEN","origin is not allowed")
     return self.respond(start_response,204,{},rid,origin)
    route,params=self.route(method,path);identity=self.identity(environ,route)
+   if route.operation.startswith('open_finance_'):
+    if identity.role!='UI':raise HttpError(403,'FORBIDDEN','owner authorization required')
+    if route.write and environ.get('finance_v2.cookie_auth') and environ.get('HTTP_X_CSRF_TOKEN')!=environ.get('finance_v2.csrf'):raise HttpError(403,'CSRF_INVALID','CSRF token is missing or invalid')
+    body,query=open_finance_http.request(environ)
+    try:payload,status=open_finance_http.dispatch(self,route.operation,identity,body,query)
+    except SyncError:raise
+    except Exception:raise HttpError(503,'STORAGE_UNAVAILABLE','staging unavailable') from None
+    return self.respond(start_response,status,payload,rid,origin)
    assistant_operation=route.operation.startswith("assistant_")
    body=self.body(environ);key=environ.get("HTTP_IDEMPOTENCY_KEY")
    if route.idem and key is None:raise HttpError(400,"IDEMPOTENCY_KEY_REQUIRED","Idempotency-Key is required")
@@ -120,6 +135,7 @@ class Application:
    payload,status=self.dispatch(route,params,identity,body,parse_qs(environ.get("QUERY_STRING","")),key)
    return self.respond(start_response,status,payload,rid,origin)
   except HttpError as e:return self.respond(start_response,e.status,{"error":{"code":e.code,"message":e.message}},rid,origin)
+  except SyncError as e:return self.respond(start_response,e.status,{'error':{'code':e.code,'message':e.code}},rid,origin)
   except InvalidIdempotencyKey as e:return self.respond(start_response,400,{"error":{"code":"IDEMPOTENCY_KEY_INVALID","message":str(e)}},rid,origin)
   except IdempotencyConflict as e:return self.respond(start_response,409,{"error":{"code":"IDEMPOTENCY_CONFLICT","message":str(e)}},rid,origin)
   except NewDueDateRequired as e:return self.respond(start_response,400,{"error":{"code":e.code,"message":str(e)}},rid,origin)
@@ -132,6 +148,7 @@ class Application:
   for r in ROUTES:
    m=r.match(path)
    if r.method==method and m:return r,{k:int(v) for k,v in m.groupdict().items()}
+  if path.startswith(open_finance_http.PREFIX) and any(r.path==path for r in ROUTES):raise HttpError(405,'METHOD_NOT_ALLOWED','method not allowed')
   raise HttpError(404,"NOT_FOUND","resource not found")
  def identity(self,e,r):
   if r.operation in {"health","openapi"}:return Identity("PUBLIC","PUBLIC")
@@ -167,7 +184,7 @@ class Application:
    request=self.body(e);method=request.get("method");request_id=request.get("id")
    if not isinstance(method,str):raise HttpError(400,"INVALID_JSON","MCP method is required")
    if method=="initialize":
-    result={"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":False}},"serverInfo":{"name":"Finance V2","version":"0.1.18"}}
+    result={"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":False}},"serverInfo":{"name":"Finance V2","version":__version__}}
    elif method=="notifications/initialized":
     return self.mcp_response(start,202,None,rid,e)
    elif method=="tools/list":
@@ -681,6 +698,7 @@ class Application:
    return {"type":"object","required":list(fields),"properties":fields}
   paths={}
   for r in ROUTES:
+   if r.operation.startswith('open_finance_'):continue
    success="201" if r.operation in {"catalog_create","card_create","card_calendar_create","expense_create","revenue_create","revenue_series_create","series_create","occurrence_override","installments_create"} else "200"
    op={"operationId":r.operation,"responses":{success:{"description":"Success","content":{"application/json":{"schema":success_schema(r.operation)}}},"400":{"$ref":"#/components/responses/BadRequest"},"401":{"$ref":"#/components/responses/Unauthenticated"},"403":{"$ref":"#/components/responses/Forbidden"},"404":{"$ref":"#/components/responses/NotFound"},"409":{"$ref":"#/components/responses/Conflict"},"413":{"$ref":"#/components/responses/PayloadTooLarge"},"422":{"$ref":"#/components/responses/ValidationError"},"500":{"$ref":"#/components/responses/InternalError"},"503":{"$ref":"#/components/responses/DatabaseUnavailable"}},"security":[] if r.operation in {"health","openapi"} else [{"bearerAuth":[]}]}
    if r.operation in {"card_calendar_create","revenue_create","revenue_series_create","installments_create"}:op["responses"]["200"]={"description":"Idempotent replay","content":{"application/json":{"schema":success_schema(r.operation)}}}
@@ -730,6 +748,7 @@ class Application:
   def response(description,codes):
    schema={"type":"object","required":["error","request_id"],"properties":{"error":{"type":"object","required":["code","message"],"properties":{"code":{"type":"string","enum":codes},"message":{"type":"string"}}},"request_id":{"type":"string"}}}
    return {"description":description,"content":{"application/json":{"schema":schema}}}
+  paths.update(open_finance_http.openapi_paths())
   return {"openapi":"3.1.0","info":{"title":"Finance V2 API","version":"2.0.0"},"paths":paths,"components":{"securitySchemes":{"bearerAuth":{"type":"http","scheme":"bearer"}},"schemas":{"MoneyCents":money,"CivilDate":date_schema,"UtcTimestamp":{"type":"string","format":"date-time","pattern":"Z$"},"Error":error_schema},"responses":{"BadRequest":response("Malformed request or idempotency key",["INVALID_JSON","IDEMPOTENCY_KEY_REQUIRED","IDEMPOTENCY_KEY_INVALID","NEW_DUE_DATE_REQUIRED"]),"Unauthenticated":response("Missing or invalid Bearer token",["UNAUTHENTICATED"]),"Forbidden":response("Authenticated identity is not authorized",["FORBIDDEN","CSRF_INVALID","CORS_FORBIDDEN"]),"NotFound":response("Resource not found",["NOT_FOUND"]),"Conflict":response("Domain or idempotency conflict",["CONFLICT","INVALID_STATE_TRANSITION","ACTIVE_PAYMENT_EXISTS","INACTIVE_ACCOUNT","OVERPAYMENT","INVOICE_PAID","AUTO_DEBIT_REQUIRES_ATTENTION","IDEMPOTENCY_CONFLICT","DOMAIN_ERROR"]),"PayloadTooLarge":response("Request body exceeds limit",["PAYLOAD_TOO_LARGE"]),"ValidationError":response("Domain validation failed",["VALIDATION_ERROR","IDENTITY_FIELD_FORBIDDEN"]),"InternalError":response("Unexpected internal failure",["INTERNAL_ERROR"]),"DatabaseUnavailable":response("Database unavailable",["DATABASE_UNAVAILABLE"])}}}
  def assistant_openapi(self):
   integer_id={"type":"integer","minimum":1}; date_schema={"type":"string","format":"date"}; error={"type":"object","required":["error","request_id"],"properties":{"error":{"type":"object","required":["code","message"],"properties":{"code":{"type":"string"},"message":{"type":"string"}}},"request_id":{"type":"string"}}}
@@ -749,6 +768,6 @@ class Application:
   """Serialize a protocol document without the Finance API envelope."""
   raw=b"" if status==204 else json.dumps(payload,ensure_ascii=False,separators=(",",":"),default=str).encode();headers=[("Content-Type","application/json; charset=utf-8"),("Content-Length",str(len(raw))),("Cache-Control","no-store"),("X-Content-Type-Options","nosniff")]
   if origin in self.settings.cors_origins:headers += [("Access-Control-Allow-Origin",origin),("Vary","Origin"),("Access-Control-Allow-Headers","Authorization, Content-Type, Idempotency-Key, X-Request-ID"),("Access-Control-Allow-Methods","GET, POST, PATCH, OPTIONS")]
-  phrase={200:"OK",201:"Created",202:"Accepted",204:"No Content",400:"Bad Request",401:"Unauthorized",403:"Forbidden",404:"Not Found",409:"Conflict",413:"Payload Too Large",422:"Unprocessable Entity",500:"Internal Server Error",503:"Service Unavailable"}.get(status,"Error");start(f"{status} {phrase}",headers);return [raw]
+  phrase={200:"OK",201:"Created",202:"Accepted",204:"No Content",207:"Multi-Status",400:"Bad Request",401:"Unauthorized",403:"Forbidden",404:"Not Found",405:"Method Not Allowed",409:"Conflict",413:"Payload Too Large",415:"Unsupported Media Type",422:"Unprocessable Entity",500:"Internal Server Error",502:"Bad Gateway",503:"Service Unavailable"}.get(status,"Error");start(f"{status} {phrase}",headers);return [raw]
 
 def create_app(settings=None,clock=None):return Application(settings or Settings.from_env(),clock)

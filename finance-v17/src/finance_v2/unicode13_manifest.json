@@ -1,0 +1,35 @@
+{
+  "contract": "FINANCE-F06-U13-MANIFEST/1",
+  "ucd": "13.0.0",
+  "backend": "FINANCE-F06-U13/1",
+  "data_contract": "OF-L3-03-U13-PRIMITIVES/1",
+  "source": "CPython 3.10.0 installed reference; OF-L3-03 independent extraction",
+  "runtime_integrity": "literal DATA_SHA256 and closed schema verified by unicode13_f06 at Application initialization and every search term; this manifest is inventory, not self-authorization",
+  "distribution": "NOTICES_DOCUMENTED_PUBLICATION_REQUIRES_SEPARATE_APPROVAL",
+  "artifacts": {
+    "UNICODE13_NOTICES.md": {
+      "sha256": "86FCFFEA7F6E15385B93E7BB390CD44CD7BB65D05F672C68E8D556EE88679134",
+      "bytes": 3395
+    },
+    "UNICODE_DATA_LICENSE_2020.txt": {
+      "sha256": "0EFACA9742A27A3F5A7F6F2B5C40A1D227295246E2483308BF83E05871FA202A",
+      "bytes": 1763
+    },
+    "UNICODE_LICENSE_V3.txt": {
+      "sha256": "E7A93B009565CFCE55919A381437AC4DB883E9DA2126FA28B91D12732BC53D96",
+      "bytes": 1995
+    },
+    "unicode13_primitives.json": {
+      "sha256": "DE81088662045384D1F0B07FDF53A40BEE297843782FE80BF1AAEA94383BAAA4",
+      "bytes": 77174
+    },
+    "unicode13_f06.py": {
+      "sha256": "6C7EC1703A30FE81A9D577604DFC1B999D9AE48BF78B1318C20DE8E9662CBCD9",
+      "bytes": 6261
+    },
+    "PYTHON_REFERENCE_LICENSE.txt": {
+      "sha256": "023163D4252112720E12757861BDD0272105EE1F67ED6A44130E652189A2F7AB",
+      "bytes": 32628
+    }
+  }
+}

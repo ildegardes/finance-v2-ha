@@ -91,6 +91,8 @@ run_startup(){
   if [ "$startup_status" -ne 0 ]; then exit "$startup_status"; fi
 }
 if [ ! -f /data/options.json ]; then echo 'options.json is required' >&2; exit 1; fi
+FINANCE_V2_PLUGGY_CONNECTIONS_JSON=$(python -m finance_v2.ha_pluggy_options /data/options.json)
+export FINANCE_V2_PLUGGY_CONNECTIONS_JSON
 APP_TIMEZONE=$(python -c 'import json; print(json.load(open("/data/options.json", encoding="utf-8")).get("timezone", "America/Sao_Paulo"))')
 FINANCE_V2_UI_TOKEN=$(python -c 'import json; print(json.load(open("/data/options.json", encoding="utf-8")).get("ui_token", ""))')
 FINANCE_V2_EXTERNAL_CLIENTS_JSON=$(python -c 'import json; value=json.load(open("/data/options.json", encoding="utf-8")).get("external_clients", "{}"); print(value if isinstance(value, str) else json.dumps(value, separators=(",", ":")))')
