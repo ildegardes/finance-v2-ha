@@ -1,0 +1,9 @@
+/* Fail closed from the initial HTML; the controller applies saved preferences. */
+#money-privacy-toggle{min-width:44px;min-height:44px;padding:.55rem;display:inline-flex;align-items:center;justify-content:center}
+#money-privacy-toggle svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.privacy-field{position:relative;display:block;min-width:0}
+.privacy-field-mask{display:none}
+html[data-money-privacy="hidden"] .privacy-field-mask{display:flex;position:absolute;inset:1px;align-items:center;padding:0 .8rem;background:var(--surface,#fff);border-radius:.65rem;pointer-events:none;font-weight:400}
+html[data-money-privacy="hidden"] [data-money-input]{color:transparent;caret-color:transparent}
+.app-header>.actions{flex-wrap:nowrap}
+@media(max-width:420px){.brand strong{font-size:.85rem}.brand-mark{display:none}.app-header{gap:.4rem}.app-header>.actions{gap:.25rem}}

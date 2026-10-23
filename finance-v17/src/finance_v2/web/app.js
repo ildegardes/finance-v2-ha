@@ -1,10 +1,12 @@
 import {icon} from './icons.js';
+import {money,installPrivacy} from './privacy.js';
 import {createOpenFinance} from './open-finance.js';
 import {completion} from './completion.js';
 import {errorText,humanAudit,financialAmount} from './presentation.js';
 let context,pendingSuccess=false;const view=document.querySelector('#view'),status=document.querySelector('#status');
 let dashboard,expenses,expenseForm,expenseDetail,catalogs,cards,cardDetail,invoices,invoiceDetail,recurring,recurringForm,recurringDetail,installments,installmentDetail;
-const money=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format((v||0)/100),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+installPrivacy();
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const flowMoney=(kind,value)=>financialAmount(kind,value,money);
 const labels={PENDING:'Pendente',OVERDUE:'Atrasada',PAID:'Paga',CANCELLED:'Cancelada',SUPERSEDED:'Substituída',ACTIVE:'Ativa',ENDED:'Encerrada',OPEN:'Aberta',CLOSED:'Fechada',RECEIVED:'Recebida',MANUAL:'Manual',AUTO_DEBIT:'Débito automático',PIX:'Pix',DEBIT:'Débito',CASH:'Dinheiro',BANK_SLIP:'Boleto',BANK_TRANSFER:'Transferência bancária',CREDIT_CARD:'Cartão de crédito',WEEKLY:'Semanal',BIWEEKLY:'Quinzenal',MONTHLY:'Mensal',BIMONTHLY:'Bimestral',QUARTERLY:'Trimestral',SEMIANNUAL:'Semestral',ANNUAL:'Anual',SAME_DAY:'Mesmo dia da ocorrência',INVOICE:'Conforme fatura do cartão'};
 const label=v=>labels[v]||v||'—',dateBR=v=>v?new Intl.DateTimeFormat('pt-BR',{timeZone:'UTC'}).format(new Date(v.length===10?v+'T12:00:00Z':v)):'—';
