@@ -1,5 +1,13 @@
 # Finance V17
 
+## 0.1.21-open-finance.1 — local composition, not published
+
+- Reuse the existing manual Pluggy staging, owner-only HTTP contracts and Open Finance query interface.
+- Include additive migration 009 and the fixed Unicode13 search profile with its notices.
+- Preserve the published 0.1.20-lifecycle.1 lifecycle functions and monitoring; add only private Pluggy options loading.
+- Preserve financial rules, OAuth/MCP, existing options and the financial scheduler; no automatic bank sync or promotion.
+- Local synthetic review candidate only. No production update, real banking access or installation is authorized.
+
 ## 0.1.18
 
 - Add inclusive start/end expense_date competence bounds to finance_list_expenses, reusing the canonical expense API with existing search, pagination and lifecycle behavior.

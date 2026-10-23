@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import os
 from pathlib import Path
@@ -8,6 +8,7 @@ import re
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from .authorization import FINANCE_SCOPES
 from .oauth import OAuthClient
+from .pluggy_config import PluggyConnection, PluggyConfigurationError, connections_from_json
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -98,8 +99,14 @@ class Settings:
     scheduler_interval_seconds: int = 3600
     external_clients: tuple[ExternalClientCredential, ...] = ()
     oauth_clients: tuple[OAuthClient, ...] = ()
+    pluggy_connections: tuple[PluggyConnection, ...] = field(default=(), repr=False)
+    # Only enable for a database whose canonical-writer provenance was verified.
+    # Not inferred from schema, timestamps or the existence of revision one.
+    open_finance_origin_evidence: bool = False
 
     def __post_init__(self):
+        if type(self.open_finance_origin_evidence) is not bool:
+            raise ConfigurationError("Open Finance origin evidence must be boolean")
         identities=[c.identity_client_id for c in self.oauth_clients]
         client_ids=[c.oauth_client_id for c in self.oauth_clients]
         legacy={"CLIENT:"+c.client_id for c in self.external_clients} | {"CLIENT:hermes"}
@@ -131,6 +138,13 @@ class Settings:
             raise ConfigurationError("FINANCE_V2_BUSY_TIMEOUT_MS cannot be negative")
         if scheduler_interval_seconds <= 0:
             raise ConfigurationError("FINANCE_V2_SCHEDULER_INTERVAL_SECONDS must be positive")
+        try:
+            pluggy_connections = connections_from_json(os.environ.get("FINANCE_V2_PLUGGY_CONNECTIONS_JSON"))
+        except PluggyConfigurationError:
+            raise ConfigurationError("invalid Pluggy connection configuration") from None
+        origin_evidence = os.environ.get("FINANCE_V2_OF_ORIGIN_EVIDENCE", "0")
+        if origin_evidence not in {"0", "1"}:
+            raise ConfigurationError("FINANCE_V2_OF_ORIGIN_EVIDENCE must be 0 or 1")
         return cls(
             database_path=path.resolve(),
             timezone=timezone,
@@ -144,4 +158,6 @@ class Settings:
             cors_origins=tuple(origin.strip() for origin in os.environ.get("FINANCE_V2_CORS_ORIGINS", "").split(",") if origin.strip()),
             external_clients=_external_clients_from_env(os.environ.get("FINANCE_V2_EXTERNAL_CLIENTS_JSON")),
             oauth_clients=_oauth_clients_from_env(os.environ.get("FINANCE_V2_OAUTH_CLIENTS_JSON")),
+            pluggy_connections=pluggy_connections,
+            open_finance_origin_evidence=origin_evidence == "1",
         )
