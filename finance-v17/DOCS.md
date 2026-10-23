@@ -1,6 +1,6 @@
 # Configuração local do Open Finance / Pluggy
 
-Candidata local 0.1.21-open-finance.1, schema 9, composta da base lifecycle publicada e do doador OF-L3-14. Python 3.12.7,
+Candidata local 0.1.22-open-finance.1, schema 9, composta da base lifecycle publicada e do doador OF-L3-14. Python 3.12.7,
 oauthlib 3.3.1 e dados Unicode13 fixados; consulte os notices distribuídos
 em `src/finance_v2/UNICODE13_NOTICES.md` e seu manifesto de integridade.
 O startup aplica migrations antes de iniciar API e scheduler financeiro.
@@ -9,6 +9,37 @@ Esta identidade não autoriza publicação ou instalação no Home Assistant.
 A integração é opcional e vem desabilitada. Este pacote em desenvolvimento
 não autoriza conexão bancária real, implantação ou migration em Production.
 API/UI, OAuth e scheduler financeiro continuam funcionando sem Pluggy.
+
+## Fase A — interface e privacidade global
+
+O olho no cabeçalho oculta/exibe valores em toda a interface, sem recarregar
+a página. Sem preferência anterior, os valores começam ocultos como
+`R$ ••••••`. A preferência `finance-v17:money-visible` fica no localStorage
+do navegador; somente `true` exibe valores. Não altera opções do add-on,
+respostas da API ou registros financeiros. Não é criptografia nem controle
+de acesso: os dados continuam na memória, nos formulários e na API.
+
+Open Finance possui Visão geral, Fluxo, Ativos e Conexões. Fluxo preserva
+filtros e paginação; Conexões reutiliza o catálogo e histórico existentes.
+Saldos consolidados e posições de investimentos estão explicitamente
+indisponíveis, sem valores fictícios. Categorias bancárias são preservadas.
+Abrir as abas não inicia sincronização bancária ou conciliação oficial.
+
+A release mantém as migrations 001–009 sem mudanças. A atualização de uma
+instalação já em schema 9 não requer migration nova; o startup ainda executa
+o migrador existente. Se o banco estiver em schema 8, a 009 continua sujeita
+a autorização específica. A versão e o schema efetivos devem ser conferidos.
+
+Limitação preexistente: editar receita recorrente pode também abrir o diálogo
+de materialização pelo handler legado. Isso foi reproduzido no baseline e
+não foi corrigido nesta release; requer avaliação antes de uso operacional
+desse fluxo. A qualificação da interface não certifica sua escrita financeira.
+
+Esta preparação não exige backup adicional automaticamente. Antes de uma
+instalação autorizada, avaliar se a proteção já aceita ainda corresponde ao
+estado atual. Recuperação deve coordenar código, configuração e banco
+compatíveis; não restaurar automaticamente um ponto antigo schema 8 sobre
+uma instalação schema 9 com dados posteriores.
 
 ## Opções
 

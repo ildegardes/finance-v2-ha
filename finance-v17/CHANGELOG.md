@@ -1,5 +1,15 @@
 # Finance V17
 
+## 0.1.22-open-finance.1 — local release preparation
+
+- Add global monetary privacy with a header eye button, hidden-by-default presentation and a persistent local browser preference.
+- Organize Open Finance into Overview, Flow, Assets and Connections; preserve existing query filters and pagination without inventing balances or investment positions.
+- Improve Brazilian date/amount presentation, friendly account labels, keyboard navigation and responsive layouts.
+- Preserve schema 9, migrations 001–009, HTTP contracts, authentication, financial rules, lifecycle and scheduler. No automatic bank sync or financial promotion.
+- Privacy is presentation only: API responses, form values and browser memory are not encrypted or removed.
+- Known pre-existing limitation: recurring revenue editing can also open a materialization dialog through the legacy delegated handler. Phase A did not fix or certify financial execution of that flow.
+- This is a local, unpublished release preparation; publication, installation and Home Assistant operations require separate authorization.
+
 ## 0.1.21-open-finance.1 — local composition, not published
 
 - Reuse the existing manual Pluggy staging, owner-only HTTP contracts and Open Finance query interface.
