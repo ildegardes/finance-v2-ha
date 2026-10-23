@@ -1,10 +1,10 @@
 # Configuração local do Open Finance / Pluggy
 
-Candidata local 0.1.22-open-finance.1, schema 9, composta da base lifecycle publicada e do doador OF-L3-14. Python 3.12.7,
+Candidata experimental 0.1.23-open-finance.1, schema 10, baseada na distribuição 0.1.22-open-finance.1. Python 3.12.7,
 oauthlib 3.3.1 e dados Unicode13 fixados; consulte os notices distribuídos
 em `src/finance_v2/UNICODE13_NOTICES.md` e seu manifesto de integridade.
 O startup aplica migrations antes de iniciar API e scheduler financeiro.
-Esta identidade não autoriza publicação ou instalação no Home Assistant.
+Publicação restrita à branch de revisão; instalação no Home Assistant não foi executada nem autorizada.
 
 A integração é opcional e vem desabilitada. Este pacote em desenvolvimento
 não autoriza conexão bancária real, implantação ou migration em Production.
@@ -19,16 +19,32 @@ do navegador; somente `true` exibe valores. Não altera opções do add-on,
 respostas da API ou registros financeiros. Não é criptografia nem controle
 de acesso: os dados continuam na memória, nos formulários e na API.
 
-Open Finance possui Visão geral, Fluxo, Ativos e Conexões. Fluxo preserva
+Open Finance possui Visão geral, Fluxo, Cartões, Ativos, Crédito e Conexões. Fluxo preserva
 filtros e paginação; Conexões reutiliza o catálogo e histórico existentes.
-Saldos consolidados e posições de investimentos estão explicitamente
-indisponíveis, sem valores fictícios. Categorias bancárias são preservadas.
+Saldos, limites, faturas, posições, movimentações de investimentos e empréstimos
+podem ser consultados no staging após coleta manual do cache autorizado. Categorias
+bancárias são preservadas. Não há total patrimonial consolidado ou retorno calculado:
+moedas, possíveis sobreposições e completude histórica não são presumidas.
 Abrir as abas não inicia sincronização bancária ou conciliação oficial.
 
-A release mantém as migrations 001–009 sem mudanças. A atualização de uma
-instalação já em schema 9 não requer migration nova; o startup ainda executa
-o migrador existente. Se o banco estiver em schema 8, a 009 continua sujeita
-a autorização específica. A versão e o schema efetivos devem ser conferidos.
+A release mantém as migrations 001–009 sem mudanças e adiciona a 010 exclusivamente
+para staging. O startup existente executará 9→10, ou 8→9→10, conforme o estado
+efetivo. Não atualizar antes de backup consistente e recuperação coordenada aprovados.
+Downgrade de código não reverte schema. Estado atual e backup devem ser reconfirmados;
+nenhuma migration foi executada em banco operacional nesta preparação.
+
+## Cobertura ampliada e coleta manual
+
+Abrir as telas consulta apenas o staging. A ação “Consultar cache” exige confirmação
+e usa a configuração privada existente por instituição; não atualiza a instituição.
+Pode emitir chave temporária POST /auth. Saldo em tempo real, SCR/Bacen e endpoints
+de movimentação financeira são bloqueados. Sincronização automática permanece falsa.
+
+Cada recurso distingue não consultado, não autorizado, não disponível, vazio e zero.
+Payloads são projetados por contrato, sem documentos/números completos ou URLs assinadas.
+Omissões privadas ou de campos ainda não contratados são contabilizadas. Histórico e
+NOT_SEEN preservam registros sem inferir exclusão ou proveniência F07 legada.
+Consulte `docs/open-finance/FULL_COVERAGE_CONTRACTS.md` no repositório de distribuição.
 
 Limitação preexistente: editar receita recorrente pode também abrir o diálogo
 de materialização pelo handler legado. Isso foi reproduzido no baseline e

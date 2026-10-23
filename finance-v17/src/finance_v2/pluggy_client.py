@@ -12,6 +12,7 @@ from urllib.parse import parse_qsl, urlencode
 from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHandler, ProxyHandler
 
 from .pluggy_config import PluggyConnection
+from .pluggy_coverage import cached_path, collection_pages
 
 
 class PluggyError(Exception):
@@ -47,7 +48,7 @@ def _unique_object(pairs):
 def transport(method, path, headers, body, timeout):
     """Fixed TLS host, no environment proxy, redirects or provider error bodies."""
     if not ((method == 'POST' and path == '/auth') or
-            (method == 'GET' and path.startswith(('/accounts?', '/v2/transactions?')))):
+            (method == 'GET' and cached_path(path))):
         raise PluggyError('INVALID_ENDPOINT')
     try:
         opener = build_opener(ProxyHandler({}), _NoRedirect(), HTTPSHandler(context=ssl.create_default_context()))
@@ -143,6 +144,26 @@ class ExternalTransaction:
 
 
 class PluggyClient:
+    def coverage_get(self, path, *, optional=False):
+        if not cached_path(path):
+            raise PluggyError('INVALID_ENDPOINT')
+        for attempt in range(2):
+            status, data = self._bounded_send('GET', path,
+                {'X-API-KEY': self._api_key(), 'Accept': 'application/json'}, None)
+            if status == 401:
+                self._key, self._expires = None, 0
+                if attempt == 0:
+                    continue
+                raise PluggyError('AUTH_FAILED')
+            if optional and status in (403, 404):
+                return {}, 'NOT_AUTHORIZED' if status == 403 else 'NOT_AVAILABLE'
+            if status != 200 or not isinstance(data, dict):
+                raise PluggyError('AUTH_FAILED' if status == 403 else 'PROVIDER_HTTP_ERROR')
+            return data, 'AVAILABLE'
+
+    def coverage_pages(self):
+        return collection_pages(self)
+
     def __init__(self, connection, *, send=transport, now=time.monotonic, sleep=time.sleep,
                  timeout=10, max_attempts=3, max_pages=200):
         if not isinstance(connection, PluggyConnection): raise ValueError('invalid connection type')

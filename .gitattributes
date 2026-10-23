@@ -1,0 +1,9 @@
+* text=auto eol=lf
+finance-v17/run.sh -text
+finance-v17/src/finance_v2/PYTHON_REFERENCE_LICENSE.txt -text
+finance-v17/src/finance_v2/UNICODE13_NOTICES.md -text
+finance-v17/src/finance_v2/UNICODE_DATA_LICENSE_2020.txt -text
+finance-v17/src/finance_v2/UNICODE_LICENSE_V3.txt -text
+finance-v17/src/finance_v2/unicode13_f06.py -text
+finance-v17/src/finance_v2/unicode13_manifest.json -text
+finance-v17/src/finance_v2/unicode13_primitives.json -text
