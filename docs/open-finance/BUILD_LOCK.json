@@ -1,0 +1,62 @@
+{
+  "contract": "FINANCE-BUILD-LOCK/1",
+  "version": "0.1.21-open-finance.1",
+  "revision": "dependency-lock-1",
+  "parent_review_commit": "41361fbbd28d3f349e4679740bdf43fbd6fc2cd8",
+  "original_package_sha256": "2053AE69D827A1D7EB074FB404C1E5033A88DF48BA7BE94459AF752D1C193315",
+  "revised_product_zip_sha256": "2F34EEE7F1813B3B961B0261C55892203D1E74BE0C3E771A9A1105EA3D986119",
+  "base": {
+    "reference": "docker.io/library/python:3.12.7-slim-bookworm@sha256:60d9996b6a8a3689d36db740b49f4327be3be09a21122bd02fb8895abb38b50d",
+    "index_digest": "sha256:60d9996b6a8a3689d36db740b49f4327be3be09a21122bd02fb8895abb38b50d",
+    "platforms": {
+      "amd64": {
+        "manifest_digest": "sha256:1c44018d7eb40488f29e7c6ad4991d3200507e14dca71b94fe61011815e98155",
+        "config_digest": "sha256:e35f80b558775b0903c34523ef3422645c10e06a66b151f228acf9cf8b862f66"
+      },
+      "arm64": {
+        "manifest_digest": "sha256:c1e796504c1c7191de63503047df381ea18675482b5679d536f6b10870ee4857",
+        "config_digest": "sha256:f5c5392dc59e48c69cc44052ea25634db038b6c4432686587d5033876702ec27"
+      }
+    }
+  },
+  "python": "3.12.7",
+  "dependencies": {
+    "gunicorn": {
+      "version": "23.0.0",
+      "filename": "gunicorn-23.0.0-py3-none-any.whl",
+      "sha256": "EC400D38950DE4DFD418CFF8328B2C8FAED0EDB0D517D3394E457C317908CA4D",
+      "url": "https://files.pythonhosted.org/packages/cb/7d/6dac2a6e1eba33ee43f318edbed4ff29151a49b5d37f080aad1e6469bca4/gunicorn-23.0.0-py3-none-any.whl"
+    },
+    "tzdata": {
+      "version": "2025.2",
+      "filename": "tzdata-2025.2-py2.py3-none-any.whl",
+      "sha256": "1A403FADA01FF9221CA8044D701868FA132215D84BEB92242D9ACD2147F667A8",
+      "url": "https://files.pythonhosted.org/packages/5c/23/c7abc0ca0a1526a0774eca151daeb8de62ec457e77262b66b359c3c7679e/tzdata-2025.2-py2.py3-none-any.whl"
+    },
+    "oauthlib": {
+      "version": "3.3.1",
+      "filename": "oauthlib-3.3.1-py3-none-any.whl",
+      "sha256": "88119C938D2B8FB88561AF5F6EE0EEC8CC8D552B7BB1F712743136EB7523B7A1",
+      "url": "https://files.pythonhosted.org/packages/be/9c/92789c596b8df838baa98fa71844d84283302f7604ed565dafe5a6b5041a/oauthlib-3.3.1-py3-none-any.whl"
+    },
+    "packaging": {
+      "version": "26.3",
+      "filename": "packaging-26.3-py3-none-any.whl",
+      "sha256": "D7193F7C8E4E93F444FDE0262BF90AF30E16FA0AD0AD44CB553C87339B23CD1C",
+      "url": "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl"
+    }
+  },
+  "protected_files": {
+    "finance-v17/run.sh": "7FBDCE1C1A73A97AD757042956512D76BC3FB0DF6BDB023E17CB7F06BEC0B070",
+    "finance-v17/src/finance_v2/PYTHON_REFERENCE_LICENSE.txt": "023163D4252112720E12757861BDD0272105EE1F67ED6A44130E652189A2F7AB",
+    "finance-v17/src/finance_v2/UNICODE13_NOTICES.md": "86FCFFEA7F6E15385B93E7BB390CD44CD7BB65D05F672C68E8D556EE88679134",
+    "finance-v17/src/finance_v2/UNICODE_DATA_LICENSE_2020.txt": "0EFACA9742A27A3F5A7F6F2B5C40A1D227295246E2483308BF83E05871FA202A",
+    "finance-v17/src/finance_v2/UNICODE_LICENSE_V3.txt": "E7A93B009565CFCE55919A381437AC4DB883E9DA2126FA28B91D12732BC53D96",
+    "finance-v17/src/finance_v2/unicode13_f06.py": "6C7EC1703A30FE81A9D577604DFC1B999D9AE48BF78B1318C20DE8E9662CBCD9",
+    "finance-v17/src/finance_v2/unicode13_manifest.json": "9A279ACA79B09F3CE3C49EEA630619BED88115F416F81A97324093B4D856F07A",
+    "finance-v17/src/finance_v2/unicode13_primitives.json": "DE81088662045384D1F0B07FDF53A40BEE297843782FE80BF1AAEA94383BAAA4"
+  },
+  "image_registry_published": false,
+  "merge_authorized": false,
+  "production_deployment_authorized": false
+}
