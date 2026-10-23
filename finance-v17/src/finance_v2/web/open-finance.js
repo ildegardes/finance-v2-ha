@@ -1,5 +1,6 @@
 // Imported bank staging only. No provider calls or official financial writes.
 import {bankMoney,dateBR} from './privacy.js';
+import {mountCoverage} from './open-finance-coverage.js';
 export function createOpenFinance({api,view,heading,esc}) {
   const directionLabels={CREDIT:'Entrada',DEBIT:'Saída',UNKNOWN:'Desconhecida',CONFLICT:'Conflito'};
   const runLabels={SUCCEEDED:'Concluída',FAILED:'Falhou',INTERRUPTED:'Interrompida',RUNNING:'Em andamento'};
@@ -23,7 +24,9 @@ export function createOpenFinance({api,view,heading,esc}) {
       return `${a.name||'Conta sem nome'} · ${institution}${peers.length>1?' · Conta '+(peers.indexOf(a)+1):''}`;
     };
     host.innerHTML=`<p class="of-notice">Consulta de staging bancário. Os filtros usam a data informada pelo provedor, não a competência das despesas. A direção bancária não comprova liquidação nem representa receita/despesa oficial. Não há conciliação ou promoção automática para lançamentos oficiais.</p>
-      <div class="of-tabs" role="tablist" aria-label="Áreas do Open Finance">${[['overview','Visão geral'],['flow','Fluxo'],['assets','Ativos'],['connections','Conexões']].map(([id,text])=>`<button type="button" role="tab" id="of-tab-${id}" aria-controls="of-panel-${id}" data-of-tab="${id}">${text}</button>`).join('')}</div>
+      <div class="of-tabs" role="tablist" aria-label="Áreas do Open Finance">${[['overview','Visão geral'],['flow','Fluxo'],['cards','Cartões'],['assets','Ativos'],['credit','Crédito'],['connections','Conexões']].map(([id,text])=>`<button type="button" role="tab" id="of-tab-${id}" aria-controls="of-panel-${id}" data-of-tab="${id}">${text}</button>`).join('')}</div>
+      <section role="tabpanel" id="of-panel-cards" aria-labelledby="of-tab-cards" class="of-panel"></section>
+      <section role="tabpanel" id="of-panel-credit" aria-labelledby="of-tab-credit" class="of-panel"></section>
       <section role="tabpanel" id="of-panel-overview" aria-labelledby="of-tab-overview" class="panel of-panel"><h2>Visão geral</h2><p>Conexões e contas de staging disponíveis para consulta. Não representam o patrimônio nem o saldo consolidado.</p><p>${catalog.connections.length} conexões · ${catalog.accounts.length} contas cadastradas no catálogo.</p><p class="of-notice">Resumo de saldos indisponível: não há contrato implementado para saldos consolidados. Consulte as movimentações na aba Fluxo.</p></section>
       <section role="tabpanel" id="of-panel-assets" aria-labelledby="of-tab-assets" class="panel of-panel"><h2>Ativos</h2><p class="empty">Consulta de ativos indisponível. O contrato de posições, investimentos e avaliação patrimonial ainda não está implementado.</p><p>Nenhum saldo ou valor estimado é apresentado.</p></section>
       <section role="tabpanel" id="of-panel-connections" aria-labelledby="of-tab-connections" class="of-panel"><section class="panel"><h2>Conexões bancárias</h2><p>Informações já registradas no catálogo. Esta tela não consulta a Pluggy nem inicia sincronizações.</p>${catalog.connections.length?`<ul class="of-run-list">${catalog.connections.map(c=>`<li><strong>${esc(connectionLabel(c))}</strong><small>${c.enabled?'Habilitada na configuração':'Desabilitada na configuração'} · ${catalog.accounts.filter(a=>a.connection_id===c.id).length} contas registradas</small></li>`).join('')}</ul>`:'<p class="empty">Nenhuma conexão registrada.</p>'}</section><section class="panel of-history"><h2>Histórico das sincronizações manuais</h2><p>Nenhuma sincronização é iniciada ao abrir esta tela.</p><div data-history></div></section></section>
@@ -42,13 +45,15 @@ export function createOpenFinance({api,view,heading,esc}) {
     function selectTab(id,focus=false){
       selectedTab=id;
       for(const tab of tabs){const active=tab.dataset.ofTab===id;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;host.querySelector('#'+tab.getAttribute('aria-controls')).hidden=!active;if(active&&focus)tab.focus()}
+      host.dispatchEvent(new CustomEvent('of-tab-selected',{detail:id}));
     }
     tabs.forEach((tab,index)=>{
       tab.onclick=()=>selectTab(tab.dataset.ofTab);
       tab.onkeydown=event=>{const next=event.key==='ArrowRight'?(index+1)%tabs.length:event.key==='ArrowLeft'?(index+tabs.length-1)%tabs.length:event.key==='Home'?0:event.key==='End'?tabs.length-1:null;if(next!==null){event.preventDefault();selectTab(tabs[next].dataset.ofTab,true)}};
     });
     selectTab(selectedTab);
-    const form=host.querySelector('form'),results=host.querySelector('.of-results');
+    mountCoverage({host,api,esc,catalog});
+    const form=host.querySelector('#of-panel-flow form'),results=host.querySelector('.of-results');
     const names=['start','end','connection_id','external_account_id','direction','category_key','search','origin_run_id'];
     const choice=(name)=>form.elements.namedItem(name);
     function scopedOptions() {
