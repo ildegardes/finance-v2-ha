@@ -1,5 +1,6 @@
 """Manual staging synchronization. Only migration-009 tables may be written."""
 from hashlib import sha256
+from contextlib import nullcontext
 import json
 import re
 import sqlite3
@@ -88,8 +89,9 @@ class OpenFinanceService:
     def _touch(self,c,connection_id,run_id,token):
         with immediate_transaction(c):self._guard(c,connection_id,run_id,token)
 
-    def _accounts(self,c,config,run_id,token,accounts):
-        with immediate_transaction(c):
+    def _accounts(self,c,config,run_id,token,accounts,*,in_transaction=False):
+        if in_transaction and not c.in_transaction:raise SyncError('STORAGE_TRANSACTION_REQUIRED',503)
+        with nullcontext() if in_transaction else immediate_transaction(c):
             self._guard(c,config.id,run_id,token)
             for account in accounts:
                 if account.connection_id!=config.id:raise SyncError('ACCOUNT_SCOPE_MISMATCH',502)
@@ -117,8 +119,9 @@ class OpenFinanceService:
                   (config.id,key,external,name,stamp))
         return key
 
-    def _page(self,c,config,run_id,token,account_id,records):
-        with immediate_transaction(c):
+    def _page(self,c,config,run_id,token,account_id,records,*,in_transaction=False):
+        if in_transaction and not c.in_transaction:raise SyncError('STORAGE_TRANSACTION_REQUIRED',503)
+        with nullcontext() if in_transaction else immediate_transaction(c):
             stamp=self._guard(c,config.id,run_id,token)
             inserted=updated=0
             for record in records:

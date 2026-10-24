@@ -1,5 +1,15 @@
 # Finance V17
 
+## 0.1.23-open-finance.1 — experimental review candidate
+
+- Add versioned cached-read contracts for configured Items, resource permissions, consents, bank/credit accounts, balances, limits, transactions, investment positions/movements, loans, bills and statement references.
+- Add migration 010 with extended staging, composite identities, parent/run foreign keys, revision history and collection quality. Preserve migrations 001–009 and all official financial tables.
+- Reuse existing leases/fencing and save legacy/extended projections atomically per page. Manual full scans are idempotent; missing records are NOT_SEEN, never silently deleted.
+- Add owner-only resource/history/progress queries and an explicitly confirmed manual cache-collection action. No remote Item update, live balance, SCR, consent modification, payment or automatic synchronization.
+- Extend Open Finance to six responsive areas, with global privacy for monetary values and sensitive numerical fields. Do not infer balances, returns or consolidated wealth.
+- Keep the eight historical protected artifacts, lifecycle, financial core, scheduler and OAuth/MCP permissions unchanged. MCP reports the candidate version.
+- This candidate is published only for review on its work branch. No stable promotion, Supervisor homologation or Home Assistant update is implied.
+
 ## 0.1.22-open-finance.1 — local release preparation
 
 - Add global monetary privacy with a header eye button, hidden-by-default presentation and a persistent local browser preference.

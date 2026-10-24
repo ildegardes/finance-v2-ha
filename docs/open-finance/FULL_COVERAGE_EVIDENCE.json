@@ -1,0 +1,116 @@
+{
+  "contract": "FINANCE-FULL-COVERAGE-EVIDENCE/1",
+  "version": "0.1.23-open-finance.1",
+  "base_commit": "a3dc38375af13d8e9d40402538bb02f1d238a334",
+  "final_product_tree": "43b705787d934d696b88fd14f68cef61f2753cce",
+  "protected_files": {
+    "finance-v17/run.sh": "7FBDCE1C1A73A97AD757042956512D76BC3FB0DF6BDB023E17CB7F06BEC0B070",
+    "finance-v17/src/finance_v2/PYTHON_REFERENCE_LICENSE.txt": "023163D4252112720E12757861BDD0272105EE1F67ED6A44130E652189A2F7AB",
+    "finance-v17/src/finance_v2/UNICODE13_NOTICES.md": "86FCFFEA7F6E15385B93E7BB390CD44CD7BB65D05F672C68E8D556EE88679134",
+    "finance-v17/src/finance_v2/UNICODE_DATA_LICENSE_2020.txt": "0EFACA9742A27A3F5A7F6F2B5C40A1D227295246E2483308BF83E05871FA202A",
+    "finance-v17/src/finance_v2/UNICODE_LICENSE_V3.txt": "E7A93B009565CFCE55919A381437AC4DB883E9DA2126FA28B91D12732BC53D96",
+    "finance-v17/src/finance_v2/unicode13_f06.py": "6C7EC1703A30FE81A9D577604DFC1B999D9AE48BF78B1318C20DE8E9662CBCD9",
+    "finance-v17/src/finance_v2/unicode13_manifest.json": "9A279ACA79B09F3CE3C49EEA630619BED88115F416F81A97324093B4D856F07A",
+    "finance-v17/src/finance_v2/unicode13_primitives.json": "DE81088662045384D1F0B07FDF53A40BEE297843782FE80BF1AAEA94383BAAA4"
+  },
+  "windows": {
+    "python": "3.12.14",
+    "financial_backend": {
+      "tests": 258,
+      "fail": 0,
+      "error": 0,
+      "skip": 0
+    },
+    "new_coverage": 20,
+    "mcp": 6,
+    "frontend": 38,
+    "aggregate_tests": 322,
+    "lifecycle_separate": 12
+  },
+  "linux_arm64": {
+    "emulated": true,
+    "python": "3.12.7",
+    "oauthlib": "3.3.1",
+    "backend_tests": 284,
+    "fail": 0,
+    "error": 0,
+    "skip": 0,
+    "source_product_tree_tested": "8e4b4842b426da245cf67b69e79ad1bdded2ece0",
+    "seconds": 307.953,
+    "container_removed": true
+  },
+  "post_arm64_change": {
+    "files": [
+      "finance-v17/src/finance_v2/web/open-finance-coverage.js"
+    ],
+    "unchanged_files": 80,
+    "backend_and_migrations_unchanged": true,
+    "frontend_validation": 38,
+    "reason": "Do not inherit BRL for a foreign-currency balance without its own currency."
+  },
+  "builds": [
+    {
+      "architecture": "amd64",
+      "image_id": "sha256:2ab3012f26b597c669ef159647b175a6adb5f06d3661fdab42eeb725f23bdaf1",
+      "version": "0.1.23-open-finance.1",
+      "exit_code": 0
+    },
+    {
+      "architecture": "arm64",
+      "image_id": "sha256:922a375d44884f265dd296be33b7ee303832724419862f50969e019b2764d11e",
+      "version": "0.1.23-open-finance.1",
+      "exit_code": 0
+    }
+  ],
+  "runtime_files_expected": 76,
+  "synthetic_boot_and_restart": [
+    {
+      "architecture": "amd64",
+      "readiness_seconds": [
+        2.313,
+        2.297
+      ],
+      "exit_code": 0,
+      "official_tables": 35,
+      "fingerprint_preserved": true,
+      "container_removed": true,
+      "volume_removed": true
+    },
+    {
+      "architecture": "arm64",
+      "readiness_seconds": [
+        31.328,
+        26.796
+      ],
+      "exit_code": 0,
+      "official_tables": 35,
+      "fingerprint_preserved": true,
+      "container_removed": true,
+      "volume_removed": true
+    }
+  ],
+  "recovery": {
+    "status": "PASS",
+    "baseline_code_executed": true,
+    "from_schema": 10,
+    "to_schema": 9,
+    "official_tables": 35,
+    "configuration_preserved": true,
+    "downgrade_alone_rejected": true,
+    "supervisor_restore": false,
+    "real_data": false
+  },
+  "limitations": {
+    "real_financial_coverage": "NOT_VERIFIED",
+    "native_arm64": "NOT_TESTED",
+    "supervisor_build_install_restore": "NOT_TESTED",
+    "consolidated_net_worth": "NOT_ESTABLISHED",
+    "retroactive_performance": "NOT_ESTABLISHED"
+  },
+  "publication": {
+    "branch": "codex/open-finance-full-coverage",
+    "stable_published": false,
+    "release_ready": "BLOCKED",
+    "reason": "No approved barrier for automatic updates of uncontrolled public consumers; no production authorization."
+  }
+}

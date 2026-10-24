@@ -58,6 +58,7 @@ export function installPrivacy(doc=document,win=window){
     for(let node=walker.nextNode();node;node=walker.nextNode()){
       if(node.parentElement?.closest('script,style,textarea'))continue;
       const entry=project(node.data,originals.get(node));
+      if(node.parentElement?.closest('[data-private-financial]')&&entry.original.trim())entry.masked=MASK;
       const next=visible?entry.original:entry.masked;
       if(entry.original!==entry.masked)originals.set(node,entry);else originals.delete(node);
       if(node.data!==next)node.data=next;

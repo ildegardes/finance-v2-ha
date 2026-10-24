@@ -6,6 +6,8 @@ from urllib.parse import parse_qs
 
 from .open_finance import OpenFinanceService, SyncError, paged
 from .open_finance_query import catalogs, query_transactions
+from .open_finance_coverage import sync_full, query as query_resources, coverage_status
+from .pluggy_coverage import RESOURCES, CONTRACT, output_schema
 
 
 PREFIX = '/api/v2/open-finance/'
@@ -14,6 +16,8 @@ OPERATIONS = (
     ('POST','sync-all','sync_all'), ('GET','sync-runs','runs'),
     ('GET','sync-run','run'), ('GET','transactions','transactions'),
     ('GET','catalogs','catalogs'),
+    ('GET','resources','resources'), ('GET','coverage','coverage'),
+    ('POST','coverage-sync','coverage_sync'),
 )
 
 
@@ -49,6 +53,15 @@ def dispatch(app,operation,identity,body,query):
     if identity.role!='UI' or identity.client_id!='UI:local':raise SyncError('FORBIDDEN',403)
     service=OpenFinanceService(app.settings,app.clock)
     op=operation.removeprefix('open_finance_')
+    if op=='coverage_sync':
+        if query or set(body)!={'connection_id'} or not isinstance(body.get('connection_id'),str) or not re.fullmatch(r'[a-z][a-z0-9-]{1,63}',body['connection_id']):
+            raise SyncError('INVALID_REQUEST',422)
+        run=sync_full(service,body['connection_id'],actor=identity.client_id)
+        return {'run':run},200 if run['state']=='SUCCEEDED' else 502
+    if op in {'resources','coverage'}:
+        if body or (op=='coverage' and query):raise SyncError('INVALID_REQUEST',422)
+        with closing(app.db()) as c:
+            return (query_resources(c,app.settings,query) if op=='resources' else coverage_status(c)),200
     if op in {'sync','sync_all'}:
         allowed={'date_from','date_to'} | ({'connection_id'} if op=='sync' else set())
         if query or set(body)-allowed:raise SyncError('INVALID_REQUEST',422)
@@ -135,6 +148,7 @@ def openapi_paths():
         'translation_status':enum('UNVERIFIED','VERIFIED','OWNER_OVERRIDE'),'updated_at':text})
     result={}
     for method,path,op in OPERATIONS:
+        if op in {'resources','coverage','coverage_sync'}:continue
         statuses=[200,401,403,422,503,500,405]
         parameters=[]
         spec={'operationId':'open_finance_'+op,'security':[{'bearerAuth':[]}],
@@ -179,5 +193,37 @@ def openapi_paths():
         spec['parameters']=parameters
         spec['responses']={str(s):{'description':'Completed sync / diagnostic outcome' if s in {200,207,502} else 'Sanitized error',
             'content':{'application/json':{'schema':schema if s in {200,207,502} else {'$ref':'#/components/schemas/Error'}}}} for s in statuses}
+        result[PREFIX+path]={method.lower():spec}
+    text_schema={'type':'string'}
+    coverage_schema=obj({**{k:text for k in ('connection_id','resource','parent_id','run_id','state','observed_at')},
+        **{k:integer for k in ('page_count','record_count','omitted_field_count')},'error_code':nullable})
+    resource_row={'type':'object','required':['connection_id','parent_id','external_id','state','observed_at','data'],
+        'properties':{**{k:text for k in ('connection_id','parent_id','external_id','state','observed_at','first_run_id','last_run_id','run_id')},
+            'data':{'anyOf':[output_schema(v['schema']) for v in CONTRACT['resources'].values()]}}}
+    resource_response=obj({'resource':enum(*RESOURCES),'items':{'type':'array','items':resource_row},'total':integer,
+        'page':integer,'page_size':integer,'history':{'type':'boolean'},'has_more':{'type':'boolean'},
+        'coverage':{'type':'array','items':coverage_schema},'source':enum('CACHED_STAGING'),
+        'net_worth':obj({'state':enum('NOT_ESTABLISHED'),'reason':enum('CURRENCY_AND_OVERLAP_NOT_PROVEN')})})
+    coverage_response=obj({'coverage':{'type':'array','items':coverage_schema},
+        'runs':{'type':'array','items':obj({k:nullable if k=='error_code' else text for k in ('id','connection_id','state','error_code')})},
+        'automatic_sync':{'type':'boolean','const':False},'remote_updates':{'type':'boolean','const':False}})
+    for method,path,op in OPERATIONS:
+        if op not in {'resources','coverage','coverage_sync'}:continue
+        response_schema=resource_response if op=='resources' else coverage_response if op=='coverage' else obj({'run':run})
+        spec={'operationId':'open_finance_'+op,'security':[{'bearerAuth':[]}],
+              'x-owner-only':True,'x-external-capability':'not-available',
+              'description':'Owner-only cached staging. No real-time balance, SCR or remote update. Cookie POST requires CSRF.',
+              'parameters':[],'responses':{str(code):{'description':'Staging result' if code==200 else 'Sanitized error',
+                'content':{'application/json':{'schema':response_schema if code==200 or (op=='coverage_sync' and code==502) else {'$ref':'#/components/schemas/Error'}}}} for code in (200,401,403,404,409,422,502,503)}}
+        if op=='coverage_sync':
+            spec['requestBody']={'required':True,'content':{'application/json':{'schema':{'type':'object','additionalProperties':False,
+                'required':['connection_id'],'properties':{'connection_id':{'type':'string','pattern':'^[a-z][a-z0-9-]{1,63}$'}}}}}}
+            spec['parameters']=[{'name':'X-CSRF-Token','in':'header','schema':text_schema,'description':'Required for cookie authentication.'}]
+        if op=='resources':
+            spec['parameters']=[{'name':name,'in':'query','schema':schema} for name,schema in (
+                ('resource',{'type':'string','enum':list(RESOURCES)}),('connection_id',text_schema),('parent_id',text_schema),
+                ('state',{'type':'string','enum':['PRESENT','NOT_SEEN']}),('page',{'type':'integer','minimum':1}),
+                ('history',{'type':'string','enum':['0','1']}),('type',text_schema),('currency',text_schema),
+                ('page_size',{'type':'integer','enum':[25,50,100]}))]
         result[PREFIX+path]={method.lower():spec}
     return result

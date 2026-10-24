@@ -1,0 +1,2431 @@
+{
+  "version": "PLUGGY-CACHED-COVERAGE/1",
+  "privacy_excluded_fields": [
+    "accessToken",
+    "accountNumber",
+    "additionalCards",
+    "attributes",
+    "authenticationCode",
+    "barcode",
+    "branchNumber",
+    "brokerageNumber",
+    "cardNumber",
+    "clientUserId",
+    "cnpj",
+    "cnpjConsignee",
+    "contractNumber",
+    "credentials",
+    "data",
+    "debtor",
+    "digitableLine",
+    "documentNumber",
+    "error",
+    "instructions",
+    "ipocCode",
+    "issuerCNPJ",
+    "number",
+    "oauthRedirectUri",
+    "oauthUrl",
+    "owner",
+    "parameter",
+    "payer",
+    "providerMessage",
+    "receiver",
+    "receiverReferenceId",
+    "referenceNumber",
+    "refreshToken",
+    "resetPasswordUrl",
+    "routingNumber",
+    "routingNumberISPB",
+    "taxNumber",
+    "transferNumber",
+    "url",
+    "userAction",
+    "webhookUrl"
+  ],
+  "resources": {
+    "item": {
+      "operation_id": "items-retrieve",
+      "path": "/items/{id}",
+      "parameters": [
+        "id"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "connector": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "number",
+                "format": "integer"
+              },
+              "name": {
+                "type": "string"
+              },
+              "institutionUrl": {
+                "type": "string"
+              },
+              "imageUrl": {
+                "type": "string"
+              },
+              "primaryColor": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "country": {
+                "type": "string"
+              },
+              "hasMFA": {
+                "type": "boolean"
+              },
+              "products": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "ACCOUNTS",
+                    "CREDIT_CARDS",
+                    "TRANSACTIONS",
+                    "PAYMENT_DATA",
+                    "INVESTMENTS",
+                    "INVESTMENTS_TRANSACTIONS",
+                    "IDENTITY",
+                    "BROKERAGE_NOTE",
+                    "MOVE_SECURITY",
+                    "LOANS"
+                  ]
+                }
+              },
+              "productCoverage": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "oauth": {
+                "type": "boolean"
+              },
+              "health": {
+                "properties": {
+                  "status": {
+                    "type": "string"
+                  },
+                  "stage": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "incidents": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "CONNECTOR_UNAVAILABLE",
+                            "CONNECTOR_DEGRADED",
+                            "INSTITUTION_OUTAGE",
+                            "SCHEDULED_MAINTENANCE",
+                            "CONSENT_ERROR",
+                            "CONNECTION_NOT_UPDATING",
+                            "PARTIAL_SUCCESS",
+                            "ACCOUNTS_MISSING",
+                            "BALANCE_INCORRECT",
+                            "TRANSACTIONS_MISSING",
+                            "TRANSACTIONS_INCORRECT",
+                            "TRANSACTIONS_INSTALLMENTS_ISSUE",
+                            "INVESTMENTS_MISSING",
+                            "INVESTMENTS_INCORRECT",
+                            "IDENTITY_MISSING",
+                            "HISTORICAL_DATA_MISSING",
+                            "WEBHOOK_DELAY",
+                            "PAYMENT_FAILURE",
+                            "OTHER"
+                          ]
+                        },
+                        "product": {
+                          "type": "string",
+                          "enum": [
+                            "dados",
+                            "pis",
+                            "pis-agendado",
+                            "pixauto",
+                            "smart",
+                            "infra"
+                          ]
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "INCIDENT",
+                            "MAINTENANCE"
+                          ]
+                        },
+                        "severity": {
+                          "type": "string",
+                          "enum": [
+                            "DEGRADED",
+                            "PARTIAL_OUTAGE",
+                            "MAJOR_OUTAGE",
+                            "MAINTENANCE"
+                          ]
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "INVESTIGATING",
+                            "IDENTIFIED",
+                            "MONITORING",
+                            "SCHEDULED"
+                          ]
+                        },
+                        "startedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "updatedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "details": {
+                    "type": "object",
+                    "properties": {
+                      "connectionRateLast6Hours": {
+                        "type": "number"
+                      },
+                      "connectionsLast6Hours": {
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              "isOpenFinance": {
+                "type": "boolean"
+              },
+              "isSandbox": {
+                "type": "boolean"
+              },
+              "supportsPaymentInitiation": {
+                "type": "boolean"
+              },
+              "supportsScheduledPayments": {
+                "type": "boolean"
+              },
+              "supportsSmartTransfers": {
+                "type": "boolean"
+              },
+              "supportsBoletoManagement": {
+                "type": "boolean"
+              },
+              "supportsAutomaticPix": {
+                "type": "boolean"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "additionalProperties": false
+          },
+          "status": {
+            "type": "string"
+          },
+          "executionStatus": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastUpdatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "statusDetail": {
+            "type": "object",
+            "properties": {
+              "accounts": {
+                "type": "object",
+                "properties": {
+                  "lastUpdatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "isUpdated": {
+                    "type": "boolean"
+                  },
+                  "warnings": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "additionalProperties": false
+              },
+              "creditCards": {
+                "type": "object",
+                "properties": {
+                  "lastUpdatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "isUpdated": {
+                    "type": "boolean"
+                  },
+                  "warnings": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "additionalProperties": false
+              },
+              "transactions": {
+                "type": "object",
+                "properties": {
+                  "lastUpdatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "isUpdated": {
+                    "type": "boolean"
+                  },
+                  "warnings": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "additionalProperties": false
+              },
+              "investments": {
+                "type": "object",
+                "properties": {
+                  "lastUpdatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "isUpdated": {
+                    "type": "boolean"
+                  },
+                  "warnings": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "additionalProperties": false
+              },
+              "identity": {
+                "type": "object",
+                "properties": {
+                  "lastUpdatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "isUpdated": {
+                    "type": "boolean"
+                  },
+                  "warnings": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "additionalProperties": false
+              },
+              "investmentsTransactions": {
+                "type": "object",
+                "properties": {
+                  "lastUpdatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "isUpdated": {
+                    "type": "boolean"
+                  },
+                  "warnings": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "additionalProperties": false
+              },
+              "paymentData": {
+                "type": "object",
+                "properties": {
+                  "lastUpdatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "isUpdated": {
+                    "type": "boolean"
+                  },
+                  "warnings": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "additionalProperties": false
+              },
+              "loans": {
+                "type": "object",
+                "properties": {
+                  "lastUpdatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "isUpdated": {
+                    "type": "boolean"
+                  },
+                  "warnings": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "additionalProperties": false
+              },
+              "accountStatements": {
+                "type": "object",
+                "properties": {
+                  "lastUpdatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "isUpdated": {
+                    "type": "boolean"
+                  },
+                  "warnings": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
+          "nextAutoSyncAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "consecutiveFailedLoginAttempts": {
+            "type": "number",
+            "format": "integer"
+          },
+          "consentExpiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "resourcesCollectedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "hasResourcesPendingAuthorization": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "products": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "ACCOUNTS",
+                "CREDIT_CARDS",
+                "TRANSACTIONS",
+                "PAYMENT_DATA",
+                "INVESTMENTS",
+                "INVESTMENTS_TRANSACTIONS",
+                "IDENTITY",
+                "BROKERAGE_NOTE",
+                "MOVE_SECURITY",
+                "LOANS"
+              ]
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "resources": {
+      "operation_id": "items-resources",
+      "path": "/items/{id}/resources",
+      "parameters": [
+        "id",
+        "pageSize",
+        "page",
+        "status"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "resourceId": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "ACCOUNT",
+              "CREDIT_CARD_ACCOUNT",
+              "LOAN",
+              "FINANCING",
+              "UNARRANGED_ACCOUNT_OVERDRAFT",
+              "INVOICE_FINANCING",
+              "BANK_FIXED_INCOME",
+              "CREDIT_FIXED_INCOME",
+              "VARIABLE_INCOME",
+              "TREASURE_TITLE",
+              "FUND"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "AVAILABLE",
+              "UNAVAILABLE",
+              "TEMPORARILY_UNAVAILABLE",
+              "PENDING_AUTHORISATION"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "consents": {
+      "operation_id": "consents-list",
+      "path": "/consents",
+      "parameters": [
+        "itemId"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "itemId": {
+            "type": "string"
+          },
+          "products": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "ACCOUNTS",
+                "CREDIT_CARDS",
+                "TRANSACTIONS",
+                "PAYMENT_DATA",
+                "INVESTMENTS",
+                "INVESTMENTS_TRANSACTIONS",
+                "IDENTITY",
+                "BROKERAGE_NOTE",
+                "MOVE_SECURITY",
+                "LOANS"
+              ]
+            }
+          },
+          "openFinancePermissionsGranted": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "REGISTRATION_ALL",
+                "REGISTRATION_IDENTIFICATIONS",
+                "REGISTRATION_QUALIFICATIONS",
+                "REGISTRATION_FINANCIAL_RELATIONS",
+                "ACCOUNTS_ALL",
+                "ACCOUNTS_LIST",
+                "ACCOUNTS_BALANCES",
+                "ACCOUNTS_LIMITS",
+                "ACCOUNTS_TRANSACTIONS",
+                "CREDIT_CARDS_ALL",
+                "CREDIT_CARDS_LIST",
+                "CREDIT_CARDS_LIMITS",
+                "CREDIT_CARDS_TRANSACTIONS",
+                "CREDIT_CARDS_BILLS",
+                "CREDIT_OPERATIONS_ALL",
+                "INVESTMENTS_ALL",
+                "EXCHANGES_ALL"
+              ]
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "revokedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "accounts": {
+      "operation_id": "accounts-list",
+      "path": "/accounts",
+      "parameters": [
+        "itemId",
+        "type"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "BANK",
+              "CREDIT"
+            ]
+          },
+          "subtype": {
+            "type": "string",
+            "enum": [
+              "SAVINGS_ACCOUNT",
+              "CHECKING_ACCOUNT",
+              "CREDIT_CARD"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "marketingName": {
+            "type": "string"
+          },
+          "balance": {
+            "type": "number",
+            "format": "double"
+          },
+          "itemId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "currencyCode": {
+            "type": "string"
+          },
+          "bankData": {
+            "type": "object",
+            "properties": {
+              "closingBalance": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "format": "double"
+              },
+              "automaticallyInvestedBalance": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "format": "double"
+              },
+              "overdraftContractedLimit": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "format": "double"
+              },
+              "overdraftUsedLimit": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "format": "double"
+              },
+              "unarrangedOverdraftAmount": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "format": "double"
+              },
+              "hasReservedBalance": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "reservedBalances": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "identification": {
+                      "type": "string"
+                    },
+                    "availableAmounts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "amount": {
+                            "type": "number",
+                            "format": "double"
+                          },
+                          "currencyCode": {
+                            "type": "string"
+                          },
+                          "remuneration": {
+                            "type": "object",
+                            "properties": {
+                              "preFixedRate": {
+                                "type": "number",
+                                "format": "double"
+                              },
+                              "postFixedIndexerPercentage": {
+                                "type": "number",
+                                "format": "double"
+                              },
+                              "rateType": {
+                                "type": "string"
+                              },
+                              "indexer": {
+                                "type": "string"
+                              },
+                              "calculation": {
+                                "type": "string"
+                              },
+                              "ratePeriodicity": {
+                                "type": "string"
+                              },
+                              "indexerAdditionalInfo": {
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "creditData": {
+            "type": "object",
+            "properties": {
+              "level": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "brand": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "brandAdditionalInfo": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "balanceCloseDate": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "balanceDueDate": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "availableCreditLimit": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "format": "double"
+              },
+              "balanceForeignCurrency": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "format": "double"
+              },
+              "minimumPayment": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "format": "double"
+              },
+              "creditLimit": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "format": "double"
+              },
+              "isLimitFlexible": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "status": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "ACTIVE",
+                  "BLOCKED",
+                  "CANCELLED",
+                  "null"
+                ]
+              },
+              "holderType": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "MAIN",
+                  "ADDITIONAL",
+                  "null"
+                ]
+              },
+              "disaggregatedCreditLimits": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "creditLineLimitType": {
+                      "type": "string"
+                    },
+                    "consolidationType": {
+                      "type": "string"
+                    },
+                    "identificationNumber": {
+                      "type": "string"
+                    },
+                    "isLimitFlexible": {
+                      "type": "boolean"
+                    },
+                    "usedAmount": {
+                      "type": "number",
+                      "format": "double"
+                    },
+                    "usedAmountCurrencyCode": {
+                      "type": "string"
+                    },
+                    "lineName": {
+                      "type": "string",
+                      "enum": [
+                        "CREDITO_A_VISTA",
+                        "CREDITO_PARCELADO",
+                        "SAQUE_CREDITO_BRASIL",
+                        "SAQUE_CREDITO_EXTERIOR",
+                        "EMPRESTIMO_CARTAO_CONSIGNADO",
+                        "OUTROS"
+                      ]
+                    },
+                    "lineNameAdditionalInfo": {
+                      "type": "string"
+                    },
+                    "limitAmount": {
+                      "type": "number",
+                      "format": "double"
+                    },
+                    "limitAmountCurrencyCode": {
+                      "type": "string"
+                    },
+                    "limitAmountReason": {
+                      "type": "string"
+                    },
+                    "customizedLimitAmount": {
+                      "type": "number",
+                      "format": "double"
+                    },
+                    "customizedLimitAmountCurrencyCode": {
+                      "type": "string"
+                    },
+                    "availableAmount": {
+                      "type": "number",
+                      "format": "double"
+                    },
+                    "availableAmountCurrencyCode": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "transactions": {
+      "operation_id": "transactions-list-by-cursor",
+      "path": "/v2/transactions",
+      "parameters": [
+        "accountId",
+        "ids",
+        "dateFrom",
+        "dateTo",
+        "createdAtFrom",
+        "after"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "descriptionRaw": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "currencyCode": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "amountInAccountCurrency": {
+            "type": "number",
+            "format": "double"
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "DEBIT",
+              "CREDIT"
+            ]
+          },
+          "balance": {
+            "type": "number",
+            "format": "double"
+          },
+          "providerCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "POSTED",
+              "PENDING"
+            ]
+          },
+          "category": {
+            "type": "string"
+          },
+          "categoryId": {
+            "type": "string"
+          },
+          "paymentData": {
+            "type": "object",
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "paymentMethod": {
+                "type": "string"
+              },
+              "boletoMetadata": {
+                "properties": {
+                  "baseAmount": {
+                    "type": "number"
+                  },
+                  "interestAmount": {
+                    "type": "number"
+                  },
+                  "penaltyAmount": {
+                    "type": "number"
+                  },
+                  "discountAmount": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
+          "creditCardMetadata": {
+            "type": "object",
+            "properties": {
+              "installmentNumber": {
+                "type": "number"
+              },
+              "totalInstallments": {
+                "type": "number"
+              },
+              "totalAmount": {
+                "type": "number"
+              },
+              "feeType": {
+                "type": "string",
+                "enum": [
+                  "ANNUAL_FEE",
+                  "ATM_WITHDRAWAL_DOMESTIC",
+                  "ATM_WITHDRAWAL_INTERNATIONAL",
+                  "EMERGENCY_CREDIT_EVALUATION",
+                  "CARD_REISSUE",
+                  "BILL_PAYMENT_FEE",
+                  "SMS",
+                  "OTHER"
+                ]
+              },
+              "feeTypeAdditionalInfo": {
+                "type": "string"
+              },
+              "otherCreditsType": {
+                "type": "string",
+                "enum": [
+                  "REVOLVING_CREDIT",
+                  "BILL_INSTALLMENT",
+                  "LOAN",
+                  "OTHER"
+                ]
+              },
+              "otherCreditsAdditionalInfo": {
+                "type": "string"
+              },
+              "purchaseDate": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "payeeMCC": {
+                "type": "integer"
+              },
+              "billId": {
+                "type": "string"
+              },
+              "billForecastDate": {
+                "type": "string"
+              },
+              "paymentType": {
+                "type": "string",
+                "enum": [
+                  "SINGLE",
+                  "INSTALLMENT"
+                ]
+              },
+              "billPostDate": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date"
+              },
+              "transactionDateTime": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "additionalProperties": false
+          },
+          "merchant": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "businessName": {
+                "type": "string"
+              },
+              "cnae": {
+                "type": "string"
+              },
+              "category": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "operationType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "operationTypeAdditionalInfo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "providerId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "accountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "order": {
+            "type": "number",
+            "format": "integer"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "investments": {
+      "operation_id": "investments-list",
+      "path": "/investments",
+      "parameters": [
+        "itemId",
+        "type",
+        "pageSize",
+        "page"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "itemId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "COE",
+              "EQUITY",
+              "ETF",
+              "FIXED_INCOME",
+              "MUTUAL_FUND",
+              "SECURITY",
+              "OTHER"
+            ]
+          },
+          "subtype": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "STRUCTURED_NOTE",
+              "STOCK",
+              "ETF",
+              "REAL_ESTATE_FUND",
+              "BDR",
+              "DERIVATIVES",
+              "OPTION",
+              "TREASURY",
+              "LCI",
+              "LCA",
+              "LF",
+              "CDB",
+              "CRI",
+              "CRA",
+              "CORPORATE_DEBT",
+              "LC",
+              "DEBENTURES",
+              "INVESTMENT_FUND",
+              "MULTIMARKET_FUND",
+              "FIXED_INCOME_FUND",
+              "STOCK_FUND",
+              "ETF_FUND",
+              "OFFSHORE_FUND",
+              "FIP_FUND",
+              "EXCHANGE_FUND",
+              "FI_INFRA",
+              "FI_AGRO",
+              "RETIREMENT",
+              "OTHER",
+              "null"
+            ]
+          },
+          "balance": {
+            "type": "number",
+            "format": "double"
+          },
+          "name": {
+            "type": "string"
+          },
+          "lastMonthRate": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "lastTwelveMonthsRate": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "annualRate": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "currencyCode": {
+            "type": "string"
+          },
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "isin": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "value": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "quantity": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "amount": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "taxes": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "taxes2": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "amountProfit": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "amountWithdrawal": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "amountOriginal": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "taxRegime": {
+                "type": "string"
+              },
+              "proposalNumber": {
+                "type": "string"
+              },
+              "processNumber": {
+                "type": "string"
+              },
+              "fundName": {
+                "type": "string"
+              },
+              "insurer": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "anbimaClass": {
+                "type": "string"
+              },
+              "anbimaSubclass": {
+                "type": "string"
+              },
+              "anbimaCategory": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "dueDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "issuer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issueDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "purchaseDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "gracePeriodDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "rate": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "rateType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fixedAnnualRate": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "taxExempt": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "ratePeriodicity": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "indexerAdditionalInfo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "priceFactor": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "couponPayment": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "hasCoupon": {
+                "type": "boolean"
+              },
+              "periodicity": {
+                "type": "string"
+              },
+              "additionalInfo": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "ACTIVE",
+              "PENDING",
+              "TOTAL_WITHDRAWAL",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "institution": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "transactions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "BUY",
+                    "SELL",
+                    "TAX",
+                    "TRANSFER",
+                    "INTEREST",
+                    "AMORTIZATION"
+                  ]
+                },
+                "movementType": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "CREDIT",
+                    "DEBIT",
+                    "null"
+                  ]
+                },
+                "quantity": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "format": "double"
+                },
+                "value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "format": "double"
+                },
+                "amount": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "format": "double"
+                },
+                "agreedRate": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "format": "double"
+                },
+                "indexerPercentage": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "format": "double"
+                },
+                "priceFactor": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "format": "double"
+                },
+                "date": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "tradeDate": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "expenses": {
+                  "type": "object",
+                  "properties": {
+                    "serviceTax": {
+                      "type": "number",
+                      "format": "double"
+                    },
+                    "brokerageFee": {
+                      "type": "number",
+                      "format": "double"
+                    },
+                    "incomeTax": {
+                      "type": "number",
+                      "format": "double"
+                    },
+                    "tradingAssetsNoticeFee": {
+                      "type": "number",
+                      "format": "double"
+                    },
+                    "maintenanceFee": {
+                      "type": "number",
+                      "format": "double"
+                    },
+                    "settlementFee": {
+                      "type": "number",
+                      "format": "double"
+                    },
+                    "clearingFee": {
+                      "type": "number",
+                      "format": "double"
+                    },
+                    "stockExchangeFee": {
+                      "type": "number",
+                      "format": "double"
+                    },
+                    "custodyFee": {
+                      "type": "number",
+                      "format": "double"
+                    },
+                    "operatingFee": {
+                      "type": "number",
+                      "format": "double"
+                    },
+                    "other": {
+                      "type": "number",
+                      "format": "double"
+                    },
+                    "iof": {
+                      "type": "number",
+                      "format": "double"
+                    },
+                    "iofProvision": {
+                      "type": "number",
+                      "format": "double"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "description": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "netAmount": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "format": "double"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "investment_transactions": {
+      "operation_id": "investment-transactions-list",
+      "path": "/investments/{id}/transactions",
+      "parameters": [
+        "id",
+        "pageSize",
+        "page"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "BUY",
+              "SELL",
+              "TAX",
+              "TRANSFER",
+              "INTEREST",
+              "AMORTIZATION"
+            ]
+          },
+          "movementType": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "CREDIT",
+              "DEBIT",
+              "null"
+            ]
+          },
+          "quantity": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "value": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "amount": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "agreedRate": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "indexerPercentage": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "priceFactor": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "tradeDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "expenses": {
+            "type": "object",
+            "properties": {
+              "serviceTax": {
+                "type": "number",
+                "format": "double"
+              },
+              "brokerageFee": {
+                "type": "number",
+                "format": "double"
+              },
+              "incomeTax": {
+                "type": "number",
+                "format": "double"
+              },
+              "tradingAssetsNoticeFee": {
+                "type": "number",
+                "format": "double"
+              },
+              "maintenanceFee": {
+                "type": "number",
+                "format": "double"
+              },
+              "settlementFee": {
+                "type": "number",
+                "format": "double"
+              },
+              "clearingFee": {
+                "type": "number",
+                "format": "double"
+              },
+              "stockExchangeFee": {
+                "type": "number",
+                "format": "double"
+              },
+              "custodyFee": {
+                "type": "number",
+                "format": "double"
+              },
+              "operatingFee": {
+                "type": "number",
+                "format": "double"
+              },
+              "other": {
+                "type": "number",
+                "format": "double"
+              },
+              "iof": {
+                "type": "number",
+                "format": "double"
+              },
+              "iofProvision": {
+                "type": "number",
+                "format": "double"
+              }
+            },
+            "additionalProperties": false
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "netAmount": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "loans": {
+      "operation_id": "loans-list",
+      "path": "/loans",
+      "parameters": [
+        "itemId"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "itemId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "productName": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "LOAN",
+              "FINANCING",
+              "INVOICE_FINANCING",
+              "UNARRANGED_ACCOUNT_OVERDRAFT"
+            ]
+          },
+          "date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "contractDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "disbursementDates": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          "settlementDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "contractAmount": {
+            "type": "number"
+          },
+          "currencyCode": {
+            "type": "string"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "installmentPeriodicity": {
+            "type": "string",
+            "enum": [
+              "WITHOUT_REGULAR_PERIODICITY",
+              "WEEKLY",
+              "FORTNIGHTLY",
+              "MONTHLY",
+              "BIMONTHLY",
+              "QUARTERLY",
+              "SEMESTERLY",
+              "YEARLY",
+              "OTHERS"
+            ]
+          },
+          "installmentPeriodicityAdditionalInfo": {
+            "type": "string"
+          },
+          "firstInstallmentDueDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "CET": {
+            "type": "number"
+          },
+          "amortizationScheduled": {
+            "type": "string",
+            "enum": [
+              "SAC",
+              "PRICE",
+              "SAM",
+              "WITHOUT_AMORTIZATION_SYSTEM",
+              "OTHERS"
+            ]
+          },
+          "amortizationScheduledAdditionalInfo": {
+            "type": "string"
+          },
+          "interestRates": {
+            "type": "array",
+            "items": {
+              "properties": {
+                "taxType": {
+                  "type": "string",
+                  "enum": [
+                    "NOMINAL",
+                    "EFFECTIVE"
+                  ]
+                },
+                "interestRateType": {
+                  "type": "string",
+                  "enum": [
+                    "SIMPLE",
+                    "COMPOUND"
+                  ]
+                },
+                "taxPeriodicity": {
+                  "type": "string",
+                  "enum": [
+                    "MONTHLY",
+                    "YEARLY"
+                  ]
+                },
+                "calculation": {
+                  "type": "string"
+                },
+                "referentialRateIndexerType": {
+                  "type": "string"
+                },
+                "referentialRateIndexerSubType": {
+                  "type": "string"
+                },
+                "referentialRateIndexerAdditionalInfo": {
+                  "type": "string"
+                },
+                "preFixedRate": {
+                  "type": "number"
+                },
+                "postFixedRate": {
+                  "type": "number"
+                },
+                "additionalInfo": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "contractedFees": {
+            "type": "array",
+            "items": {
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "code": {
+                  "type": "string"
+                },
+                "chargeType": {
+                  "type": "string",
+                  "enum": [
+                    "UNIQUE",
+                    "BY_INSTALLMENT"
+                  ]
+                },
+                "charge": {
+                  "type": "string",
+                  "enum": [
+                    "MINIMUM",
+                    "MAXIMUM",
+                    "FIXED",
+                    "PERCENTAGE"
+                  ]
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "rate": {
+                  "type": "number"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "contractedFinanceCharges": {
+            "type": "array",
+            "items": {
+              "properties": {
+                "type": {
+                  "type": "string"
+                },
+                "additionalInfo": {
+                  "type": "string"
+                },
+                "rate": {
+                  "type": "number"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "warranties": {
+            "type": "array",
+            "items": {
+              "properties": {
+                "currencyCode": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "subtype": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "installments": {
+            "properties": {
+              "typeNumberOfInstallments": {
+                "type": "string",
+                "enum": [
+                  "DAY",
+                  "WEEK",
+                  "MONTH",
+                  "YEAR",
+                  "WITHOUT_TOTAL_PERIOD"
+                ]
+              },
+              "totalNumberOfInstallments": {
+                "type": "number"
+              },
+              "typeContractRemaining": {
+                "type": "string",
+                "enum": [
+                  "DAY",
+                  "WEEK",
+                  "MONTH",
+                  "YEAR",
+                  "WITHOUT_TOTAL_PERIOD",
+                  "WITHOUT_REMAINING_PERIOD"
+                ]
+              },
+              "contractRemainingNumber": {
+                "type": "number"
+              },
+              "paidInstallments": {
+                "type": "number"
+              },
+              "dueInstallments": {
+                "type": "number"
+              },
+              "pastDueInstallments": {
+                "type": "number"
+              },
+              "balloonPayments": {
+                "type": "array",
+                "items": {
+                  "properties": {
+                    "dueDate": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "amount": {
+                      "properties": {
+                        "value": {
+                          "type": "number"
+                        },
+                        "currencyCode": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "payments": {
+            "properties": {
+              "contractOutstandingBalance": {
+                "type": "number"
+              },
+              "releases": {
+                "type": "array",
+                "items": {
+                  "properties": {
+                    "isOverParcelPayment": {
+                      "type": "boolean"
+                    },
+                    "installmentId": {
+                      "type": "string"
+                    },
+                    "paidDate": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "currencyCode": {
+                      "type": "string"
+                    },
+                    "paidAmount": {
+                      "type": "number"
+                    },
+                    "overParcel": {
+                      "properties": {
+                        "fees": {
+                          "type": "array",
+                          "items": {
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "amount": {
+                                "type": "number"
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "charges": {
+                          "type": "array",
+                          "items": {
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              },
+                              "additionalInfo": {
+                                "type": "string"
+                              },
+                              "amount": {
+                                "type": "number"
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "bills": {
+      "operation_id": "bills-list",
+      "path": "/bills",
+      "parameters": [
+        "accountId",
+        "pageSize",
+        "page"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "billClosingDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "totalAmount": {
+            "type": "number"
+          },
+          "totalAmountCurrencyCode": {
+            "type": "string"
+          },
+          "minimumPaymentAmount": {
+            "type": "number"
+          },
+          "allowsInstallments": {
+            "type": "boolean"
+          },
+          "financeCharges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "LATE_PAYMENT_REMUNERATIVE_INTEREST",
+                    "LATE_PAYMENT_FEE",
+                    "LATE_PAYMENT_INTEREST",
+                    "IOF",
+                    "OTHER"
+                  ]
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "currencyCode": {
+                  "type": "string"
+                },
+                "additionalInfo": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "payments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "valueType": {
+                  "type": "string",
+                  "enum": [
+                    "INSTALLMENT_PAYMENT",
+                    "FULL_PAYMENT",
+                    "OTHER_PAYMENT"
+                  ]
+                },
+                "paymentDate": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "paymentMode": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "DEBIT_ACCOUNT",
+                    "BANK_SLIP",
+                    "PAYROLL_DEDUCTION",
+                    "PIX",
+                    "null"
+                  ]
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "currencyCode": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "statements": {
+      "operation_id": "account-statements-list",
+      "path": "/accounts/{id}/statements",
+      "parameters": [
+        "id"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "monthYear": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

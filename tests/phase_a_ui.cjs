@@ -34,6 +34,7 @@ function fixture(url){
   if(p==='/revenue-recurring-series/1')return {series:{...recurring,expected_day:18},occurrences:[]};
   if(p==='/installment-series')return {items:[{...expense,total_cents:123456,payment_method:'PIX',purchase_date:'2026-10-12',installment_count:3,next_installment:{installment_number:1,amount_cents:123456,expense_date:'2026-10-12'}}]};
   if(p==='/open-finance/catalogs')return ofCatalog;
+  if(p==='/open-finance/resources')return {resource:url.searchParams.get('resource'),items:[],coverage:[],total:0,page:+(url.searchParams.get('page')||1),has_more:false};
   if(p==='/open-finance/transactions'){
     const q=url.searchParams;
     const selected=transactions.filter(t=>(!q.get('connection_id')||t.connection_id===q.get('connection_id'))&&(!q.get('external_account_id')||t.external_account_id===q.get('external_account_id'))&&(!q.get('category_key')||t.category_key===q.get('category_key'))&&(!q.get('search')||t.description_original.toLocaleLowerCase().normalize('NFD').replace(/\p{M}/gu,'').includes(q.get('search')))&&(!q.get('start')||t.transaction_date>=q.get('start'))&&(!q.get('end')||t.transaction_date<=q.get('end'))&&(!q.get('direction')||q.get('direction')==='all'||t.direction.result===(q.get('direction')==='incoming'?'CREDIT':'DEBIT')));
@@ -121,8 +122,8 @@ test('replaced text and accessible labels never restore stale amounts',async()=>
   await page.locator('#money-privacy-toggle').click();assert.equal(await page.locator('#late').innerText(),'R$ 20,00');assert.equal(await page.locator('#late').getAttribute('title'),'R$ 20,00');
 });
 test('default overview and assets do not invent balances',async()=>{
-  await go('open-finance');await page.getByRole('tabpanel',{name:'Visão geral',exact:true}).waitFor();assert.match(await page.locator('#of-panel-overview').innerText(),/Resumo de saldos indisponível/);
-  await page.getByRole('tab',{name:'Ativos',exact:true}).click();assert.match(await page.locator('#of-panel-assets').innerText(),/contrato.*não está implementado/);assert.doesNotMatch(await page.locator('#of-panel-assets').innerText(),/R\$|0,00/);
+  await go('open-finance');await page.getByRole('tabpanel',{name:'Visão geral',exact:true}).waitFor();await page.locator('#of-panel-overview .empty').waitFor();assert.match(await page.locator('#of-panel-overview').innerText(),/não são somados como patrimônio/);
+  await page.getByRole('tab',{name:'Ativos',exact:true}).click();await page.locator('#of-panel-assets .empty').waitFor();assert.match(await page.locator('#of-panel-assets').innerText(),/não comprova ausência/);assert.doesNotMatch(await page.locator('#of-panel-assets').innerText(),/R\$|0,00/);
 });
 test('connections reuse four runs, dates and catalog without synchronization',async()=>{
   await go('open-finance');await page.getByRole('tab',{name:'Conexões',exact:true}).click();assert.equal(await page.locator('.of-history li').count(),4);assert.match(await page.locator('.of-history').innerText(),/18\/10\/2026/);assert(!requests.some(r=>/sync/.test(r.path)));
@@ -198,7 +199,7 @@ test('real recurring revenue edit never exposes a native monetary prompt',async(
   await page.getByRole('heading',{name:'Editar valor',exact:true}).waitFor();await page.waitForFunction(()=>document.querySelector('dialog input[name=amount]').type==='password');assert.equal(await page.locator('dialog input[name=amount]').inputValue(),'1234,56');assert.deepEqual(native,['Descrição']);await page.getByRole('dialog').filter({has:page.getByRole('heading',{name:'Editar valor',exact:true})}).getByRole('button',{name:'Cancelar'}).click();
 });
 test('baseline counterexample: native monetary prompt and extra materialization dialog predate this change',async()=>{
-  const baseline=require('node:child_process').execFileSync('git',['show','f634d2b7ff9b6616ef2f02624027efb1ac066a99:finance-v17/src/finance_v2/web/completion.js'],{cwd:path.resolve(__dirname,'..'),encoding:'utf8'});
+  const baseline=require('node:child_process').execFileSync('git',['-c','safe.directory='+path.resolve(__dirname,'..').replaceAll('\\','/'),'show','f634d2b7ff9b6616ef2f02624027efb1ac066a99:finance-v17/src/finance_v2/web/completion.js'],{cwd:path.resolve(__dirname,'..'),encoding:'utf8'});
   await page.route('**/app/assets/completion.js',route=>route.fulfill({contentType:'text/javascript',body:baseline}));
   const native=[];page.on('dialog',async d=>{native.push({message:d.message(),value:d.defaultValue()});if(d.message()==='Descrição')await d.accept('Descrição sintética');else await d.dismiss()});
   await go('revenue-series-1');await page.locator('[data-action=change-revenue]').click();await page.locator('dialog').getByRole('button',{name:'Continuar'}).click();
@@ -206,4 +207,47 @@ test('baseline counterexample: native monetary prompt and extra materialization 
   assert.deepEqual(native,[{message:'Descrição',value:'Recorrência sintética'},{message:'Valor (R$)',value:'1234,56'}]);
   await page.getByRole('heading',{name:'Materializar receitas',exact:true}).waitFor();
   await page.getByRole('dialog').getByRole('button',{name:'Cancelar'}).click();
+});
+
+test('cached account values and nested limits respect global privacy without fake wealth',async()=>{
+  await page.route('**/api/v2/open-finance/resources?**',route=>route.fulfill({json:{resource:'accounts',total:1,has_more:false,coverage:[{state:'AVAILABLE',record_count:1,page_count:1,observed_at:'2026-10-23T12:00:00Z',omitted_field_count:0}],items:[{connection_id:'itau-test',state:'PRESENT',observed_at:'2026-10-23T12:00:00Z',data:{name:'Conta sintética',balance:1234.56,currencyCode:'BRL',creditData:{creditLimit:2000}}}]}}));
+  await go('open-finance');await page.locator('.of-resource-card').waitFor();
+  await page.waitForFunction(()=>document.querySelector('[data-private-financial]')?.textContent==='R$ ••••••');
+  assert.doesNotMatch(await page.locator('#of-panel-overview').innerText(),/1\.234,56|2\.000,00/);
+  await page.locator('#money-privacy-toggle').click();assert.match(await page.locator('#of-panel-overview').innerText(),/1\.234,56/);
+  assert.match(await page.locator('#of-panel-overview').innerText(),/não são somados como patrimônio/);
+  await page.locator('#money-privacy-toggle').click();assert.doesNotMatch(await page.locator('#of-panel-overview').innerText(),/1\.234,56/);
+});
+
+test('six areas, credit filter and observation history are query-only',async()=>{
+  await go('open-finance');assert.equal(await page.getByRole('tab').count(),6);
+  await page.getByRole('tab',{name:'Cartões',exact:true}).click();await page.locator('#of-panel-cards .empty').waitFor();
+  assert(requests.some(r=>r.path.endsWith('/resources')&&r.query.type==='CREDIT'));
+  await page.getByRole('tab',{name:'Ativos',exact:true}).click();await page.locator('#of-panel-assets .empty').waitFor();
+  await page.locator('#of-panel-assets [name=history]').check();await page.locator('#of-panel-assets [type=submit]').click();
+  await page.waitForFunction(()=>document.querySelector('#of-panel-assets .empty'));
+  assert(requests.some(r=>r.path.endsWith('/resources')&&r.query.resource==='investments'&&r.query.history==='1'));
+});
+
+test('manual cached collection requires explicit confirmation and can be cancelled',async()=>{
+  await page.route('**/api/v2/open-finance/catalogs',route=>route.fulfill({json:{...ofCatalog,connections:connections.map((c,i)=>({...c,enabled:i===0}))}}));
+  await go('open-finance');await page.getByRole('tab',{name:'Conexões',exact:true}).click();
+  page.once('dialog',dialog=>dialog.dismiss());await page.getByRole('button',{name:'Consultar cache: Itaú'}).click();
+  assert.match(await page.locator('[data-coverage-progress]').innerText(),/Nenhuma coleta iniciada/);
+  assert.equal(requests.filter(r=>r.method==='POST').length,0);
+});
+
+test('missing currency never silently becomes BRL or a zero balance',async()=>{
+  await page.route('**/api/v2/open-finance/resources?**',route=>route.fulfill({json:{resource:'investments',total:1,has_more:false,coverage:[{state:'NOT_AUTHORIZED',record_count:0,page_count:1,observed_at:'2026-10-23'}],items:[{connection_id:'itau-test',state:'PRESENT',observed_at:'2026-10-23',data:{name:'Ativo sintético',balance:0}}]}}));
+  await go('open-finance');await page.locator('.of-resource-card').waitFor();await page.locator('#money-privacy-toggle').click();
+  assert.match(await page.locator('#of-panel-overview').innerText(),/Valor indisponível/);
+  assert.match(await page.locator('#of-panel-overview').innerText(),/Acesso não autorizado/);
+  assert.doesNotMatch(await page.locator('#of-panel-overview').innerText(),/R\$ 0,00/);
+});
+
+test('foreign card balances require their own currency instead of inheriting BRL',async()=>{
+  await page.route('**/api/v2/open-finance/resources?**',route=>route.fulfill({json:{resource:'accounts',total:1,has_more:false,coverage:[],items:[{connection_id:'itau-test',state:'PRESENT',observed_at:'2026-10-23',data:{name:'Cartão sintético',currencyCode:'BRL',creditData:{creditLimit:1234.56,balanceForeignCurrency:[{balance:1000},{balance:50,currencyCode:'USD'}]}}}]}}));
+  await go('open-finance');await page.locator('.of-resource-card').waitFor();await page.locator('#money-privacy-toggle').click();
+  const text=await page.locator('#of-panel-overview').innerText();
+  assert.match(text,/Valor indisponível/);assert.match(text,/USD 50,00/);assert.match(text,/R\$ 1\.234,56/);assert.doesNotMatch(text,/R\$ 1\.000,00/);
 });
