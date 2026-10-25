@@ -1,5 +1,6 @@
 """Manual staging synchronization. Only migration-009 tables may be written."""
 from hashlib import sha256
+from .open_finance_diagnostics import annotate, emit
 from contextlib import nullcontext
 from datetime import datetime
 from math import ceil
@@ -105,7 +106,7 @@ class OpenFinanceService:
         with nullcontext() if in_transaction else immediate_transaction(c):
             self._guard(c,config.id,run_id,token)
             for account in accounts:
-                if account.connection_id!=config.id:raise SyncError('ACCOUNT_SCOPE_MISMATCH',502)
+                if account.connection_id!=config.id:raise annotate(SyncError('ACCOUNT_SCOPE_MISMATCH',502), resource='accounts', operation='ACCOUNTS_PERSIST', stage='STAGING_CHECK', category='LOCAL_CONNECTION_MISMATCH')
                 values=account.staging_fields()
                 c.execute('INSERT INTO of_accounts(connection_id,external_id,name,type,subtype,currency,provider_updated_at) '
                           'VALUES(?,?,?,?,?,?,?) ON CONFLICT(connection_id,external_id) DO UPDATE SET '
@@ -200,8 +201,12 @@ class OpenFinanceService:
                         try:page=next(pages)  # Outside write transactions.
                         except StopIteration:break
                         self._page(c,config,run_id,token,account.external_id,page)
-            except PluggyError as exc:error=exc.code
-            except SyncError as exc:error=exc.code
+            except PluggyError as exc:
+                emit(config.id,run_id,exc)
+                error=exc.code
+            except SyncError as exc:
+                emit(config.id,run_id,exc)
+                error=exc.code
             except sqlite3.Error:error='STORAGE_FAILURE'
             except Exception:error='SYNC_INTERNAL_FAILURE'  # No raw provider/SQL exception logging.
             try:return self._finish(c,config,run_id,token,error)

@@ -8,6 +8,7 @@ from .db import immediate_transaction
 from .open_finance import SyncError, OpenFinanceService
 from .pluggy_client import ExternalAccount, PluggyError
 from .pluggy_coverage import RESOURCES, project
+from .open_finance_diagnostics import emit
 
 
 def _batch(service, c, config, run_id, token, batch, *, in_transaction=False):
@@ -96,8 +97,10 @@ def _sync_full(service, connection_id, *, actor, check=lambda: None, minimum_int
                     _batch(service, c, config, run_id, token, batch, in_transaction=True)
                     check()  # Cancellation before commit rolls back this complete page.
         except PluggyError as exc:
+            emit(config.id, run_id, exc)
             error = exc.code
         except SyncError as exc:
+            emit(config.id, run_id, exc)
             error = exc.code
         except (sqlite3.Error, ValueError, RuntimeError):
             error = 'COVERAGE_INVALID_OR_STORAGE_FAILURE'
