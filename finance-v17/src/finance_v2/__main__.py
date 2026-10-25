@@ -9,6 +9,7 @@ from .config import Settings
 from .migrations import migrate, require_current_schema
 from .domain.clock import SystemClock
 from .scheduler import SchedulerService
+from .http_runtime import ConcurrentWSGIServer, serve
 
 
 class SafeRequestHandler(WSGIRequestHandler):
@@ -39,9 +40,9 @@ def main() -> None:
         if args.command == "migrate":
             return
     require_current_schema(settings.database_path)
-    with make_server(settings.host, settings.port, create_app(settings), handler_class=SafeRequestHandler) as server:
+    with make_server(settings.host, settings.port, create_app(settings), server_class=ConcurrentWSGIServer, handler_class=SafeRequestHandler) as server:
         print(f"Finance V2 listening on http://{settings.host}:{settings.port}/api/v2/health")
-        server.serve_forever()
+        serve(server, settings)
 
 
 if __name__ == "__main__":

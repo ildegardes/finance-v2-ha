@@ -55,6 +55,19 @@ def _batch(service, c, config, run_id, token, batch, *, in_transaction=False):
 def sync_full(service, connection_id, *, actor):
     if actor != 'UI:local':
         raise SyncError('OWNER_REQUIRED', 403)
+    return _sync_full(service, connection_id, actor=actor)
+
+
+def sync_full_automatic(service, connection_id, *, check, minimum_interval=0):
+    """Internal worker entry; never exposed through HTTP or MCP authorization."""
+    config = service.config.get(connection_id)
+    if config is None or not config.auto_sync_enabled:
+        raise SyncError('AUTO_SYNC_DISABLED', 403)
+    return _sync_full(service, connection_id, actor='AUTO:coverage', check=check, minimum_interval=minimum_interval)
+
+
+def _sync_full(service, connection_id, *, actor, check=lambda: None, minimum_interval=0):
+    check()
     config = service.config.get(connection_id)
     if config is None:
         raise SyncError('CONNECTION_NOT_FOUND', 404)
@@ -62,13 +75,14 @@ def sync_full(service, connection_id, *, actor):
         raise SyncError('CONNECTION_DISABLED')
     with closing(service._db()) as c:
         try:
-            run_id, token = service._claim(c, config, actor, None, None)
+            run_id, token = service._claim(c, config, actor, None, None, minimum_interval=minimum_interval)
         except sqlite3.Error:
             raise SyncError('STORAGE_BUSY', 503) from None
         error = None
         try:
             client = service.client_factory(config)
             for batch in client.coverage_pages():
+                check()
                 service._touch(c, config.id, run_id, token)
                 # Persist complete safe projections alongside existing OF-L2 rows.
                 with immediate_transaction(c):
@@ -80,6 +94,7 @@ def sync_full(service, connection_id, *, actor):
                         records = [client._transaction(row, batch['parent']) for row in batch['rows']]
                         service._page(c, config, run_id, token, batch['parent'], records, in_transaction=True)
                     _batch(service, c, config, run_id, token, batch, in_transaction=True)
+                    check()  # Cancellation before commit rolls back this complete page.
         except PluggyError as exc:
             error = exc.code
         except SyncError as exc:
@@ -88,12 +103,20 @@ def sync_full(service, connection_id, *, actor):
             error = 'COVERAGE_INVALID_OR_STORAGE_FAILURE'
         except Exception:
             error = 'COVERAGE_INTERNAL_FAILURE'
-        if error:
-            with immediate_transaction(c):
-                # An expired worker may not write over a newer worker's diagnostics.
-                stamp = service._guard(c, config.id, run_id, token)
-                c.execute("UPDATE of_resource_coverage SET state='FAILED',error_code=?,observed_at=? WHERE run_id=? AND state='RUNNING'", (error, stamp, run_id))
-        return service._finish(c, config, run_id, token, error)
+        interrupted = error == 'AUTO_SYNC_CANCELLED' and actor == 'AUTO:coverage'
+        try:
+            if error:
+                with immediate_transaction(c):
+                    # An expired worker may not write over a newer worker's diagnostics.
+                    stamp = service._guard(c, config.id, run_id, token)
+                    c.execute("UPDATE of_resource_coverage SET state='FAILED',error_code=?,observed_at=? WHERE run_id=? AND state='RUNNING'", (error, stamp, run_id))
+            return service._finish(c, config, run_id, token, error, interrupted=interrupted)
+        except sqlite3.Error:
+            if interrupted:
+                # Do not pretend the lease was released when storage refuses cleanup.
+                # The existing finite expiry and fencing remain authoritative.
+                raise SyncError('CANCELLATION_FINALIZATION_DEFERRED', 503) from None
+            raise
 
 
 def query(c, settings, values):
@@ -155,7 +178,7 @@ def query(c, settings, values):
         c.rollback()
 
 
-def coverage_status(c):
+def coverage_status(c, settings=None):
     return {'coverage': [dict(row) for row in c.execute('SELECT * FROM of_resource_coverage ORDER BY connection_id,resource,parent_id')],
             'runs': [dict(row) for row in c.execute('SELECT id,connection_id,state,error_code FROM of_sync_runs ORDER BY rowid DESC LIMIT 25')],
-            'automatic_sync': False, 'remote_updates': False}
+            'automatic_sync': bool(settings and any(x.enabled and x.auto_sync_enabled for x in settings.pluggy_connections)), 'remote_updates': False}

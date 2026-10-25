@@ -16,13 +16,14 @@ class PluggyConnection:
     client_secret: str = field(repr=False)
     item_id: str = field(repr=False)
     enabled: bool = False
+    auto_sync_enabled: bool = False
 
     def __post_init__(self):
         valid = isinstance(self.id, str) and re.fullmatch(r'[a-z][a-z0-9-]{1,63}', self.id)
         for value in (self.institution, self.client_id, self.client_secret, self.item_id):
             valid = valid and isinstance(value, str) and 0 < len(value) <= 512
             valid = valid and value == value.strip() and not any(ord(c) < 32 or ord(c) == 127 for c in value)
-        if not valid or not isinstance(self.enabled, bool) or len(self.institution)>200 or len(self.item_id)>200:
+        if not valid or not isinstance(self.enabled, bool) or type(self.auto_sync_enabled) is not bool or len(self.institution)>200 or len(self.item_id)>200:
             raise PluggyConfigurationError('invalid Pluggy connection configuration')
 
 
@@ -45,7 +46,7 @@ def connections_from_json(raw: str | None) -> tuple[PluggyConnection, ...]:
         result = []
         required = {'institution', 'client_id', 'client_secret', 'item_id'}
         for slug, values in payload.items():
-            if not isinstance(values, dict) or not required <= set(values) or set(values) - required - {'enabled'}:
+            if not isinstance(values, dict) or not required <= set(values) or set(values) - required - {'enabled', 'auto_sync_enabled'}:
                 raise ValueError()
             result.append(PluggyConnection(slug, **values))
         return tuple(result)

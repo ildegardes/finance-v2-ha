@@ -1,148 +1,113 @@
-# Configuração local do Open Finance / Pluggy
+# Finance V17 — Open Finance 0.1.24
 
-Candidata experimental 0.1.23-open-finance.1, schema 10, baseada na distribuição 0.1.22-open-finance.1. Python 3.12.7,
-oauthlib 3.3.1 e dados Unicode13 fixados; consulte os notices distribuídos
-em `src/finance_v2/UNICODE13_NOTICES.md` e seu manifesto de integridade.
-O startup aplica migrations antes de iniciar API e scheduler financeiro.
-Publicação restrita à branch de revisão; instalação no Home Assistant não foi executada nem autorizada.
+Schema 10; migrations 001–010 preservadas. Atualizar de 0.1.23 não exige migration nova.
+Python 3.12.7, oauthlib 3.3.1 e Unicode13 versionado. Notices em
+`src/finance_v2/UNICODE13_NOTICES.md`. O slug continua finance_v17, porta 8766,
+armazenamento /data e repositório público de distribuição permanecem os mesmos.
 
-A integração é opcional e vem desabilitada. Este pacote em desenvolvimento
-não autoriza conexão bancária real, implantação ou migration em Production.
-API/UI, OAuth e scheduler financeiro continuam funcionando sem Pluggy.
+## Ativação sem sobrescrever preferências
 
-## Fase A — interface e privacidade global
+O default `open_finance_auto_sync_enabled` é **true para opções novas**, mas
+`open_finance_enabled` e as duas conexões continuam false em instalações novas.
+Não há chamadas sem integração habilitada e credenciais/Item configurados.
 
-O olho no cabeçalho oculta/exibe valores em toda a interface, sem recarregar
-a página. Sem preferência anterior, os valores começam ocultos como
-`R$ ••••••`. A preferência `finance-v17:money-visible` fica no localStorage
-do navegador; somente `true` exibe valores. Não altera opções do add-on,
-respostas da API ou registros financeiros. Não é criptografia nem controle
-de acesso: os dados continuam na memória, nos formulários e na API.
+**Atualização da instalação existente:** um false persistido é respeitado. O
+Supervisor combina defaults com opções persistidas; mudar o default não habilita
+silenciosamente esta instalação. Não há migração de opções, escrita em
+/data/options.json pelo Finance ou acesso administrativo ao Supervisor.
 
-Open Finance possui Visão geral, Fluxo, Cartões, Ativos, Crédito e Conexões. Fluxo preserva
-filtros e paginação; Conexões reutiliza o catálogo e histórico existentes.
-Saldos, limites, faturas, posições, movimentações de investimentos e empréstimos
-podem ser consultados no staging após coleta manual do cache autorizado. Categorias
-bancárias são preservadas. Não há total patrimonial consolidado ou retorno calculado:
-moedas, possíveis sobreposições e completude histórica não são presumidas.
-Abrir as abas não inicia sincronização bancária ou conciliação oficial.
+Depois da atualização pelo proprietário, para a instalação já configurada e com
+integração/conexões habilitadas, a ação adicional é abrir Configuração do add-on e
+habilitar **open_finance_auto_sync_enabled**, salvar e iniciar/reiniciar quando
+autorizado. Não alterar os Client IDs, Client Secrets ou Item IDs existentes.
+O primeiro ciclo começa após a criação do servidor HTTP. Se a flag efetiva
+permanecer false, **não haverá ingestão automática**. As opções são lidas no startup;
+não existe hot reload. Não se exige recadastrar uma conexão válida.
 
-A release mantém as migrations 001–009 sem mudanças e adiciona a 010 exclusivamente
-para staging. O startup existente executará 9→10, ou 8→9→10, conforme o estado
-efetivo. Não atualizar antes de backup consistente e recuperação coordenada aprovados.
-Downgrade de código não reverte schema. Estado atual e backup devem ser reconfirmados;
-nenhuma migration foi executada em banco operacional nesta preparação.
+| Opção | Default novo | Efeito |
+|---|---|---|
+| open_finance_enabled | false | Habilita a integração configurada |
+| open_finance_auto_sync_enabled | true | Coleta periódica de cache, respeitando false persistido |
+| pluggy_itau_enabled | false | Habilita o preset Itaú |
+| pluggy_santander_enabled | false | Habilita o preset Santander |
+| pluggy_*_client_id/client_secret/item_id | vazio | Aplicação/Item próprios de cada instituição |
 
-## Cobertura ampliada e coleta manual
+Não presumir credenciais iguais. Opção incompleta afeta somente o banco correspondente,
+com diagnóstico fixo OPEN_FINANCE_CONNECTION_INVALID_ITAU/SANTANDER. Nenhuma opção ou
+credencial é apagada. Vínculo divergente com staging existente resulta em
+CONNECTION_BINDING_CHANGED; não substituir Item ou apagar staging para contorná-lo.
 
-Abrir as telas consulta apenas o staging. A ação “Consultar cache” exige confirmação
-e usa a configuração privada existente por instituição; não atualiza a instituição.
-Pode emitir chave temporária POST /auth. Saldo em tempo real, SCR/Bacen e endpoints
-de movimentação financeira são bloqueados. Sincronização automática permanece falsa.
+## O que a sincronização faz
 
-Cada recurso distingue não consultado, não autorizado, não disponível, vazio e zero.
-Payloads são projetados por contrato, sem documentos/números completos ou URLs assinadas.
-Omissões privadas ou de campos ainda não contratados são contabilizadas. Histórico e
-NOT_SEEN preservam registros sem inferir exclusão ou proveniência F07 legada.
-Consulte `docs/open-finance/FULL_COVERAGE_CONTRACTS.md` no repositório de distribuição.
+Um worker por conexão usa a mesma ingestão de `POST /api/v2/open-finance/coverage-sync`.
+Configuração, hash do vínculo e escopo dos IDs são conferidos. O Item e os metadados
+de recursos/consentimentos são lidos antes dos produtos. Autorização expirada,
+revogada ou Item exigindo ação do usuário é registrada sem renovar consentimento.
+Quando metadados de consentimento não estão disponíveis, não se inventa sua validade;
+os endpoints e estados de cobertura do provedor continuam sendo respeitados.
 
-Limitação preexistente: editar receita recorrente pode também abrir o diálogo
-de materialização pelo handler legado. Isso foi reproduzido no baseline e
-não foi corrigido nesta release; requer avaliação antes de uso operacional
-desse fluxo. A qualificação da interface não certifica sua escrita financeira.
+São chamadas GET de cache e, quando necessário, POST /auth para chave temporária.
+Não há atualização remota do Item, saldo em tempo real, SCR, pagamento, transferência
+ou renovação de autorização. Dados podem estar desatualizados no provedor; ingestão
+do cache não é comprovação de uma nova coleta pela instituição.
 
-Esta preparação não exige backup adicional automaticamente. Antes de uma
-instalação autorizada, avaliar se a proteção já aceita ainda corresponde ao
-estado atual. Recuperação deve coordenar código, configuração e banco
-compatíveis; não restaurar automaticamente um ponto antigo schema 8 sobre
-uma instalação schema 9 com dados posteriores.
+Após sucesso automático recente, o restart aguarda o intervalo restante de uma hora,
+sem criar outra execução. Falha automática recente recebe backoff mínimo de cinco
+minutos em restart; interrupções permitem retomada. Decisão e lease compartilham
+transação SQLite. A ação manual continua disponível e auditada. Cada instituição é
+independente; lease ativo impede sobreposição. Não há polling agressivo.
 
-## Opções
+Chamadas automáticas usam timeout de socket de 2s e orçamento de execução de 120s.
+Um I/O que não coopera é desacoplado da autoridade de persistência; sua resposta
+tardia não pode gravar. Há no máximo uma chamada não resolvida por conexão.
+Cancelamento finaliza como INTERRUPTED/AUTO_SYNC_CANCELLED. Se o banco recusar a
+finalização, CANCELLATION_FINALIZATION_DEFERRED mantém recuperação pelo lease de
+300s e fencing. Não se anuncia sucesso de uma coleta interrompida.
 
-| Opção | Padrão | Uso |
-| --- | --- | --- |
-| `open_finance_enabled` | false | Habilita as conexões Pluggy selecionadas para sincronização manual owner-only |
-| `open_finance_auto_sync_enabled` | false | Reservada: true bloqueia startup com OPEN_FINANCE_AUTO_SYNC_UNAVAILABLE; não existe scheduler Open Finance |
-| `pluggy_itau_enabled` | false | Seleciona Itaú, somente com integração geral habilitada |
-| `pluggy_itau_client_id` | vazio | Client ID da aplicação Pluggy destinada a essa conexão |
-| `pluggy_itau_client_secret` | vazio | Client Secret dessa aplicação; campo password |
-| `pluggy_itau_item_id` | vazio | Item ID da conexão Itaú |
-| `pluggy_santander_enabled` | false | Seleciona Santander, somente com integração geral habilitada |
-| `pluggy_santander_client_id` | vazio | Client ID da aplicação Pluggy destinada a essa conexão |
-| `pluggy_santander_client_secret` | vazio | Client Secret dessa aplicação; campo password |
-| `pluggy_santander_item_id` | vazio | Item ID da conexão Santander |
+## Interface e verificação
 
-Não substituir timezone, ui_token, external_clients ou oauth_clients existentes.
-Para uso futuro autorizado, preencher cada banco com sua aplicação/item próprios.
-Credenciais estruturais válidas não provam autorização ou conectividade bancária.
-Nenhum token/API key vem embutido no pacote.
+As seis áreas consultam staging: Visão geral (contas/saldos), Fluxo (transações e
+categorias), Cartões (contas CREDIT, limites/faturas), Ativos (posições/movimentos),
+Crédito (empréstimos) e Conexões (Item, consentimentos, recursos e histórico).
+Ao abrir ou trocar de área, os dados atualmente persistidos são consultados.
+Não há promessa de atualização por push de uma aba já aberta.
 
-`/data/options.json` é lido no startup. O adaptador converte os presets de HA
-em registry genérico `FINANCE_V2_PLUGGY_CONNECTIONS_JSON`, validado pelo mesmo
-parser do backend. Itaú/Santander são opções de apresentação: o modelo interno
-continua suportando outras conexões, sem novos campos específicos em Settings.
+Conexões mostra estado da última execução e cobertura. Conferir cada instituição:
+SUCCEEDED não significa todos os produtos disponíveis. EMPTY, NOT_AVAILABLE,
+NOT_AUTHORIZED, NOT_COLLECTED e FAILED têm significados diferentes; zero e ausência
+não são equivalentes. Item OUTDATED pode fornecer cache antigo, identificado pelos
+metadados originais. CONSENT_EXPIRED, CONSENT_NOT_ACTIVE, ITEM_REAUTH_REQUIRED e
+ITEM_USER_ACTION_REQUIRED exigem revisão do proprietário, não sincronizações repetidas.
 
-Flags devem ser booleanas. Com integração geral habilitada, cada conexão
-selecionada exige Client ID, Client Secret e Item ID não vazios, sem espaços
-periféricos ou caracteres de controle; limites são os do cliente canônico.
-Incompletude bloqueia antes de migrations/API/scheduler, com diagnóstico
-estático que identifica somente a conexão, nunca o valor informado.
+Não inferir saldos de transações, patrimônio consolidado, retorno histórico ou
+proveniência F07 sem evidência. Revisões não são novas posições. NOT_SEEN preserva
+histórico sem afirmar exclusão. Categorias originais são preservadas.
+Nenhum registro staging é promovido para despesa, receita, pagamento, cartão,
+fatura ou recorrência oficial. O scheduler financeiro permanece separado.
 
-Conexões desabilitadas são omitidas do registry: campos parciais/armazenados
-não são utilizados nem exportados. Habilitação geral false produz registry
-vazio, inclusive sobrescrevendo variável antiga herdada. Nenhuma conexão
-habilitada também é estado válido. As opções e o histórico já importado não
-são apagados. Alterações das opções são recarregadas em novo startup; não há
-hot reload ou sincronização implícita após salvar/reiniciar.
+O botão de olho mantém a privacidade global: valores ocultos por padrão, preferência
+localStorage e máscara R$ ••••••. Isso não é criptografia ou autorização; dados seguem
+na API/memória. Não publicar screenshots com dados reais.
 
-## Segurança e limitações
+## Segurança e recuperação
 
-O schema HA usa `password` para os dois Client Secrets, conforme o contrato
-de configuração do Supervisor:
-[Home Assistant — App configuration](https://developers.home-assistant.io/docs/apps/configuration/).
-Não confundir esse tipo de campo com criptografia em repouso ou um cofre.
-Configuração, editor YAML, backups e acesso administrativo ao host/Supervisor
-podem disponibilizar os valores; proteger esses acessos e backups.
-Client ID e Item ID são identificadores, mas também não aparecem em diagnóstico
-ou consultas de conexões.
+Não imprimir options.json, environment, Client Secrets, API keys, Items ou números
+completos. O stdout de ha_pluggy_options é transporte privado capturado pelo wrapper;
+nunca executá-lo isoladamente em terminal ou com set -x. Campos password e backups
+não substituem controle de acesso ao host. OAuth/MCP não recebe acesso owner-only
+ao staging. Sessões de escrita continuam exigindo CSRF.
 
-O helper `finance_v2.ha_pluggy_options` é transporte interno de credenciais:
-seu stdout é capturado por command substitution no run.sh, sem impressão.
-Não executá-lo standalone em terminal/log, ativar `set -x`, imprimir registry,
-options.json ou environment, nem compartilhar dumps de processos.
-Segredos permanecem em memória/environment dos processos que herdam a
-configuração, como já acontece com credenciais do runtime; administradores
-podem inspecioná-los. Não há proteção contra um host comprometido.
-API keys Pluggy não são armazenadas nas tabelas de staging ou nas opções.
+Antes de instalação em produção: verificar estado atual, proteção consistente
+imediatamente anterior e recuperação conjunta de código, configuração e /data.
+Manter cópia externa verificada e janela operacional. Nada nesta documentação
+executa backup, parada, atualização ou sincronização.
 
-Consultas de conexões e imports são owner-only; não conceder acesso bancário
-ao MCP, Hermes ou scheduler. POST por sessão exige CSRF; bearer UI utiliza a
-autorização existente. Respostas e erros não retornam Client Secret/API key.
+Se houver falha, preservar logs sanitizados e o conjunto SQLite/WAL/SHM; não apagar
+leases para fabricar sucesso. Restaurar versão e configuração compatíveis com o
+mesmo banco. Ao voltar para **0.1.23**, restaurar auto-sync **false**: essa versão
+rejeita true antes da API. Downgrade de código não é restauração de dados.
+O backup antigo schema 9 não equivale a rollback de uma instalação schema 10.
 
-Não existe sincronização automática. A opção automática deve permanecer false.
-O scheduler financeiro existente não foi transformado em scheduler Pluggy.
-Não há conciliação, categorização inteligente ou criação automática de despesas,
-receitas, cartões, faturas ou recorrências a partir dos imports.
-
-## Implantação futura e rollback (não executados)
-
-1. Obter autorização específica de release/deployment e, separadamente, da
-   aplicação da migration 009 em banco real. O startup do pacote com registry 9
-   executa migrations oficiais; configurar opções não substitui essa autorização.
-2. Revisar versão/gates, sincronização pública byte a byte e build/ensaio ARM64
-   em ambiente descartável. Este lote não é prova de build/runtime HA real.
-3. Parar o runtime somente quando autorizado, criar backup consistente de todo
-   `/data` (SQLite e configuração, protegendo segredos), e validar restauração
-   em cópia antes de atualizar. Preservar configurações OAuth/UI anteriores.
-4. Após implantação autorizada, começar com integração/auto sync false;
-   conferir health, schema/histórico/checksums e funcionamento da aplicação.
-5. Só com autorização bancária posterior habilitar conexão e solicitar uma
-   sincronização manual owner-only; não usar GET como comando.
-
-Rollback de configuração: desabilitar integração/auto sync e reiniciar somente
-quando autorizado; isso impede chamadas futuras sem apagar staging/financeiro.
-Rollback de pacote/schema exige parar processos e restaurar backup compatível
-previamente validado: não fazer downgrade de user_version, apagar tabelas ou
-rodar pacote schema 8 contra banco schema 9. Restaurar as opções correspondentes
-e verificar health/OAuth antes de disponibilizar novamente. Nunca imprimir os
-segredos durante backup, restauração ou diagnóstico.
+Build e testes Docker/ARM64 emulado não são homologação Supervisor/HAOS real.
+Consultar o relatório versionado em docs/open-finance/RELEASE_0.1.24.md para
+evidências, limitações, gates e instruções operacionais propostas.

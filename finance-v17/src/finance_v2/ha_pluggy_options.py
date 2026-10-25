@@ -23,8 +23,6 @@ def registry_from_options(options):
     for slug,_ in PRESETS:
         if type(options.get('pluggy_'+slug+'_enabled',False)) is not bool:
             raise HaPluggyConfigurationError('OPEN_FINANCE_INVALID_FLAGS')
-    if automatic:
-        raise HaPluggyConfigurationError('OPEN_FINANCE_AUTO_SYNC_UNAVAILABLE')
     if not enabled:return '{}'
     registry={}
     for slug,institution in PRESETS:
@@ -34,9 +32,14 @@ def registry_from_options(options):
         values={field:options.get('pluggy_'+slug+'_'+field,'') for field in ('client_id','client_secret','item_id')}
         try:connection=PluggyConnection(slug,institution,**values,enabled=True)
         except (PluggyConfigurationError,TypeError):
-            raise HaPluggyConfigurationError('OPEN_FINANCE_CONNECTION_INVALID_'+slug.upper()) from None
+            # One incomplete institution must not stop the API or its peer.
+            # No supplied option value is included in this diagnostic.
+            print('OPEN_FINANCE_CONNECTION_INVALID_'+slug.upper(), file=sys.stderr)
+            continue
         registry[connection.id]={'institution':connection.institution,'client_id':connection.client_id,
             'client_secret':connection.client_secret,'item_id':connection.item_id,'enabled':connection.enabled}
+        if automatic:
+            registry[connection.id]['auto_sync_enabled']=True
     result=json.dumps(registry,separators=(',',':'))
     # Use precisely the Lote-2 parser, rather than a second internal contract.
     try:connections_from_json(result)

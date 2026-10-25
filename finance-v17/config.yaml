@@ -1,5 +1,5 @@
 name: Finance V17
-version: "0.1.23-open-finance.1"
+version: "0.1.24-open-finance.1"
 slug: finance_v17
 description: Finance V17 local API and scheduler
 url: https://github.com/ildegardes/finance-v2-ha
@@ -19,7 +19,7 @@ options:
   external_clients: "{}"
   oauth_clients: "{}"
   open_finance_enabled: false
-  open_finance_auto_sync_enabled: false
+  open_finance_auto_sync_enabled: true
   pluggy_itau_enabled: false
   pluggy_itau_client_id: ""
   pluggy_itau_client_secret: ""

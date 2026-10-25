@@ -61,7 +61,7 @@ def dispatch(app,operation,identity,body,query):
     if op in {'resources','coverage'}:
         if body or (op=='coverage' and query):raise SyncError('INVALID_REQUEST',422)
         with closing(app.db()) as c:
-            return (query_resources(c,app.settings,query) if op=='resources' else coverage_status(c)),200
+            return (query_resources(c,app.settings,query) if op=='resources' else coverage_status(c,app.settings)),200
     if op in {'sync','sync_all'}:
         allowed={'date_from','date_to'} | ({'connection_id'} if op=='sync' else set())
         if query or set(body)-allowed:raise SyncError('INVALID_REQUEST',422)
@@ -206,7 +206,7 @@ def openapi_paths():
         'net_worth':obj({'state':enum('NOT_ESTABLISHED'),'reason':enum('CURRENCY_AND_OVERLAP_NOT_PROVEN')})})
     coverage_response=obj({'coverage':{'type':'array','items':coverage_schema},
         'runs':{'type':'array','items':obj({k:nullable if k=='error_code' else text for k in ('id','connection_id','state','error_code')})},
-        'automatic_sync':{'type':'boolean','const':False},'remote_updates':{'type':'boolean','const':False}})
+        'automatic_sync':{'type':'boolean'},'remote_updates':{'type':'boolean','const':False}})
     for method,path,op in OPERATIONS:
         if op not in {'resources','coverage','coverage_sync'}:continue
         response_schema=resource_response if op=='resources' else coverage_response if op=='coverage' else obj({'run':run})

@@ -1,5 +1,15 @@
 # Finance V17
 
+## 0.1.24-open-finance.1
+
+- Replace the unsupported-auto-sync startup rejection with isolated cached-coverage workers. Enable the default only for new options; preserve explicit persisted false and document activation after update.
+- Reuse manual coverage ingestion, per-connection leases, binding verification and revision history; record automatic runs as `AUTO:coverage` rather than impersonating the owner.
+- Isolate incomplete institution credentials with fixed diagnostics, without preventing API startup or a valid peer connection.
+- Serve HTTP requests concurrently with a limit of 16 workers. Keep the wrapper, financial scheduler, migrations, OAuth/MCP permissions and protected Unicode bytes unchanged.
+- Incorporate H06-R cancellation: bounded ingestion shutdown, INTERRUPTED audit state, fenced lease recovery and discarded late I/O results; at most one unresolved transport call per institution.
+- Avoid duplicate startup collections after a recent automatic success and back off after recent failure. Do not turn expired authorization into empty product snapshots; expose Item/consent diagnostics.
+- No new migration, Item update, live balance, consent renewal, official financial promotion or automatic modification of existing options. Tests and residual Supervisor limitations are documented separately.
+
 ## 0.1.23-open-finance.1 — experimental review candidate
 
 - Add versioned cached-read contracts for configured Items, resource permissions, consents, bank/credit accounts, balances, limits, transactions, investment positions/movements, loans, bills and statement references.

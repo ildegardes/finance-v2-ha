@@ -1,0 +1,647 @@
+{
+  "version": "0.1.24-open-finance.1",
+  "base_commit": "7bec77f6dcff63f9a66f3c408d19c887febff690",
+  "schema": 10,
+  "CANDIDATE_INTEGRITY": "PASS",
+  "WINDOWS_REGRESSION": "PASS",
+  "ARM64_REGRESSION": "PASS",
+  "CORRECTED_IMAGE_BUILD": "PASS",
+  "AUTO_SYNC_MULTI_BANK": "PASS",
+  "ADDON_COMPATIBILITY": "PASS",
+  "UPDATE_SAFETY": "PASS",
+  "PUBLICATION_GATE": "GO",
+  "HOME_ASSISTANT_PRODUCTION_UPDATE": "NOT_EXECUTED",
+  "REAL_BANK_SYNC": "NOT_EXECUTED",
+  "windows": {
+    "run": 60,
+    "pass": 60,
+    "fail": 0,
+    "error": 0,
+    "skip": 0,
+    "elapsed_seconds": 26.64,
+    "python": "3.12.14 (main, Aug 25 2026, 14:01:42) [MSC v.1944 64 bit (AMD64)]"
+  },
+  "arm64": {
+    "run": 60,
+    "pass": 60,
+    "fail": 0,
+    "error": 0,
+    "skip": 0,
+    "elapsed_seconds": 88.849,
+    "python": "3.12.7 (main, Dec  3 2024, 09:02:00) [GCC 12.2.0]",
+    "machine": "aarch64"
+  },
+  "individual_tests": [
+    {
+      "test": "test_sqlite_validation.HttpTests.test_real_api_available_while_bank_waits_and_peer_finishes",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.HttpTests.test_real_api_available_with_both_providers_unavailable",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_actual_workers_failure_isolated_and_all_threads_stop",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_auto_disabled_no_ingestion",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_binding_change_rejected_without_replacing_existing_connection",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_cancellation_inside_page_rolls_back_and_releases_lease",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_concurrent_manual_auto_same_bank_rejected_peer_continues",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_each_bank_auth_failure_leaves_peer_successful",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_existing_live_lease_not_stolen",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_malformed_page_rolls_back_both_staging_projections",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_missing_bank_credentials_do_not_prevent_valid_peer",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_partial_collection_fails_without_false_absence_or_peer_loss",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_repeated_automatic_ingestion_no_duplicates_or_promotion",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_restart_after_abrupt_interruption_of_uncommitted_page",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_restart_after_abrupt_interruption_with_committed_pages",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_same_external_ids_are_scoped_by_institution",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_schema10_migration_history_and_reapplication",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_timeout_is_recorded_and_retry_is_idempotent",
+      "result": "PASS"
+    },
+    {
+      "test": "test_cancellation.CancellationTests.test_cancellation_during_pagination_itau",
+      "result": "PASS"
+    },
+    {
+      "test": "test_cancellation.CancellationTests.test_cancellation_during_pagination_santander",
+      "result": "PASS"
+    },
+    {
+      "test": "test_cancellation.CancellationTests.test_cancellation_inside_persistence_rolls_back_entire_page",
+      "result": "PASS"
+    },
+    {
+      "test": "test_cancellation.CancellationTests.test_cooperative_transport_cancellation",
+      "result": "PASS"
+    },
+    {
+      "test": "test_cancellation.CancellationTests.test_deadline_bounds_wait_and_prevents_unbounded_retry_threads",
+      "result": "PASS"
+    },
+    {
+      "test": "test_cancellation.CancellationTests.test_interrupt_cannot_be_recorded_without_reason",
+      "result": "PASS"
+    },
+    {
+      "test": "test_cancellation.CancellationTests.test_itau_interrupted_santander_operational",
+      "result": "PASS"
+    },
+    {
+      "test": "test_cancellation.CancellationTests.test_noncooperative_io_detached_not_reported_as_provider_cancelled",
+      "result": "PASS"
+    },
+    {
+      "test": "test_cancellation.CancellationTests.test_old_worker_and_late_transport_cannot_write_over_new_owner",
+      "result": "PASS"
+    },
+    {
+      "test": "test_cancellation.CancellationTests.test_santander_interrupted_itau_operational",
+      "result": "PASS"
+    },
+    {
+      "test": "test_cancellation.CancellationTests.test_storage_refuses_cleanup_deferred_lease_is_expiring_and_recoverable",
+      "result": "PASS"
+    },
+    {
+      "test": "test_cancellation.CancellationTests.test_timeout_error_releases_slot_and_peer_can_collect",
+      "result": "PASS"
+    },
+    {
+      "test": "test_release_policy.ReleasePolicyTests.test_binding_guard_precedes_schedule_optimization",
+      "result": "PASS"
+    },
+    {
+      "test": "test_release_policy.ReleasePolicyTests.test_expired_item_preserves_previously_ingested_products",
+      "result": "PASS"
+    },
+    {
+      "test": "test_release_policy.ReleasePolicyTests.test_failure_backoff_does_not_block_explicit_manual_collection",
+      "result": "PASS"
+    },
+    {
+      "test": "test_release_policy.ReleasePolicyTests.test_historical_invalid_and_valid_consents_select_current_authorization",
+      "result": "PASS"
+    },
+    {
+      "test": "test_release_policy.ReleasePolicyTests.test_interrupted_run_can_resume_without_cooldown",
+      "result": "PASS"
+    },
+    {
+      "test": "test_release_policy.ReleasePolicyTests.test_item_login_user_action_and_unknown_states_are_auditable",
+      "result": "PASS"
+    },
+    {
+      "test": "test_release_policy.ReleasePolicyTests.test_optional_consent_unavailable_does_not_invent_denial_for_other_products",
+      "result": "PASS"
+    },
+    {
+      "test": "test_release_policy.ReleasePolicyTests.test_restart_does_not_repeat_recent_automatic_success",
+      "result": "PASS"
+    },
+    {
+      "test": "test_release_policy.ReleasePolicyTests.test_revoked_consents_are_not_turned_into_empty_snapshots",
+      "result": "PASS"
+    },
+    {
+      "test": "test_release_policy.ReleasePolicyTests.test_schedule_becomes_due_without_changing_product_timeout",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_absence_is_not_asserted_as_deletion",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_all_products_projection_history_and_financial_preservation",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_changed_balance_retains_original_history",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_connection_disabled_binding_and_owner_guards",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_contract_integrity_fails_closed",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_corrupt_transaction_scope_fails_without_official_changes",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_cursor_cycles_and_missing_next_rejected",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_duplicate_and_foreign_item_rejected",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_forbidden_live_endpoints_and_writes_fail_before_network",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_http_auth_owner_and_validation",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_http_manual_sync_and_resource_schema",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_malformed_page_rolls_back_legacy_and_extended_rows_together",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_no_implicit_auth_or_network_on_get",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_paged_collection_complete_and_partial_page_rejected",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_payment_and_loan_details_keep_financial_fields_not_identifiers",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_query_pagination_and_integrity",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_replay_does_not_duplicate_revisions",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_schema8_to10_preservation_reapply_and_rollback",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_unavailable_and_unauthorized_preserve_previous_values",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_zero_null_absent_and_projection_types",
+      "result": "PASS"
+    }
+  ],
+  "additional_historical_test": {
+    "windows": "PASS",
+    "arm64": "PASS",
+    "source_not_published": true,
+    "note": "Earlier 61-case runs include one external private historical staging-projection test. Public suite is 60/60, with no skipped tests."
+  },
+  "supplemental": [
+    {
+      "group": "mcp",
+      "pass": 6,
+      "fail": 0,
+      "skip": 0,
+      "exit_code": 0
+    },
+    {
+      "group": "ui",
+      "pass": 38,
+      "fail": 0,
+      "skip": 0,
+      "exit_code": 0
+    }
+  ],
+  "operational_scenarios": [
+    {
+      "case": "01-disabled",
+      "scenario": "disabled",
+      "signal": "TERM",
+      "exit_code": 0,
+      "shutdown_seconds": 2.032,
+      "forced_kill": false,
+      "result": "PASS"
+    },
+    {
+      "case": "02-persistence",
+      "scenario": "disabled",
+      "signal": "TERM",
+      "exit_code": 0,
+      "shutdown_seconds": 2.266,
+      "forced_kill": false,
+      "result": "PASS"
+    },
+    {
+      "case": "03-enabled-int",
+      "scenario": "normal",
+      "signal": "INT",
+      "exit_code": 0,
+      "shutdown_seconds": 2.219,
+      "forced_kill": false,
+      "result": "PASS"
+    },
+    {
+      "case": "04-unavailable",
+      "scenario": "unavailable",
+      "signal": "TERM",
+      "exit_code": 0,
+      "shutdown_seconds": 1.532,
+      "forced_kill": false,
+      "result": "PASS"
+    },
+    {
+      "case": "05-missing",
+      "scenario": "missing-credentials",
+      "signal": "INT",
+      "exit_code": 0,
+      "shutdown_seconds": 2.125,
+      "forced_kill": false,
+      "result": "PASS"
+    },
+    {
+      "case": "06-timeouts",
+      "scenario": "timeouts",
+      "signal": "TERM",
+      "exit_code": 0,
+      "shutdown_seconds": 1.656,
+      "forced_kill": false,
+      "result": "PASS"
+    },
+    {
+      "case": "07-invalid",
+      "scenario": "invalid-response",
+      "signal": "TERM",
+      "exit_code": 0,
+      "shutdown_seconds": 1.953,
+      "forced_kill": false,
+      "result": "PASS"
+    },
+    {
+      "case": "08-pending-timeout",
+      "scenario": "pending-timeout",
+      "signal": "INTERNAL_TERM",
+      "exit_code": 0,
+      "shutdown_seconds": 2.0,
+      "forced_kill": false,
+      "result": "PASS"
+    },
+    {
+      "case": "09-pending-santander-int",
+      "scenario": "pending-timeout-santander-int",
+      "signal": "INTERNAL_INT",
+      "exit_code": 0,
+      "shutdown_seconds": 1.797,
+      "forced_kill": false,
+      "result": "PASS"
+    },
+    {
+      "case": "10-cooperative",
+      "scenario": "pending-cooperative",
+      "signal": "INTERNAL_TERM",
+      "exit_code": 0,
+      "shutdown_seconds": 2.109,
+      "forced_kill": false,
+      "result": "PASS"
+    },
+    {
+      "case": "11-restart",
+      "scenario": "normal",
+      "signal": "TERM",
+      "exit_code": 0,
+      "shutdown_seconds": 1.516,
+      "forced_kill": false,
+      "result": "PASS"
+    },
+    {
+      "case": "12-replay",
+      "scenario": "normal",
+      "signal": "TERM",
+      "exit_code": 0,
+      "shutdown_seconds": 2.516,
+      "forced_kill": false,
+      "result": "PASS"
+    }
+  ],
+  "official_tables_full_fingerprints_preserved": 36,
+  "sqlite_integrity": "ok",
+  "foreign_key_violations": 0,
+  "protected_files": {
+    "finance-v17/run.sh": "7FBDCE1C1A73A97AD757042956512D76BC3FB0DF6BDB023E17CB7F06BEC0B070",
+    "finance-v17/src/finance_v2/PYTHON_REFERENCE_LICENSE.txt": "023163D4252112720E12757861BDD0272105EE1F67ED6A44130E652189A2F7AB",
+    "finance-v17/src/finance_v2/UNICODE13_NOTICES.md": "86FCFFEA7F6E15385B93E7BB390CD44CD7BB65D05F672C68E8D556EE88679134",
+    "finance-v17/src/finance_v2/UNICODE_DATA_LICENSE_2020.txt": "0EFACA9742A27A3F5A7F6F2B5C40A1D227295246E2483308BF83E05871FA202A",
+    "finance-v17/src/finance_v2/UNICODE_LICENSE_V3.txt": "E7A93B009565CFCE55919A381437AC4DB883E9DA2126FA28B91D12732BC53D96",
+    "finance-v17/src/finance_v2/unicode13_f06.py": "6C7EC1703A30FE81A9D577604DFC1B999D9AE48BF78B1318C20DE8E9662CBCD9",
+    "finance-v17/src/finance_v2/unicode13_manifest.json": "9A279ACA79B09F3CE3C49EEA630619BED88115F416F81A97324093B4D856F07A",
+    "finance-v17/src/finance_v2/unicode13_primitives.json": "DE81088662045384D1F0B07FDF53A40BEE297843782FE80BF1AAEA94383BAAA4"
+  },
+  "new_migrations": [],
+  "image_id": "sha256:590e5ad0d2f58464c26b04a739363c20ee3b8f37f451fa0f6065eb968f26e665",
+  "packages": {
+    "gunicorn": "23.0.0",
+    "tzdata": "2025.2",
+    "oauthlib": "3.3.1",
+    "packaging": "26.3"
+  },
+  "supervisor_contract_fixture": {
+    "result": "PASS",
+    "cases": 3,
+    "checks": [
+      {
+        "saved_option": "ABSENT",
+        "effective_option": true,
+        "no_config_write": true
+      },
+      {
+        "saved_option": false,
+        "effective_option": false,
+        "no_config_write": true
+      },
+      {
+        "saved_option": true,
+        "effective_option": true,
+        "no_config_write": true
+      }
+    ],
+    "supervisor_version": "2026.10.3",
+    "source_sha256": "88476DFCF136284FCFE971D5A918AC89FAC78C9C553754B3081650ED5FEA1719",
+    "exact_merger_lines": [
+      136,
+      140
+    ],
+    "exact_getter_lines": [
+      449,
+      454
+    ],
+    "supervisor_running": false,
+    "limitation": "Only the unmodified merger/getter execute with the pinned deepmerge dependency; full Supervisor needs Python 3.14 and is not installed.",
+    "addon_identity_configuration": "PASS",
+    "production_accessed": false
+  },
+  "supervisor_homologation": "NOT_EXECUTED",
+  "supervisor_source": {
+    "sources": {
+      "supervisor/apps/app.py": {
+        "url": "https://raw.githubusercontent.com/home-assistant/supervisor/2026.10.3/supervisor/apps/app.py",
+        "sha256": "88476DFCF136284FCFE971D5A918AC89FAC78C9C553754B3081650ED5FEA1719"
+      },
+      "requirements.txt": {
+        "url": "https://raw.githubusercontent.com/home-assistant/supervisor/2026.10.3/requirements.txt",
+        "sha256": "0ED87F536C59B0997A0E8CA303B107D6BBCEC86D305C2D893493C69A92E32D57"
+      },
+      "supervisor/apps/validate.py": {
+        "url": "https://raw.githubusercontent.com/home-assistant/supervisor/2026.10.3/supervisor/apps/validate.py",
+        "sha256": "9A94B538ECFCF026DB84B4FF83F35BC4F4CA972006E2E63361DD23668D1F0E17"
+      },
+      "supervisor/docker/app.py": {
+        "url": "https://raw.githubusercontent.com/home-assistant/supervisor/2026.10.3/supervisor/docker/app.py",
+        "sha256": "F8D51ADCF2568BFA3F0EBDE8F718A2002BDA08A3BB9873275F17C9D8B01FB020"
+      }
+    },
+    "test_dependency_pins": [
+      "deepmerge==3.0.1",
+      "PyYAML==6.0.3",
+      "voluptuous==0.16.0"
+    ]
+  },
+  "owned_test_containers_removed": 28,
+  "historical_failure": "H06 original remains BLOCKED (7 PASS / 1 FAIL). H06-R cancellation correction is incorporated; this final image is neither old H06 nor old H06-R image.",
+  "metadata_corrections": [
+    {
+      "initial_validator_result": "FAIL",
+      "initial_error": "INDEX_WORKTREE docs/open-finance/RELEASE_0.1.24_MANIFEST.json",
+      "cause": "New release metadata was CRLF while existing .gitattributes canonicalizes text to LF.",
+      "correction": "Normalize only the newly authored manifest to declared LF; do not change historical manifests or protected artifacts.",
+      "file": "docs/open-finance/RELEASE_0.1.24_MANIFEST.json",
+      "sha256_before": "BA351515C6AB170A34527B500250B5A389CDF057B6810753E334C53E361CAB97",
+      "sha256_after": "BB23717D26C508B7BEDC6FFEEFE93AAB232319A4DD6808263C968C5B9D17A379",
+      "json_content_identical": true,
+      "product_bytes_changed": false
+    },
+    {
+      "initial_validator_result": "FAIL",
+      "initial_error": "GIT_MODE finance-v17/migrate.sh",
+      "cause": "Manifest generator assumed executable Git modes for shell scripts, while baseline and index both use 100644. Dockerfile makes installed wrappers executable.",
+      "correction": "Read actual Git index modes; preserve original modes and every product byte.",
+      "changes": {
+        "finance-v17/migrate.sh": {
+          "before": "100755",
+          "after": "100644"
+        },
+        "finance-v17/run.sh": {
+          "before": "100755",
+          "after": "100644"
+        }
+      },
+      "sha256_before": "BB23717D26C508B7BEDC6FFEEFE93AAB232319A4DD6808263C968C5B9D17A379",
+      "sha256_after": "82E6A5D99F9647D8D661A373AF14F09849B3C44891BE094F97C057D284FC2CBA",
+      "product_bytes_or_modes_changed": false
+    }
+  ],
+  "activation": "Default true only where not explicitly overridden; persisted false remains false. Owner enables once after update if needed.",
+  "risks": [
+    "Supervisor install/watchdog/restore not exercised; extra exact-options contract fixture passed.",
+    "Current live Item/consent validity and actual bank coverage are unverified; no credentials or real bank data were accessed.",
+    "Noncooperative pure transport may remain daemon I/O until return/process exit; no database/fencing ownership or persistence callback is held by it.",
+    "Current schema10 rollback requires a fresh coordinated 0.1.23 backup; historical schema9 backup is not the current recovery point.",
+    "Public repository can have unknown third-party consumers; explicit false preferences are preserved."
+  ],
+  "evidence_sha256": {
+    "windows-r1.log": "295BAAD25B130E29CB64FD53EB94A4B384B2D6EE97CC3A3AB48FDA27124A3B00",
+    "windows-r1.json": "1A3D80EFAF98FD20A87323952FDC603C364277ED889472CE2A10CF54E572789A",
+    "BUILD_ARM64.log": "A2CEE27CED66D3B73AE5C355266DA92053D8FCE259FC85DDB4D39153F38FD92A",
+    "BUILD_ARM64.json": "BAA668FC354A2B1558B2F222231E2A7E34EEADA293154DB0956641F3081ACEF0",
+    "UNIT_CONTAINER.json": "7C8FC819077570D2F14EA8F1472DC3C277A5BA3B7B1E2E573FECFDB0F42A5C67",
+    "OWN_CONTAINERS.json": "3C78EF1339E78DFB609F280831B827DAD434F673CB82670BDB39B18163354A35",
+    "finance-release0124-20261025-01-verify.stdout.log": "E35803921DD6DF6B1DC268BBE69A21C0A3DA63CC32306A8D77FA52A82291E479",
+    "finance-release0124-20261025-01-verify.stderr.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "finance-release0124-20261025-01-verify.inspect.json": "CC2B5AC27A89DE8353164946CBF06104AD17F2FD3622D84A2B37D9D03C900050",
+    "IMAGE_FILES.json": "019B386C856784EC2E78C40D0A5BAD49B80724EBC08FF81B0841E00D09B13848",
+    "finance-release0124-20261025-01-seed.stdout.log": "4240BAC66324EA5FEB0AE9D64A697CDAE80B86E366F4F7BC2FBEB8E31594EC68",
+    "finance-release0124-20261025-01-seed.stderr.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "finance-release0124-20261025-01-seed.inspect.json": "DC4170885C75242278ECA0B9D50E34BF188D7C7257A7E189A7885732C3FE930F",
+    "finance-release0124-20261025-01-01-disabled.stdout.log": "B5769D38B88CD2DEDF0C9FD3668BA9BC17B6CC66E13D8743092B152C82805E07",
+    "finance-release0124-20261025-01-01-disabled.stderr.log": "7DBE81F3FA45B20D201427C3154465AAC219A328F2B532346D956D66110A672B",
+    "finance-release0124-20261025-01-01-disabled.inspect.json": "0CB99149E11E2D83265072DE9120C0B0F2FC7BFACC582885338D413C592F90C9",
+    "finance-release0124-20261025-01-check-01-disabled.stdout.log": "AE282538AE68A7065B6956250A7644AAEF83121E8CB5977B1E9B05D81AA8CB25",
+    "finance-release0124-20261025-01-check-01-disabled.stderr.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "finance-release0124-20261025-01-check-01-disabled.inspect.json": "8B466E9846CC3EA2E24C687A63D624AB0FFFF70E25F1492794DD95C313E577D8",
+    "SCENARIOS.json": "248626DA81F715D23CED1BB136DC5BD3FB370FE139A0FDF12E0620C3192EE5EB",
+    "finance-release0124-20261025-01-02-persistence.stdout.log": "B5769D38B88CD2DEDF0C9FD3668BA9BC17B6CC66E13D8743092B152C82805E07",
+    "finance-release0124-20261025-01-02-persistence.stderr.log": "657585132A9A232E495350D1F20FBCD050FC14B9AB932CC88ADCA9C725CAF30E",
+    "finance-release0124-20261025-01-02-persistence.inspect.json": "7C4CEA31BE51CE63B27780BCE73FF067B578A6C2B3CB889EA0B690F5E56E58ED",
+    "finance-release0124-20261025-01-check-02-persistence.stdout.log": "AE282538AE68A7065B6956250A7644AAEF83121E8CB5977B1E9B05D81AA8CB25",
+    "finance-release0124-20261025-01-check-02-persistence.stderr.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "finance-release0124-20261025-01-check-02-persistence.inspect.json": "7C53E526B11EE89A3DC6A9AA4A7EB2C8E873C940E759548AFDBF2D170D311271",
+    "arm64-container.stdout.log": "DBBEE31772B21364A2A32E6CF56FE763F154361DE785B7F6F4D8D309B584529C",
+    "arm64-container.stderr.log": "106F332C6D053D07947ED1589A4259A6DB45DC43D559DD19B30B99C0DD659467",
+    "arm64-container.inspect.json": "17836716BB5A253BB6060802C8F854ECC90DB0E53B921E714CBEA4C45630AD9E",
+    "arm64-r1.json": "076A676837CB254BB5F9BC1F3F7B4BCB8A38E09C68066F78443EA4F2AA644509",
+    "arm64-r1.log": "78EE4649269192924B55D2B9DE4D6F2B1E7503C14A2BDD90B90B91366637AFD3",
+    "INSTALLED_MODULES.json": "1C29361320F4B6F9012463B24955134AF2F55A6D3ACAD9C9EB5299D283BDE7AA",
+    "finance-release0124-20261025-01-03-enabled-int.stdout.log": "B5769D38B88CD2DEDF0C9FD3668BA9BC17B6CC66E13D8743092B152C82805E07",
+    "finance-release0124-20261025-01-03-enabled-int.stderr.log": "EBD1127C4AE417EE7C79720D48350F0F81C43C07135E9B12F0E8AF30A4124302",
+    "finance-release0124-20261025-01-03-enabled-int.inspect.json": "E5D17E6965CA2CD6C725512914A34922CEE21A28CD7836569646C88521175F9F",
+    "finance-release0124-20261025-01-check-03-enabled-int.stdout.log": "057E5EB757B45376706F58CFB268EC5610A754F59AE5E9B842296BFA173C1081",
+    "finance-release0124-20261025-01-check-03-enabled-int.stderr.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "finance-release0124-20261025-01-check-03-enabled-int.inspect.json": "8B7BE4232C7D7483B25230A7E171974F056E4CDCE17A84EDBB14E62F5A18831C",
+    "finance-release0124-20261025-01-04-unavailable.stdout.log": "B5769D38B88CD2DEDF0C9FD3668BA9BC17B6CC66E13D8743092B152C82805E07",
+    "finance-release0124-20261025-01-04-unavailable.stderr.log": "653A4DB02A758B405D40F17E88CE58347E51D17719FF364D0417F29363C2EA96",
+    "finance-release0124-20261025-01-04-unavailable.inspect.json": "D9DE51833730D018A1CD700068EAC9B79B97FE201B355222502937A429B98716",
+    "finance-release0124-20261025-01-check-04-unavailable.stdout.log": "887314D5E4FA5915E6EC9E62F876C42F8B052BE189824C2453102E0CC4E50C7D",
+    "finance-release0124-20261025-01-check-04-unavailable.stderr.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "finance-release0124-20261025-01-check-04-unavailable.inspect.json": "46C075FFF67A020E9D7B32BD2E33C685F558E4BCE1E58C980CD4289535173F57",
+    "TEST_LAYOUT.json": "9C0DA2C03B5F41DB49234D721D814B8AAF4F741A242C7B7199A5584492379471",
+    "finance-release0124-20261025-01-05-missing.stdout.log": "B5769D38B88CD2DEDF0C9FD3668BA9BC17B6CC66E13D8743092B152C82805E07",
+    "finance-release0124-20261025-01-05-missing.stderr.log": "4A156E552E7FC6E1128C383C8445459DB2C042C4AD9E22D405B8845DA0032403",
+    "finance-release0124-20261025-01-05-missing.inspect.json": "88E558458CB4A9F76F42EFA781EB1147B7B0A38F23C96299B44E2B06D76BCB79",
+    "finance-release0124-20261025-01-check-05-missing.stdout.log": "887314D5E4FA5915E6EC9E62F876C42F8B052BE189824C2453102E0CC4E50C7D",
+    "finance-release0124-20261025-01-check-05-missing.stderr.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "finance-release0124-20261025-01-check-05-missing.inspect.json": "FBC139214F6FE82C334E1F65D484B24B9CED0C47EEE7564FA65298875AD6D6FC",
+    "UNIT_CONTAINER-arm64-r2.json": "330480749053551D4FA7BBB717A56BF7EDF829C55D6C17BF3F717BE0587BB8AD",
+    "windows-r2.log": "5087FA3D6180F9F6CA9E5D84A3417B345E4C483F2412EC08AD74E186A33220ED",
+    "mcp.stdout.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "mcp.stderr.log": "19D5E407F990AD0CE03DFDD032228CC48A1D44F3BAD16C4DA24CE47196E90EC3",
+    "ui.stdout.log": "742DF8872CB0E0D820EBFBB8B4E5E3968904CD001D7609E2A0005314E6A0613E",
+    "ui.stderr.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "SUPPLEMENTAL.json": "AB6BA6F1BA197B22CD23FDF17C9C367C3B1117FDBB296461C973F3A09069B6EB",
+    "windows-r2.json": "7A050DCE6AB57D642D58BB1C73E6DC4279F845B56BD54B8559C71E7313577375",
+    "finance-release0124-20261025-01-06-timeouts.stdout.log": "B5769D38B88CD2DEDF0C9FD3668BA9BC17B6CC66E13D8743092B152C82805E07",
+    "finance-release0124-20261025-01-06-timeouts.stderr.log": "E2AB57EF80A15F9AD96A067653031B587201AB6B037150A5E192A9614C178ACC",
+    "finance-release0124-20261025-01-06-timeouts.inspect.json": "31F90E63AF26F362CF1965C85EBEFFBA8382D9C38D166E84D34B45E95595ABC3",
+    "finance-release0124-20261025-01-check-06-timeouts.stdout.log": "887314D5E4FA5915E6EC9E62F876C42F8B052BE189824C2453102E0CC4E50C7D",
+    "finance-release0124-20261025-01-check-06-timeouts.stderr.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "finance-release0124-20261025-01-check-06-timeouts.inspect.json": "25A1F2FBFACB16C40D83940512671F01A1FF19E4E230555305BD59C3B5DD0B88",
+    "finance-release0124-20261025-01-07-invalid.stdout.log": "B5769D38B88CD2DEDF0C9FD3668BA9BC17B6CC66E13D8743092B152C82805E07",
+    "finance-release0124-20261025-01-07-invalid.stderr.log": "8CC7E4A4FFF41E36A18B91AADC524302C39361903C420BE752B757CC11275A5A",
+    "finance-release0124-20261025-01-07-invalid.inspect.json": "94FF95A8E064F6DB2375510728D566EEE62AC400F984C900F8A4EF1671CA5760",
+    "finance-release0124-20261025-01-check-07-invalid.stdout.log": "6A3B753B96F7B523CACA98F02F615CAA80C9BB69DFBD2583089D14C0B4A013DE",
+    "finance-release0124-20261025-01-check-07-invalid.stderr.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "finance-release0124-20261025-01-check-07-invalid.inspect.json": "C42831B525D6FA9F981EF77B122B2073C854C02BAD1B6778F1944B59AF190071",
+    "finance-release0124-20261025-01-08-pending-timeout.stdout.log": "B5769D38B88CD2DEDF0C9FD3668BA9BC17B6CC66E13D8743092B152C82805E07",
+    "finance-release0124-20261025-01-08-pending-timeout.stderr.log": "D972708DA93ECE0008E66DC4B6DA05F04D4C5225FDFC8A31CA622AEEF96DCDAF",
+    "finance-release0124-20261025-01-08-pending-timeout.inspect.json": "78F2F8E5F79E7F6B39C3480D1BC35C7E1DA4A5C728A9DB7065CF73770B913830",
+    "arm64-r2-container.stdout.log": "E1780D97DC1A97C89E16D0563DC3174CC433ED08348A669EEE70ACF6842129E5",
+    "arm64-r2-container.stderr.log": "106F332C6D053D07947ED1589A4259A6DB45DC43D559DD19B30B99C0DD659467",
+    "arm64-r2-container.inspect.json": "D63592ACAADF3B5F93E0E2ABD41907ECCC39D06F2528E28244DC073F92BF038E",
+    "arm64-r2.json": "615F5531E1E27C3402DA74EC4CE8CE295EF449210EE96D2C0063CDF5EF85AB4F",
+    "arm64-r2.log": "4BC409965772054D11679430A4C504BA436FC4AB257331687F638DC26690D750",
+    "finance-release0124-20261025-01-check-08-pending-timeout.stdout.log": "1CC7F7168D1D31D008FB783CA86C16B0AE29E059C7C5EC8E9BA343C7702C160C",
+    "finance-release0124-20261025-01-check-08-pending-timeout.stderr.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "finance-release0124-20261025-01-check-08-pending-timeout.inspect.json": "098F7735D73E9886DFC273ACC8E7F63689DEFA7889CC440B4A21BA5C9DA6E33D",
+    "finance-release0124-20261025-01-09-pending-santander-int.stdout.log": "B5769D38B88CD2DEDF0C9FD3668BA9BC17B6CC66E13D8743092B152C82805E07",
+    "finance-release0124-20261025-01-09-pending-santander-int.stderr.log": "8CE55150C8A0B1C330EBA92C793A762958D83F0A011141EA6438EC0A5C032DC8",
+    "finance-release0124-20261025-01-09-pending-santander-int.inspect.json": "D6377DCA0068C695659BA253CE40D9387D697155CD09B57B271F9F1F639D7FB6",
+    "finance-release0124-20261025-01-check-09-pending-santander-int.stdout.log": "1CC7F7168D1D31D008FB783CA86C16B0AE29E059C7C5EC8E9BA343C7702C160C",
+    "finance-release0124-20261025-01-check-09-pending-santander-int.stderr.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "finance-release0124-20261025-01-check-09-pending-santander-int.inspect.json": "75FE0F9C4C5BE9443DDD49CC7BB851E2C3CE83EBB5C80A9EA4FA5B2F55A410A6",
+    "METADATA_EOL_CORRECTION.json": "76FC98F97ADA05A667FB81B312F71408BFF7FC86DDAAEE7B5AC20F0CA0483061",
+    "finance-release0124-20261025-01-10-cooperative.stdout.log": "B5769D38B88CD2DEDF0C9FD3668BA9BC17B6CC66E13D8743092B152C82805E07",
+    "finance-release0124-20261025-01-10-cooperative.stderr.log": "87B5921ADC8691CDD5D4ECC089EFA41AB55F38B16A23E3E127A0576C07FBB92A",
+    "finance-release0124-20261025-01-10-cooperative.inspect.json": "DD258E56ED3476EACAA884097DD6A84954C0B35AAF0816A6E23D8984F2BFE0A6",
+    "finance-release0124-20261025-01-check-10-cooperative.stdout.log": "1CC7F7168D1D31D008FB783CA86C16B0AE29E059C7C5EC8E9BA343C7702C160C",
+    "finance-release0124-20261025-01-check-10-cooperative.stderr.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "finance-release0124-20261025-01-check-10-cooperative.inspect.json": "78B81AA30548F1118580CF81B5B454396FD24D386B34F9E5BA5BDDFF3D9A360C",
+    "finance-release0124-20261025-01-11-restart.stdout.log": "B5769D38B88CD2DEDF0C9FD3668BA9BC17B6CC66E13D8743092B152C82805E07",
+    "finance-release0124-20261025-01-11-restart.stderr.log": "556BD33C4A2FD8FA38182FA5A7CBB5E9362AB97527A2C65E8FF5B40669CF4604",
+    "finance-release0124-20261025-01-11-restart.inspect.json": "639784BE4AB477EB577F1167900295AD8BD04F678E063E1F8750328E364F76F7",
+    "finance-release0124-20261025-01-check-11-restart.stdout.log": "057E5EB757B45376706F58CFB268EC5610A754F59AE5E9B842296BFA173C1081",
+    "finance-release0124-20261025-01-check-11-restart.stderr.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "finance-release0124-20261025-01-check-11-restart.inspect.json": "AE0178F4A8688BD303C066A526C1ADE2C2FB8EDD1D9AB708AEB4AE6A784D9393",
+    "MANIFEST_MODE_CORRECTION.json": "B69019F50BECA70AD3F35B18611275ED5240BD0917D55AB129B202811314FCE1",
+    "finance-release0124-20261025-01-12-replay.stdout.log": "B5769D38B88CD2DEDF0C9FD3668BA9BC17B6CC66E13D8743092B152C82805E07",
+    "finance-release0124-20261025-01-12-replay.stderr.log": "5B4248F2DAC4E5BB3A34F93753611358A60729E71D908661114C168E1A83B902",
+    "finance-release0124-20261025-01-12-replay.inspect.json": "5340285A5D8F421D7AE357418CE2E33DB74DB77492ECF157BE20452D977CFB92",
+    "finance-release0124-20261025-01-check-12-replay.stdout.log": "057E5EB757B45376706F58CFB268EC5610A754F59AE5E9B842296BFA173C1081",
+    "finance-release0124-20261025-01-check-12-replay.stderr.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "finance-release0124-20261025-01-check-12-replay.inspect.json": "ADDE7452448060AF98AE8106507C4B0B8CF5F4CB870B46738B6F2182111B7F1C",
+    "CLEANUP.json": "1208ECA50D3397E195AD87CE1BFB712248F0FA9DA1AC15100315C7662892CD0A",
+    "supervisor/SOURCES.json": "A7EF6FAD3687EFFBA41F07062F65F7E09B1C85300986223DB20734914720A6AA",
+    "supervisor/TEST_DEPENDENCIES.log": "98292B1FE4BB329AB173C0705DEC707F227FC3A2B57BE7FE7D4202034892291A",
+    "supervisor/TEST_DEPENDENCIES.json": "9476A852DE0E52BF59CAB1C3249B9C64A03D16BCBD0B1760FDAC1AD1F8691717",
+    "supervisor/OPTIONS_CONTRACT.json": "C3A04D737DB56CFCAEDE7E9795F86C46D6DA7A0E94D6238002008207A65E9665"
+  }
+}
