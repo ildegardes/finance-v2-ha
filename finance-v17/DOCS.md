@@ -1,4 +1,4 @@
-# Finance V17 — Open Finance 0.1.24
+# Finance V17 — Open Finance 0.1.25
 
 Schema 10; migrations 001–010 preservadas. Atualizar de 0.1.23 não exige migration nova.
 Python 3.12.7, oauthlib 3.3.1 e Unicode13 versionado. Notices em
@@ -111,3 +111,13 @@ O backup antigo schema 9 não equivale a rollback de uma instalação schema 10.
 Build e testes Docker/ARM64 emulado não são homologação Supervisor/HAOS real.
 Consultar o relatório versionado em docs/open-finance/RELEASE_0.1.24.md para
 evidências, limitações, gates e instruções operacionais propostas.
+
+## Diagnóstico 0.1.25
+
+Esta versão acrescenta somente eventos OPEN_FINANCE_DIAGNOSTIC para localizar
+ACCOUNT_SCOPE_MISMATCH e AUTH_FAILED. Campos fechados identificam etapa, recurso,
+categoria, status HTTP e correlação de execução local; não expõem Item/conta,
+credencial, payload ou dados financeiros. Os códigos públicos e as guardas não mudam.
+Opções, auto-sync, consentimentos e schema 10 continuam como na 0.1.24.
+Não iniciar novas sincronizações para validar este diagnóstico sem autorização.
+Procedimento e rollback: docs/open-finance/RELEASE_0.1.25.md no repositório.

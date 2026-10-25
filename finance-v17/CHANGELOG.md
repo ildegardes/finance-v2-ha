@@ -1,5 +1,12 @@
 # Finance V17
 
+## 0.1.25-open-finance.1
+
+- Add allowlisted Open Finance failure diagnostics for account/Item scope and application/resource authentication, correlated with local runs.
+- Preserve original error codes, API responses, validation guards, provider calls, bank selection, staging and idempotency. No new migration or financial behavior.
+- Never log banking identifiers, credentials, payloads or financial values. Existing configuration and auto-sync preferences are unchanged.
+- Release evidence distinguishes synthetic ARM64/container checks from Supervisor homologation. See docs/open-finance/RELEASE_0.1.25.md for deployment and schema-10 rollback gates.
+
 ## 0.1.24-open-finance.1
 
 - Replace the unsupported-auto-sync startup rejection with isolated cached-coverage workers. Enable the default only for new options; preserve explicit persisted false and document activation after update.

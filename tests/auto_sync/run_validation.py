@@ -12,7 +12,7 @@ import unittest
 
 from support import ROOT, CANDIDATE, FIXTURES, STOCK
 tempfile.tempdir = str(FIXTURES)
-manifest = json.loads((CANDIDATE / 'docs/open-finance/RELEASE_0.1.24_MANIFEST.json').read_text(encoding='utf-8'))
+manifest = json.loads((CANDIDATE / 'docs/open-finance/RELEASE_0.1.25_MANIFEST.json').read_text(encoding='utf-8'))
 def hashes():
     result = {p:sha256((CANDIDATE/p).read_bytes()).hexdigest().upper() for p in manifest['files']}
     assert all(result[p] == meta['sha256'] for p,meta in manifest['files'].items()), 'CANDIDATE_CHANGED'
@@ -22,6 +22,7 @@ suite = unittest.defaultTestLoader.discover(str(ROOT),pattern='test_sqlite_valid
 suite.addTests(unittest.defaultTestLoader.discover(str(ROOT),pattern='test_cancellation.py'))
 suite.addTests(unittest.defaultTestLoader.discover(str(ROOT),pattern='test_release_policy.py'))
 suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(STOCK))
+suite.addTests(unittest.defaultTestLoader.discover(str(ROOT),pattern='test_diagnostics.py'))
 
 class Result(unittest.TextTestResult):
     def __init__(self,*args,**kwargs):

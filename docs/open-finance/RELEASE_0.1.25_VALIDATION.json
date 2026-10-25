@@ -1,0 +1,944 @@
+{
+  "version": "0.1.25-open-finance.1",
+  "base_commit": "0ed53d32e7a7c57f3f37a7fd239d4582854e4032",
+  "ARM64_RELEASE_BUILD": "PASS",
+  "REGRESSION_TESTS": "PASS",
+  "DIAGNOSTIC_SECURITY": "PASS",
+  "FUNCTIONAL_BEHAVIOR_CHANGED": false,
+  "SCHEMA_VERSION": 10,
+  "PROTECTED_HASHES": "PASS",
+  "REAL_BANK_REQUESTS": 0,
+  "REAL_RUNTIME_MUTATED": false,
+  "REMOTE_PUBLICATION": false,
+  "SUPERVISOR_HOMOLOGATION": "NOT_PERFORMED",
+  "windows": {
+    "run": 90,
+    "pass": 90,
+    "fail": 0,
+    "error": 0,
+    "skip": 0,
+    "python": "3.12.14 (main, Aug 25 2026, 14:01:42) [MSC v.1944 64 bit (AMD64)]",
+    "elapsed_seconds": 26.468
+  },
+  "arm64": {
+    "run": 90,
+    "pass": 90,
+    "fail": 0,
+    "error": 0,
+    "skip": 0,
+    "python": "3.12.7 (main, Dec  3 2024, 09:02:00) [GCC 12.2.0]",
+    "machine": "aarch64",
+    "elapsed_seconds": 94.597
+  },
+  "financial": {
+    "run": 45,
+    "pass": 45,
+    "fail": 0,
+    "error": 0,
+    "skip": 0,
+    "elapsed_seconds": 12.656
+  },
+  "financial_external_test_sources_sha256": {
+    "test_domain": "33D71EE7B147DA320B179D531189B694AFA1BC40DBCE8DA41D96108FAFC73EC9",
+    "test_revenues_v17": "5A7BC9D7F37CF8586E88F1897CE5A6A5DADFDFA62351AF4B125A379517FAA810",
+    "test_scheduler": "55999CF767F175412B4272D396EE971736EB999E886004A52622F90DFCE66990",
+    "support": "65F359588327CAD44CA0F645B41924C97897974AD0D09B2E3EED5727C538C447"
+  },
+  "private_test_code_published": false,
+  "mcp": {
+    "run": 6,
+    "pass": 6,
+    "fail": 0,
+    "error": 0,
+    "skip": 0,
+    "exit_code": 0
+  },
+  "individual_regression": [
+    {
+      "test": "test_sqlite_validation.HttpTests.test_real_api_available_while_bank_waits_and_peer_finishes",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.HttpTests.test_real_api_available_with_both_providers_unavailable",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_actual_workers_failure_isolated_and_all_threads_stop",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_auto_disabled_no_ingestion",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_binding_change_rejected_without_replacing_existing_connection",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_cancellation_inside_page_rolls_back_and_releases_lease",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_concurrent_manual_auto_same_bank_rejected_peer_continues",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_each_bank_auth_failure_leaves_peer_successful",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_existing_live_lease_not_stolen",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_malformed_page_rolls_back_both_staging_projections",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_missing_bank_credentials_do_not_prevent_valid_peer",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_partial_collection_fails_without_false_absence_or_peer_loss",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_repeated_automatic_ingestion_no_duplicates_or_promotion",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_restart_after_abrupt_interruption_of_uncommitted_page",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_restart_after_abrupt_interruption_with_committed_pages",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_same_external_ids_are_scoped_by_institution",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_schema10_migration_history_and_reapplication",
+      "result": "PASS"
+    },
+    {
+      "test": "test_sqlite_validation.SQLiteTests.test_timeout_is_recorded_and_retry_is_idempotent",
+      "result": "PASS"
+    },
+    {
+      "test": "test_cancellation.CancellationTests.test_cancellation_during_pagination_itau",
+      "result": "PASS"
+    },
+    {
+      "test": "test_cancellation.CancellationTests.test_cancellation_during_pagination_santander",
+      "result": "PASS"
+    },
+    {
+      "test": "test_cancellation.CancellationTests.test_cancellation_inside_persistence_rolls_back_entire_page",
+      "result": "PASS"
+    },
+    {
+      "test": "test_cancellation.CancellationTests.test_cooperative_transport_cancellation",
+      "result": "PASS"
+    },
+    {
+      "test": "test_cancellation.CancellationTests.test_deadline_bounds_wait_and_prevents_unbounded_retry_threads",
+      "result": "PASS"
+    },
+    {
+      "test": "test_cancellation.CancellationTests.test_interrupt_cannot_be_recorded_without_reason",
+      "result": "PASS"
+    },
+    {
+      "test": "test_cancellation.CancellationTests.test_itau_interrupted_santander_operational",
+      "result": "PASS"
+    },
+    {
+      "test": "test_cancellation.CancellationTests.test_noncooperative_io_detached_not_reported_as_provider_cancelled",
+      "result": "PASS"
+    },
+    {
+      "test": "test_cancellation.CancellationTests.test_old_worker_and_late_transport_cannot_write_over_new_owner",
+      "result": "PASS"
+    },
+    {
+      "test": "test_cancellation.CancellationTests.test_santander_interrupted_itau_operational",
+      "result": "PASS"
+    },
+    {
+      "test": "test_cancellation.CancellationTests.test_storage_refuses_cleanup_deferred_lease_is_expiring_and_recoverable",
+      "result": "PASS"
+    },
+    {
+      "test": "test_cancellation.CancellationTests.test_timeout_error_releases_slot_and_peer_can_collect",
+      "result": "PASS"
+    },
+    {
+      "test": "test_release_policy.ReleasePolicyTests.test_binding_guard_precedes_schedule_optimization",
+      "result": "PASS"
+    },
+    {
+      "test": "test_release_policy.ReleasePolicyTests.test_expired_item_preserves_previously_ingested_products",
+      "result": "PASS"
+    },
+    {
+      "test": "test_release_policy.ReleasePolicyTests.test_failure_backoff_does_not_block_explicit_manual_collection",
+      "result": "PASS"
+    },
+    {
+      "test": "test_release_policy.ReleasePolicyTests.test_historical_invalid_and_valid_consents_select_current_authorization",
+      "result": "PASS"
+    },
+    {
+      "test": "test_release_policy.ReleasePolicyTests.test_interrupted_run_can_resume_without_cooldown",
+      "result": "PASS"
+    },
+    {
+      "test": "test_release_policy.ReleasePolicyTests.test_item_login_user_action_and_unknown_states_are_auditable",
+      "result": "PASS"
+    },
+    {
+      "test": "test_release_policy.ReleasePolicyTests.test_optional_consent_unavailable_does_not_invent_denial_for_other_products",
+      "result": "PASS"
+    },
+    {
+      "test": "test_release_policy.ReleasePolicyTests.test_restart_does_not_repeat_recent_automatic_success",
+      "result": "PASS"
+    },
+    {
+      "test": "test_release_policy.ReleasePolicyTests.test_revoked_consents_are_not_turned_into_empty_snapshots",
+      "result": "PASS"
+    },
+    {
+      "test": "test_release_policy.ReleasePolicyTests.test_schedule_becomes_due_without_changing_product_timeout",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_absence_is_not_asserted_as_deletion",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_all_products_projection_history_and_financial_preservation",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_changed_balance_retains_original_history",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_connection_disabled_binding_and_owner_guards",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_contract_integrity_fails_closed",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_corrupt_transaction_scope_fails_without_official_changes",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_cursor_cycles_and_missing_next_rejected",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_duplicate_and_foreign_item_rejected",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_forbidden_live_endpoints_and_writes_fail_before_network",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_http_auth_owner_and_validation",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_http_manual_sync_and_resource_schema",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_malformed_page_rolls_back_legacy_and_extended_rows_together",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_no_implicit_auth_or_network_on_get",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_paged_collection_complete_and_partial_page_rejected",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_payment_and_loan_details_keep_financial_fields_not_identifiers",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_query_pagination_and_integrity",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_replay_does_not_duplicate_revisions",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_schema8_to10_preservation_reapply_and_rollback",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_unavailable_and_unauthorized_preserve_previous_values",
+      "result": "PASS"
+    },
+    {
+      "test": "stock_coverage.CoverageTests.test_zero_null_absent_and_projection_types",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.OriginTests.test_adversarial_metadata_is_strictly_reallowlisted_at_emit",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.OriginTests.test_auth_coverage_repeated_401_origin",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.OriginTests.test_auth_coverage_required_403_origin",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.OriginTests.test_auth_creation_refusal_origin",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.OriginTests.test_auth_legacy_repeated_401_origin",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.OriginTests.test_auth_legacy_required_403_origin",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.OriginTests.test_bool_status_and_foreign_context_types_cannot_leak",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.OriginTests.test_correlation_consistent_per_run_distinct_between_runs",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.OriginTests.test_non_target_error_not_annotated_or_logged",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.OriginTests.test_optional_403_behavior_and_no_diagnostic_preserved",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.OriginTests.test_path_classifier_never_returns_identifiers_or_query",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.OriginTests.test_scope_account_foreign_item",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.OriginTests.test_scope_account_missing_item",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.OriginTests.test_scope_consent_foreign_item",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.OriginTests.test_scope_consent_missing_item",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.OriginTests.test_scope_consent_null_item",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.OriginTests.test_scope_investment_missing_item",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.OriginTests.test_scope_item_foreign_id",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.OriginTests.test_scope_item_missing_id",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.OriginTests.test_scope_item_null_id",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.OriginTests.test_scope_legacy_account_response",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.OriginTests.test_scope_legacy_transaction_membership",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.OriginTests.test_scope_loan_foreign_item",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.OriginTests.test_scope_second_guard_optional_resource",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.ServiceDiagnosticTests.test_auto_service_emits_once_and_keeps_existing_run_shape",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.ServiceDiagnosticTests.test_concurrent_workers_emit_bank_local_context_and_stop",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.ServiceDiagnosticTests.test_http_response_preserves_error_code_and_excludes_diagnostic",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.ServiceDiagnosticTests.test_legacy_auth_failure_emits_once",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.ServiceDiagnosticTests.test_logging_sink_failure_never_prevents_existing_finalization",
+      "result": "PASS"
+    },
+    {
+      "test": "test_diagnostics.ServiceDiagnosticTests.test_sixth_scope_origin_real_persistence_guard_legacy",
+      "result": "PASS"
+    }
+  ],
+  "individual_financial": [
+    {
+      "test": "tests.test_domain.ConcurrencyTests.test_concurrent_materialization_creates_each_slot_once",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_domain.ConcurrencyTests.test_concurrent_pay_pay_has_one_effect",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_domain.DomainTests.test_automation_primitives_enforce_identity_retry_and_precedence_shapes",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_domain.DomainTests.test_calendar_clamp_due_rule_and_lineage",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_domain.DomainTests.test_cycle_boundary_invoice_snapshot_close_pay_reverse_revision",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_domain.DomainTests.test_expense_status_lifecycle_and_audit_history",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_domain.DomainTests.test_inactive_dependencies_are_rejected_without_rewriting_history",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_domain.DomainTests.test_installments_exact_sum_and_terminal_cancel_remaining",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_domain.DomainTests.test_invoice_financial_commands_are_idempotent",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_domain.DomainTests.test_money_distribution_and_validation",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_domain.DomainTests.test_occurrence_override_is_single_source_and_audited",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_domain.DomainTests.test_payment_is_integral_idempotent_and_blocks_edit_cancel",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_domain.DomainTests.test_recurrence_materialization_all_frequencies_idempotent_and_terminal",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_domain.DomainTests.test_reversal_and_replacement_preserve_history",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_revenues_v17.RevenueDomainTests.test_all_recurrence_frequencies_and_calendar_clamping",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_revenues_v17.RevenueDomainTests.test_each_financial_command_replays_and_rejects_payload_conflict",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_revenues_v17.RevenueDomainTests.test_lifecycle_status_tags_audit_and_reports",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_revenues_v17.RevenueDomainTests.test_permanent_replay_survives_cache_removal_and_failed_effect_rolls_back",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_revenues_v17.RevenueDomainTests.test_recurrence_calendar_tags_replay_and_scheduler",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_revenues_v17.RevenueHttpTests.test_concurrent_equivalent_and_conflicting_requests_have_one_effect",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_revenues_v17.RevenueHttpTests.test_concurrent_receipt_requests_leave_exactly_one_active_receipt",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_revenues_v17.RevenueHttpTests.test_http_crud_replay_conflict_filters_openapi_and_persisted_effect",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_revenues_v17.RevenueHttpTests.test_http_filters_pagination_aggregates_edit_cancel_reverse_and_audit",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_revenues_v17.RevenueHttpTests.test_recurring_http_create_materialize_replay_detail_and_end",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_revenues_v17.RevenueHttpTests.test_ui_bundle_exposes_complete_revenue_flows_without_cent_input",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_scheduler.SchedulerConcurrencyTests.test_T168_two_schedulers_create_one_payment",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_scheduler.SchedulerConcurrencyTests.test_T169_T170_T171_T590_concurrent_manual_config_cancel_are_serializable",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_scheduler.SchedulerTests.test_F4N04_F4N05_paid_on_is_real_execution_date_after_downtime",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_scheduler.SchedulerTests.test_F4N07_new_settlement_successor_has_independent_attempt_group",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_scheduler.SchedulerTests.test_F4N10_F4N16_empty_tick_is_observable_and_clean",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_scheduler.SchedulerTests.test_F4N10_scheduler_loop_waits_configured_interval_before_next_tick",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_scheduler.SchedulerTests.test_F4N11_batch_boundary_is_stable_across_ticks",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_scheduler.SchedulerTests.test_F4N13_manual_partial_reduces_invoice_auto_amount",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_scheduler.SchedulerTests.test_F4N17_scheduler_uses_only_v2_database_configuration",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_scheduler.SchedulerTests.test_T092_F4N01_F4N02_F4N03_startup_catchup_and_year_horizon",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_scheduler.SchedulerTests.test_T157_T159_T160_T161_F4N15_expense_success_identity_actor_and_replay",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_scheduler.SchedulerTests.test_T158_T151_invoice_success_uses_permanent_identity",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_scheduler.SchedulerTests.test_T162_T166_F4N06_F4N09_retry_survives_restart_and_third_is_attention",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_scheduler.SchedulerTests.test_T163_T165_F4N14_inactive_account_attention",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_scheduler.SchedulerTests.test_T164_T172_T514_manual_wins_then_scheduler_skips",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_scheduler.SchedulerTests.test_T167_F4N08_failure_isolated_from_next_obligation",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_scheduler.SchedulerTests.test_T170_T171_selected_candidate_revalidates_account_and_cancellation",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_scheduler.SchedulerTests.test_T173_get_contract_is_covered_without_scheduler_side_effect_hook",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_scheduler.SchedulerTests.test_T391_scheduler_after_reverse_records_one_skipped_and_never_repays",
+      "result": "PASS"
+    },
+    {
+      "test": "tests.test_scheduler.SchedulerTests.test_T588_F4N12_open_overdue_invoice_closes_or_cancels_atomically",
+      "result": "PASS"
+    }
+  ],
+  "image_id": "sha256:9dded9d236c76c5278b0fdff6b247461b7b6310f983e8a8505b01e7c0d00e586",
+  "base_python": "python:3.12.7-slim-bookworm@sha256:60d9996b6a8a3689d36db740b49f4327be3be09a21122bd02fb8895abb38b50d",
+  "build_no_cache": true,
+  "requirements_deploy_sha256": "7A375B056AD7AD462A5CB9C76C73CBDE0BB9AA1D0AF3C22275306DBFDB178DC6",
+  "installed_packages": {
+    "gunicorn": "23.0.0",
+    "tzdata": "2025.2",
+    "oauthlib": "3.3.1",
+    "packaging": "26.3"
+  },
+  "image_file_hashes": {
+    "finance-v17/migrate.sh": "488C3E2915F3AA3E07D3622B1BC5C996296B1BF2ECC265DEF868107879BE90C6",
+    "finance-v17/migrations/001_v16_schema.sql": "4D007847DE4A76B0D190DE065782831E94A1DE698FEEDB8BE0CB14E42DF014B7",
+    "finance-v17/migrations/002_v17_revenues.sql": "E4C8972DBFE6271F0AD02897FFDDF5B1A3544EE5074B7315F390F1E9BD2B70C0",
+    "finance-v17/migrations/003_v17_recurring_revenues.sql": "F5F6D6AABF85F66B1AF2E44436E193404EC2FE6B6078EDB559272AC6166C6FD6",
+    "finance-v17/migrations/004_v17_multimethod_installments.sql": "500B389C804C259E5953B7E4719E07FF543E65D0EDF5D4C8CCB0B908F92620C8",
+    "finance-v17/migrations/005_v17_expense_tombstone.sql": "7D29C5151AD4703001F2C1F76482A48650EFD2D92E8976D7B93C3C54282B2F86",
+    "finance-v17/migrations/006_v17_revenue_recurrence_versions.sql": "E7DAA63B8B8174D416368062832EFC9EF57FBD841958311B3DBD3BC4AC8FC421",
+    "finance-v17/migrations/007_v17_oauth_foundation.sql": "A7D135CFD7DDA6F11A6D5A28317C24D7FB8B7476E73F70D3E0005BACFC5DD924",
+    "finance-v17/migrations/008_v17_oauth_refresh.sql": "3B2D818B0BCEBA9C57CB882E149A546E781DEE7DCB21F6CE0C4E9E006B6B111A",
+    "finance-v17/migrations/009_open_finance_foundation.sql": "F40BF2A455CAA70925C008EBC13CB9C36DBF4FB2CEE7AC309B3015C7F7975E72",
+    "finance-v17/migrations/010_open_finance_coverage.sql": "4608C15B0977C166CDA3EC7112E20D67BDF091706AB2C8AD860930D2B02FEC9E",
+    "finance-v17/requirements-deploy.txt": "7A375B056AD7AD462A5CB9C76C73CBDE0BB9AA1D0AF3C22275306DBFDB178DC6",
+    "finance-v17/run.sh": "7FBDCE1C1A73A97AD757042956512D76BC3FB0DF6BDB023E17CB7F06BEC0B070",
+    "finance-v17/src/finance_v2/__init__.py": "836056C67FA128C1E522FDB9195D55BA777868F2A70BB2279A5B3A59BB299CE3",
+    "finance-v17/src/finance_v2/__main__.py": "E826BF61A5BD24948BADF5FC63E48E9EA442AFF1B59AAC8B2DB98AB986246E0C",
+    "finance-v17/src/finance_v2/api.py": "7BAABF04D08B60D219FDED88B68CEFE3C75C78C7BB763B88FC6CF67A1C452D9A",
+    "finance-v17/src/finance_v2/authorization.py": "ACA9BBCEF76A877FFF384D1D8667CE10136ACDC948F364F5AAB87F56440DF281",
+    "finance-v17/src/finance_v2/config.py": "9A1E326203C57DDD37BE92650DE560BD500E2F110BC8D218FEEBDE57E33564DB",
+    "finance-v17/src/finance_v2/db.py": "CC857220F0BEEE6B325DE7D0D8B2E4DCD41A712589BA0A092F2305F2695CE79B",
+    "finance-v17/src/finance_v2/domain/__init__.py": "7169BA116BD572790380EEB6C760299DE48384F2A8AC0A9793D766C6ADA6947A",
+    "finance-v17/src/finance_v2/domain/auto_debit.py": "B125DBE0E9257742E45C35EC0F78B83BEC339902ACE22911D06219214943B72A",
+    "finance-v17/src/finance_v2/domain/automation.py": "35ED337F5722DA998567384511A9749A65731A7A4081DFF382A24609F64DF92B",
+    "finance-v17/src/finance_v2/domain/calendar.py": "5957DFE49DE2EE7816E7A8E056F577238DF8394A62E07B2572B75E5B3ACE876C",
+    "finance-v17/src/finance_v2/domain/catalog.py": "A2CB5A085AC6C40C98B600CEA658EBA60EB9CF388DBA02A42E7BA63E35BF6475",
+    "finance-v17/src/finance_v2/domain/clock.py": "899CA93E36215E972C9AE69C0F25FE36FAF9C8ACE784F9C993C988AF89CAEF7E",
+    "finance-v17/src/finance_v2/domain/errors.py": "3EEFB0319A087EE6DC704015A414FEF6108F48C5399BB80DF77CA9E3508BEF63",
+    "finance-v17/src/finance_v2/domain/expenses.py": "F7736E1D41F60A87D89A3C13D72DBCF330AE4A0F7C9C38DD67BCD5B83DA5960D",
+    "finance-v17/src/finance_v2/domain/idempotent.py": "1D33612240F097AE4E5D17C753C752539FA312D4D35918228788F12AC510B7CC",
+    "finance-v17/src/finance_v2/domain/installments.py": "0ADB3291DD888A36A7CE4B7E994AA9FE998CE0489340324889A00CC62D0F4629",
+    "finance-v17/src/finance_v2/domain/invoices.py": "1A8E93856E819AFB767B8E78C72B903893B5E0CCFF555383BE97EB974E74EC25",
+    "finance-v17/src/finance_v2/domain/money.py": "FD54361DE33FC7AEC997F96BF710BA3D9FB3E3430DCDE258B226C1518387B20C",
+    "finance-v17/src/finance_v2/domain/recurrence.py": "207353508E083627053909DB27105896A5F0F48A7E391FA0ED0A3920A8B2D997",
+    "finance-v17/src/finance_v2/domain/recurrence_projection.py": "AAC80FE2933274E3DE304BE0B720F73795C7F9D814795E8F4E2E9B1C0D52BF35",
+    "finance-v17/src/finance_v2/domain/reports.py": "356018EC24872B62ED1CA707B14DB62457743F70A9E6F2C61C795CCE035CDDE6",
+    "finance-v17/src/finance_v2/domain/revenue_recurrence.py": "621F5F1C26CE55D6300021D8392A835688F5DCFF76BC229BEBC6DC282FF78D98",
+    "finance-v17/src/finance_v2/domain/revenues.py": "A281B1EC600B3CB72E39452AE121B045841E426C8EF720DF4518558C7787AD0F",
+    "finance-v17/src/finance_v2/domain/support.py": "7E29871207ECAADE1CB9460F95E8C4247CFE07A3D8519A2D14D04CFA1C080BE1",
+    "finance-v17/src/finance_v2/ha_pluggy_options.py": "BC0EA17B452B4804739B2DC2B66FA252DE6CA47C338B530934511E1E7E7EF4FB",
+    "finance-v17/src/finance_v2/http_runtime.py": "389EB8677365EC1656DAAD177DB86855D4644C873EB80B9BF39B93065DC52AA3",
+    "finance-v17/src/finance_v2/idempotency.py": "137FE167853D2F7AA647CC0E9D5D1DB4CC1278F715102D015D962796536F33A2",
+    "finance-v17/src/finance_v2/mcp_recurring.py": "CBC61BBF7A006B68A71146CC032733958DD9868B939768AD67C05A44DEFBE696",
+    "finance-v17/src/finance_v2/migrations.py": "1C55B1376776C7E5DD076EC818EF84D1B1AEE23E1AD9D1967956EAAD28435281",
+    "finance-v17/src/finance_v2/oauth.py": "723578407440DC5A452C42F6263E53ABF79A2E73B45BCC07A8A123002D484BF6",
+    "finance-v17/src/finance_v2/oauth_server.py": "60513B9DACF531AA3117518165B9C6D0DE4D605C6C6E52151B672EC14B518DB1",
+    "finance-v17/src/finance_v2/open_finance.py": "EA455DEBBDB8AC43DF66635539FFCEC6A8C726C50EA496FFD9EA46C6713EC74A",
+    "finance-v17/src/finance_v2/open_finance_auto.py": "C380136C5E1D976C7994D2869FD563CBB809455B9DE32CFCBD47CFC8B7462AC3",
+    "finance-v17/src/finance_v2/open_finance_coverage.py": "D4E4D2496D5C46B0CDC4AC12ADEE22D178702943B4527D748669730C54B572F3",
+    "finance-v17/src/finance_v2/open_finance_diagnostics.py": "8B75668A8BAEB29AF8D62061F4193B4703EEF1342DF7A98DCE97C82E4BC51CFE",
+    "finance-v17/src/finance_v2/open_finance_http.py": "929BBCF802CF7351FEA5BB14046FA597723F74CD8FD946A29E19D84C53031C0C",
+    "finance-v17/src/finance_v2/open_finance_query.py": "F7786A5DAB271C1E2C25E4B14B9D764A7D36B899C8E2D0F79D9A962D5805857A",
+    "finance-v17/src/finance_v2/pluggy_client.py": "78481B69558A8554E3CD992B39FA9096EA369217D7BAFA745F901CBD09223DBC",
+    "finance-v17/src/finance_v2/pluggy_config.py": "A47A76A55A77424179D4F1AF2EA93A39AA6367FFEE63A4E3DF76BF554FD3323C",
+    "finance-v17/src/finance_v2/pluggy_coverage.py": "2A94A93584805E8CE9CAC052741730AB0E47ACCD5A32772E783C742CE4A54A7C",
+    "finance-v17/src/finance_v2/pluggy_coverage_contracts.json": "985404C7EC53EFE9F97DC9A8591C444D974BF14CF414F8BADEE4840E798F6419",
+    "finance-v17/src/finance_v2/PYTHON_REFERENCE_LICENSE.txt": "023163D4252112720E12757861BDD0272105EE1F67ED6A44130E652189A2F7AB",
+    "finance-v17/src/finance_v2/scheduler/__init__.py": "0F6C705603CAB360E2322532134405A1F486A78B90DFD376DA33F5F8419ED54C",
+    "finance-v17/src/finance_v2/scheduler/service.py": "9BBE1117A01E9A53FBB2BDB7691A082F4A1A0C9C6413E26082065D43260150FA",
+    "finance-v17/src/finance_v2/unicode13_f06.py": "6C7EC1703A30FE81A9D577604DFC1B999D9AE48BF78B1318C20DE8E9662CBCD9",
+    "finance-v17/src/finance_v2/unicode13_manifest.json": "9A279ACA79B09F3CE3C49EEA630619BED88115F416F81A97324093B4D856F07A",
+    "finance-v17/src/finance_v2/UNICODE13_NOTICES.md": "86FCFFEA7F6E15385B93E7BB390CD44CD7BB65D05F672C68E8D556EE88679134",
+    "finance-v17/src/finance_v2/unicode13_primitives.json": "DE81088662045384D1F0B07FDF53A40BEE297843782FE80BF1AAEA94383BAAA4",
+    "finance-v17/src/finance_v2/UNICODE_DATA_LICENSE_2020.txt": "0EFACA9742A27A3F5A7F6F2B5C40A1D227295246E2483308BF83E05871FA202A",
+    "finance-v17/src/finance_v2/UNICODE_LICENSE_V3.txt": "E7A93B009565CFCE55919A381437AC4DB883E9DA2126FA28B91D12732BC53D96",
+    "finance-v17/src/finance_v2/web/app.js": "8D64089AD5D4615A448EBADF1275414E49C111CBE0895DDF338DCD65307B831F",
+    "finance-v17/src/finance_v2/web/capabilities.js": "74A7611FECFF5A8CCB55B2A065C162E54BBE5E9BF2CA02FF99E4EF3C100905B6",
+    "finance-v17/src/finance_v2/web/completion.css": "A03B1C7195D7113F2BDF75E453879967CFA5A5183E12055D8C07CD100FCC8B73",
+    "finance-v17/src/finance_v2/web/completion.js": "29F6AFA9D568FF4656E98F857D57001A741E9B2B3DE143B56AE3B1A34957E5BD",
+    "finance-v17/src/finance_v2/web/forms.css": "2802E35BA26FE03463D93FBAD6BCCD9FC9F43C54ED19EE77C5F482E439CEC555",
+    "finance-v17/src/finance_v2/web/icons.js": "6EAB9DA9EB654DBBA8B47564DC963D191340EA4431B716FEE73910002825077E",
+    "finance-v17/src/finance_v2/web/index.html": "5F927A4D101CC95C2BBE08BAB1E6E189990C52982A7714814B0331B8294A8FE3",
+    "finance-v17/src/finance_v2/web/open-finance-coverage.js": "025D40B6246D4FEBDE3C55136F6669F9D0680EA0C73372EC25F5879F5982598F",
+    "finance-v17/src/finance_v2/web/open-finance.css": "F584CEE57B533F14EEDDC65FEA5AC4C71A807A123467333E5F124C2303923283",
+    "finance-v17/src/finance_v2/web/open-finance.js": "8A08B322C8B6CB29D6B6A199A52E20EEE30E42296BB27508E38638CABDFC8E18",
+    "finance-v17/src/finance_v2/web/presentation.js": "BED2EE2C3B3F57FA91A21AEC11BCCCD47D58FA1BD6CC5F996097F0F9FAD9DA2A",
+    "finance-v17/src/finance_v2/web/privacy.css": "315E53E0F4E7DF96D47D94BF15D7645A83023BB7747D3E0444A8B9C00B47ECA1",
+    "finance-v17/src/finance_v2/web/privacy.js": "2D6BFB4F89BFED54F29BD453C1E9FA8C77B6613993788336D1633D54D98F8999",
+    "finance-v17/src/finance_v2/web/revenues.js": "9626603D886EF025CE1BD41791D86066473F447A1F0A97839401DB0C994F040A",
+    "finance-v17/src/finance_v2/web/styles.css": "9CA8179C66C19C1D4044D0644CDC1F9D1E071EA72C01E20B283A1FD8AAA6DD46",
+    "finance-v17/src/finance_v2/web/unlock.html": "B2BE8B6548E357888C13EB4AB7F788EDEE66604798C71D27FB91E0700BBA79A5"
+  },
+  "operational_scenarios": [
+    {
+      "case": "01-disabled",
+      "scenario": "disabled",
+      "signal": "TERM",
+      "exit_code": 0,
+      "shutdown_seconds": 2.0,
+      "forced_kill": false,
+      "result": "PASS",
+      "diagnostics": []
+    },
+    {
+      "case": "02-scope-auth",
+      "scenario": "d02-scope-auth",
+      "signal": "TERM",
+      "exit_code": 0,
+      "shutdown_seconds": 2.312,
+      "forced_kill": false,
+      "result": "PASS",
+      "diagnostics": [
+        {
+          "category": "AUTH_REQUEST_REJECTED",
+          "correlation_id": "ofdiag-ca42fdff79eba2152b6af831",
+          "error_code": "AUTH_FAILED",
+          "event": "OPEN_FINANCE_DIAGNOSTIC",
+          "http_status": 401,
+          "institution": "SANTANDER",
+          "operation": "AUTH_CREATE",
+          "resource": "other",
+          "stage": "TOKEN_ACQUISITION",
+          "version": "D02/1"
+        },
+        {
+          "category": "ITEM_ID_MISSING",
+          "correlation_id": "ofdiag-92516284dd6cee42b90fa111",
+          "error_code": "ACCOUNT_SCOPE_MISMATCH",
+          "event": "OPEN_FINANCE_DIAGNOSTIC",
+          "http_status": null,
+          "institution": "ITAU",
+          "operation": "CONSENTS_LIST",
+          "resource": "consents",
+          "stage": "SCOPE_CHECK",
+          "version": "D02/1"
+        }
+      ]
+    },
+    {
+      "case": "03-item-forbidden",
+      "scenario": "d02-item-forbidden",
+      "signal": "INT",
+      "exit_code": 0,
+      "shutdown_seconds": 2.204,
+      "forced_kill": false,
+      "result": "PASS",
+      "diagnostics": [
+        {
+          "category": "REQUIRED_RESOURCE_403",
+          "correlation_id": "ofdiag-d07ab79c2d89e5c7f4a5d2be",
+          "error_code": "AUTH_FAILED",
+          "event": "OPEN_FINANCE_DIAGNOSTIC",
+          "http_status": 403,
+          "institution": "ITAU",
+          "operation": "ITEM_GET",
+          "resource": "item",
+          "stage": "RESOURCE_QUERY",
+          "version": "D02/1"
+        }
+      ]
+    },
+    {
+      "case": "04-pending",
+      "scenario": "pending-timeout",
+      "signal": "INTERNAL_TERM",
+      "exit_code": 0,
+      "shutdown_seconds": 1.219,
+      "forced_kill": false,
+      "result": "PASS",
+      "diagnostics": []
+    }
+  ],
+  "schema_migrations_unchanged": true,
+  "official_tables_preserved": 36,
+  "integrity": "ok",
+  "foreign_key_violations": 0,
+  "protected_files": {
+    "finance-v17/run.sh": "7FBDCE1C1A73A97AD757042956512D76BC3FB0DF6BDB023E17CB7F06BEC0B070",
+    "finance-v17/src/finance_v2/PYTHON_REFERENCE_LICENSE.txt": "023163D4252112720E12757861BDD0272105EE1F67ED6A44130E652189A2F7AB",
+    "finance-v17/src/finance_v2/UNICODE13_NOTICES.md": "86FCFFEA7F6E15385B93E7BB390CD44CD7BB65D05F672C68E8D556EE88679134",
+    "finance-v17/src/finance_v2/UNICODE_DATA_LICENSE_2020.txt": "0EFACA9742A27A3F5A7F6F2B5C40A1D227295246E2483308BF83E05871FA202A",
+    "finance-v17/src/finance_v2/UNICODE_LICENSE_V3.txt": "E7A93B009565CFCE55919A381437AC4DB883E9DA2126FA28B91D12732BC53D96",
+    "finance-v17/src/finance_v2/unicode13_f06.py": "6C7EC1703A30FE81A9D577604DFC1B999D9AE48BF78B1318C20DE8E9662CBCD9",
+    "finance-v17/src/finance_v2/unicode13_manifest.json": "9A279ACA79B09F3CE3C49EEA630619BED88115F416F81A97324093B4D856F07A",
+    "finance-v17/src/finance_v2/unicode13_primitives.json": "DE81088662045384D1F0B07FDF53A40BEE297843782FE80BF1AAEA94383BAAA4"
+  },
+  "diagnostic_security": {
+    "result": "PASS",
+    "sensitive_data_exposure": "NONE",
+    "events_scanned": 9,
+    "canary_values_checked": 14,
+    "schema_fields": [
+      "category",
+      "correlation_id",
+      "error_code",
+      "event",
+      "http_status",
+      "institution",
+      "operation",
+      "resource",
+      "stage",
+      "version"
+    ],
+    "events": [
+      {
+        "file": "windows-regression.process.stderr.log",
+        "institution": "ITAU",
+        "resource": "other",
+        "stage": "TOKEN_ACQUISITION",
+        "category": "AUTH_REQUEST_REJECTED",
+        "http_status": 401
+      },
+      {
+        "file": "windows-regression.process.stderr.log",
+        "institution": "SANTANDER",
+        "resource": "other",
+        "stage": "TOKEN_ACQUISITION",
+        "category": "AUTH_REQUEST_REJECTED",
+        "http_status": 401
+      },
+      {
+        "file": "windows-regression.process.stderr.log",
+        "institution": "OTHER",
+        "resource": "loans",
+        "stage": "SCOPE_CHECK",
+        "category": "ITEM_ID_DIFFERENT",
+        "http_status": null
+      },
+      {
+        "file": "finance-d03-20261025-01-02-scope-auth.stderr.log",
+        "institution": "SANTANDER",
+        "resource": "other",
+        "stage": "TOKEN_ACQUISITION",
+        "category": "AUTH_REQUEST_REJECTED",
+        "http_status": 401
+      },
+      {
+        "file": "finance-d03-20261025-01-02-scope-auth.stderr.log",
+        "institution": "ITAU",
+        "resource": "consents",
+        "stage": "SCOPE_CHECK",
+        "category": "ITEM_ID_MISSING",
+        "http_status": null
+      },
+      {
+        "file": "arm64.process.stderr.log",
+        "institution": "ITAU",
+        "resource": "other",
+        "stage": "TOKEN_ACQUISITION",
+        "category": "AUTH_REQUEST_REJECTED",
+        "http_status": 401
+      },
+      {
+        "file": "arm64.process.stderr.log",
+        "institution": "SANTANDER",
+        "resource": "other",
+        "stage": "TOKEN_ACQUISITION",
+        "category": "AUTH_REQUEST_REJECTED",
+        "http_status": 401
+      },
+      {
+        "file": "arm64.process.stderr.log",
+        "institution": "OTHER",
+        "resource": "loans",
+        "stage": "SCOPE_CHECK",
+        "category": "ITEM_ID_DIFFERENT",
+        "http_status": null
+      },
+      {
+        "file": "finance-d03-20261025-01-03-item-forbidden.stderr.log",
+        "institution": "ITAU",
+        "resource": "item",
+        "stage": "RESOURCE_QUERY",
+        "category": "REQUIRED_RESOURCE_403",
+        "http_status": 403
+      }
+    ],
+    "additional_in_memory_canary_assertions": true
+  },
+  "owned_stopped_containers_removed": 11,
+  "reference_files_unchanged": 125,
+  "rollback_document": "RELEASE_0.1.25.md",
+  "release_validator": "tests/auto_sync/verify_release_0125.py",
+  "release_gate_note": "Final PASS requires staged-tree validator and the local candidate commit, recorded outside the commit to avoid self-reference.",
+  "limitations": [
+    "No Home Assistant or Supervisor operations, installation or restore test.",
+    "Real Item/consent status and actual causes of Itau/Santander failure remain unverified.",
+    "Windows financial tests use unchanged external private test sources; no private test code is copied into this public candidate.",
+    "Owner must verify a current coordinated schema10 backup and prior image/config availability before a separately authorized deployment."
+  ],
+  "evidence_sha256": {
+    "ARM64_RELEASE_BUILD.log": "5FD5D1DCED85D9C7E3AB067D381CCDD73E7558CAEDB0A79C8F3BBF44916237D3",
+    "ARM64_RELEASE_BUILD.json": "28CD1A2DDE85407CE034373AAC204BF9C42F5277051E6317851723D4FCB8B4B8",
+    "UNIT_CONTAINER.json": "A869D3B11AE714CC811BA327A02D7ACCA37133F33EC6A6DC03293A6F5D2BE632",
+    "OWN_CONTAINERS.json": "878315A64B5595ECAF49A4F8A9825F0D804EE85D527D18EC91C3CD61C8DFC874",
+    "FINANCIAL_REGRESSION.log": "A2E8D3F7DCB74D3BAC5ED4067D7BB1D48ED613C9375134E924928651642ACBDD",
+    "windows-regression.log": "38857277FA99170B685BB649242F08A5DA401B8898DBB073A327B6A7A214D2C1",
+    "finance-d03-20261025-01-verify.stdout.log": "B6BE9C36FBD35765EDFF7C47E5EE8BC26AF3AC26D85B610E5DE85E994E7DA995",
+    "finance-d03-20261025-01-verify.stderr.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "finance-d03-20261025-01-verify.inspect.json": "7E87B238E8738CD9173DDA02D9503C11E46F66C28F6D263CB7DA0B3141BC98A9",
+    "IMAGE_FILES.json": "548BE500B961960925A38FA8A4F311ACF4AA8A2C444B5AEC0C342716EC581E13",
+    "FINANCIAL_REGRESSION.json": "454CF7158261030317803B21671FDC8978DD6F404FB87BAE61DE25A06E22D1E0",
+    "finance-d03-20261025-01-seed.stdout.log": "4240BAC66324EA5FEB0AE9D64A697CDAE80B86E366F4F7BC2FBEB8E31594EC68",
+    "finance-d03-20261025-01-seed.stderr.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "finance-d03-20261025-01-seed.inspect.json": "8F2A26D0DCCA4F9D79B2FA628BAF425CD52633CA0D3743416A2E09D34C1B0697",
+    "windows-regression.json": "B6265B334CC513D326CB087134F3868E74260E5465D40951D2A6C75FACF1CCCA",
+    "windows-regression.process.stdout.log": "98634507DC28DFE3CCF98D545B3880EDD1A4A20F27D2E5C9D2904C20AB36DDB7",
+    "windows-regression.process.stderr.log": "52C8862380F449D48DA6488E477137D25EEB80CA6F49E5C174C6CFE9BB935C64",
+    "finance-d03-20261025-01-01-disabled.stdout.log": "B5769D38B88CD2DEDF0C9FD3668BA9BC17B6CC66E13D8743092B152C82805E07",
+    "finance-d03-20261025-01-01-disabled.stderr.log": "58AC80D6141847C9B993071C346ADED4368B62D36B71B614A72F6960F766EC34",
+    "finance-d03-20261025-01-01-disabled.inspect.json": "B421483CD5752A84F22AEDBA3527FF7F3B626FD498F9A457B86B02F8A8CD2B9D",
+    "finance-d03-20261025-01-check-01-disabled.stdout.log": "AE282538AE68A7065B6956250A7644AAEF83121E8CB5977B1E9B05D81AA8CB25",
+    "finance-d03-20261025-01-check-01-disabled.stderr.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "finance-d03-20261025-01-check-01-disabled.inspect.json": "AA444A61B5B6CB6AE547BAFFFA3ECFC7F2F5524294993B982C050C5754506514",
+    "SCENARIOS.json": "B28C13EAAB67AC74AAC1E1C3159BD454D2F30877F4D8779AA72D32CB6E2D4E08",
+    "finance-d03-20261025-01-02-scope-auth.stdout.log": "B5769D38B88CD2DEDF0C9FD3668BA9BC17B6CC66E13D8743092B152C82805E07",
+    "finance-d03-20261025-01-02-scope-auth.stderr.log": "241D64DB4D0E2B6D660D9C49727816D7FB4FCEDF767AE367F429FE4596577C81",
+    "finance-d03-20261025-01-02-scope-auth.inspect.json": "34772270235148D3D2643B35F7EAB6A0D0E8A13FD244F4859C2A172F4F87B4AC",
+    "finance-d03-20261025-01-check-02-scope-auth.stdout.log": "64FC578C253A4A3258469FDB34FE177AEFE6B2F78FD8CD0824656B977E3BD5E2",
+    "finance-d03-20261025-01-check-02-scope-auth.stderr.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "finance-d03-20261025-01-check-02-scope-auth.inspect.json": "AF252DEB36E882814239FCF6BB8FF399C79101DFA2A06D114E4D1C3B3AFE20C9",
+    "arm64.process.stdout.log": "2CE35265336C60F8867D479297AD20E90FAA3302970E9EF8D4AEFD4A6CE150C4",
+    "arm64.process.stderr.log": "F351CD47997B4EBEE792AEFF1A3DE92B96C8F22CD4205E82EB3138D6DFC3C3F0",
+    "arm64.inspect.json": "AAE38DD62C0C89B276280B977D53D051C18F1FBFE278DBABA4337931DF4BB74E",
+    "arm64-regression.json": "D5586093050C7706A0A43D60B73DADE1416A6E59343CCB3A9263A022B62F7F53",
+    "arm64-regression.log": "6C50AC9CF6D992E47CC0F2751264A584EF3696BF693D3D48D692B89A195B8878",
+    "IMAGE_MODULES.json": "355FF4197094AFD43C9F89DD58872058D468DDDCF59256015EEC3C4358F6CF71",
+    "finance-d03-20261025-01-03-item-forbidden.stdout.log": "B5769D38B88CD2DEDF0C9FD3668BA9BC17B6CC66E13D8743092B152C82805E07",
+    "finance-d03-20261025-01-03-item-forbidden.stderr.log": "51D098A73AB74904E7981B06FBA0B1768B3B6782B1F61D238377C39A250936A6",
+    "finance-d03-20261025-01-03-item-forbidden.inspect.json": "4DEA14924802DE962248342AFDA7335974971F01E5DEEFA2C9AE76F41D7102F1",
+    "finance-d03-20261025-01-check-03-item-forbidden.stdout.log": "887314D5E4FA5915E6EC9E62F876C42F8B052BE189824C2453102E0CC4E50C7D",
+    "finance-d03-20261025-01-check-03-item-forbidden.stderr.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "finance-d03-20261025-01-check-03-item-forbidden.inspect.json": "4FE6C822E2F25B73EBFE2C1A2A84EA6E1E631F61FDD6A502DD2E309B35F14DAA",
+    "finance-d03-20261025-01-04-pending.stdout.log": "B5769D38B88CD2DEDF0C9FD3668BA9BC17B6CC66E13D8743092B152C82805E07",
+    "finance-d03-20261025-01-04-pending.stderr.log": "A6B2246BBCD4B6B712DACA8DB0EA307A4971375CAEA838E9FDE85F89ED6F2C24",
+    "finance-d03-20261025-01-04-pending.inspect.json": "DDCE3A7C1072A60401E5FBE2FBF036AA7ACD8006475A9DE8D57AD85DA47A7E7F",
+    "finance-d03-20261025-01-check-04-pending.stdout.log": "1CC7F7168D1D31D008FB783CA86C16B0AE29E059C7C5EC8E9BA343C7702C160C",
+    "finance-d03-20261025-01-check-04-pending.stderr.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "finance-d03-20261025-01-check-04-pending.inspect.json": "9A9243B0DC9FF5C4E066A24E85FA2AF91BD3217B79F9B39BB203E2AEF82BA94B",
+    "MCP.stdout.log": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "MCP.stderr.log": "398D142CEA04E0A53777051E53EA9E95898A95D0E6EB965FBB4147F251EC6E64",
+    "MCP.json": "A47679A4108367F61404CA1E8B57EAB97FD6C8A87A8A169B7EC5AEB59AE201C7",
+    "DIAGNOSTIC_SECURITY.json": "AD7F307B54CEF607E8E424854391C16DFB48BB4080CF413A69E6E54591F7709D",
+    "CLEANUP.json": "C3AF33D745CF9C8CBECC75E977E6B79AD86BACE595B78E5D30D04A6D3297750A"
+  }
+}

@@ -7,6 +7,8 @@ from pathlib import Path
 import re
 from urllib.parse import urlencode
 
+from .open_finance_diagnostics import annotate, describe_resource, scope_category
+
 
 RESOURCES = ('item', 'resources', 'consents', 'accounts', 'transactions', 'investments',
              'investment_transactions', 'loans', 'bills', 'statements')
@@ -123,7 +125,7 @@ def collection_pages(client):
 
     item, state = get('/items/' + item_id)
     if item.get('id') != item_id:
-        raise PluggyError('ACCOUNT_SCOPE_MISMATCH')
+        raise annotate(PluggyError('ACCOUNT_SCOPE_MISMATCH'), resource='item', operation='ITEM_GET', stage='SCOPE_CHECK', category=scope_category(item, 'id'))
     yield {'resource': 'item', 'parent': '', 'rows': [item], 'state': 'AVAILABLE', 'last': True}
     # Preserve technical metadata before refusing an expired/disconnected Item.
     # Never replace previously ingested products with misleading empty snapshots.
@@ -161,9 +163,9 @@ def collection_pages(client):
             rows = client._rows(data)
             for row in rows:
                 if resource in ('accounts','investments','loans','consents') and row.get('itemId') != item_id:
-                    raise PluggyError('ACCOUNT_SCOPE_MISMATCH')
+                    raise annotate(PluggyError('ACCOUNT_SCOPE_MISMATCH'), stage='SCOPE_CHECK', category=scope_category(row), **describe_resource(resource))
                 if 'itemId' in row and row['itemId'] != item_id:
-                    raise PluggyError('ACCOUNT_SCOPE_MISMATCH')
+                    raise annotate(PluggyError('ACCOUNT_SCOPE_MISMATCH'), stage='SCOPE_CHECK', category=scope_category(row), **describe_resource(resource))
                 if resource == 'transactions' and row.get('accountId') != parent:
                     raise PluggyError('TRANSACTION_SCOPE_MISMATCH')
                 identity = _identifier(row.get('resourceId') if resource == 'resources' else row.get('id'))

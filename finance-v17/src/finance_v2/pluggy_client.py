@@ -13,6 +13,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 from .pluggy_config import PluggyConnection
 from .pluggy_coverage import cached_path, collection_pages
+from .open_finance_diagnostics import annotate, describe_path, scope_category
 
 
 class PluggyError(Exception):
@@ -157,11 +158,11 @@ class PluggyClient:
                 self._key, self._expires = None, 0
                 if attempt == 0:
                     continue
-                raise PluggyError('AUTH_FAILED')
+                raise annotate(PluggyError('AUTH_FAILED'), stage='RESOURCE_QUERY', category='REPEATED_401', http_status=status, **describe_path(path))
             if optional and status in (403, 404):
                 return {}, 'NOT_AUTHORIZED' if status == 403 else 'NOT_AVAILABLE'
             if status != 200 or not isinstance(data, dict):
-                raise PluggyError('AUTH_FAILED' if status == 403 else 'PROVIDER_HTTP_ERROR')
+                raise annotate(PluggyError('AUTH_FAILED' if status == 403 else 'PROVIDER_HTTP_ERROR'), stage='RESOURCE_QUERY', category='REQUIRED_RESOURCE_403', http_status=status, **describe_path(path))
             return data, 'AVAILABLE'
 
     def coverage_pages(self):
@@ -209,7 +210,7 @@ class PluggyClient:
             body = json.dumps({'clientId':self.connection.client_id,
                                'clientSecret':self.connection.client_secret}).encode()
             status, data = self._bounded_send('POST','/auth',{'Content-Type':'application/json'},body)
-            if status != 200: raise PluggyError('AUTH_FAILED')
+            if status != 200: raise annotate(PluggyError('AUTH_FAILED'), stage='TOKEN_ACQUISITION', operation='AUTH_CREATE', category='AUTH_REQUEST_REJECTED', http_status=status)
             key = data.get('apiKey') if isinstance(data,dict) else None
             if not isinstance(key,str) or not 1 <= len(key) <= 4096 or not all(33 <= ord(c) <= 126 for c in key):
                 raise PluggyError('INVALID_AUTH_RESPONSE')
@@ -224,9 +225,9 @@ class PluggyClient:
                 with self._lock:
                     if self._key == key: self._key, self._expires = None, 0
                 if renewal == 0: continue
-                raise PluggyError('AUTH_FAILED')
+                raise annotate(PluggyError('AUTH_FAILED'), stage='RESOURCE_QUERY', category='REPEATED_401', http_status=status, **describe_path(path))
             if status != 200:
-                raise PluggyError('AUTH_FAILED' if status == 403 else 'PROVIDER_HTTP_ERROR')
+                raise annotate(PluggyError('AUTH_FAILED' if status == 403 else 'PROVIDER_HTTP_ERROR'), stage='RESOURCE_QUERY', category='REQUIRED_RESOURCE_403', http_status=status, **describe_path(path))
             if not isinstance(data,dict): raise PluggyError('INVALID_RESPONSE')
             return data
 
@@ -249,7 +250,7 @@ class PluggyClient:
         result=[]; ids=set()
         for row in rows:
             identifier = _identifier(row.get('id'))
-            if row.get('itemId') != self.connection.item_id: raise PluggyError('ACCOUNT_SCOPE_MISMATCH')
+            if row.get('itemId') != self.connection.item_id: raise annotate(PluggyError('ACCOUNT_SCOPE_MISMATCH'), resource='accounts', operation='ACCOUNTS_LIST', stage='SCOPE_CHECK', category=scope_category(row))
             if identifier in ids: raise PluggyError('DUPLICATE_ACCOUNT')
             ids.add(identifier)
             result.append(ExternalAccount(self.connection.id,identifier,_text(row.get('name')),
@@ -302,7 +303,7 @@ class PluggyClient:
         start,end=_period(date_from),_period(date_to)
         if start and end and start>end: raise PluggyError('INVALID_PERIOD')
         if self._account_ids is None: self.accounts()
-        if account_id not in self._account_ids: raise PluggyError('ACCOUNT_SCOPE_MISMATCH')
+        if account_id not in self._account_ids: raise annotate(PluggyError('ACCOUNT_SCOPE_MISMATCH'), resource='transactions', operation='TRANSACTION_ACCOUNT_SCOPE', stage='SCOPE_CHECK', category='ACCOUNT_MEMBERSHIP_MISS')
         scope={'accountId':account_id}
         if start: scope['dateFrom']=start
         if end: scope['dateTo']=end
