@@ -1,5 +1,6 @@
 """Explicit cached GET contracts. Never contacts institutions or changes consent."""
 from decimal import Decimal
+from datetime import datetime, timezone
 from hashlib import sha256
 import json
 from pathlib import Path
@@ -93,6 +94,18 @@ def project(resource, row):
     return payload, encoded, sha256(encoded.encode()).hexdigest(), omitted
 
 
+def _expired(value):
+    from .pluggy_client import PluggyError
+    if value is None:
+        return False  # Provider contract: null can mean no expiry; not proof of consent.
+    try:
+        instant=datetime.fromisoformat(value.replace('Z','+00:00'))
+        if instant.tzinfo is None:raise ValueError()
+        return instant <= datetime.now(timezone.utc)
+    except (AttributeError,TypeError,ValueError):
+        raise PluggyError('INVALID_RESPONSE') from None
+
+
 def collection_pages(client):
     """Configured Item only, bounded pages. Complete snapshots; no misleading createdAt-only delta."""
     from .pluggy_client import PluggyError, _identifier
@@ -112,6 +125,16 @@ def collection_pages(client):
     if item.get('id') != item_id:
         raise PluggyError('ACCOUNT_SCOPE_MISMATCH')
     yield {'resource': 'item', 'parent': '', 'rows': [item], 'state': 'AVAILABLE', 'last': True}
+    # Preserve technical metadata before refusing an expired/disconnected Item.
+    # Never replace previously ingested products with misleading empty snapshots.
+    if _expired(item.get('consentExpiresAt')):
+        raise PluggyError('CONSENT_EXPIRED')
+    unavailable={'LOGIN_ERROR':'ITEM_REAUTH_REQUIRED','WAITING_USER_INPUT':'ITEM_USER_ACTION_REQUIRED',
+        'UPDATING':'ITEM_UPDATING'}
+    if item.get('status') in unavailable:
+        raise PluggyError(unavailable[item['status']])
+    if item.get('status') not in ('UPDATED','OUTDATED'):
+        raise PluggyError('ITEM_STATUS_UNKNOWN')
 
     def pages(resource, parent, path, query, optional=True):
         spec = CONTRACT['resources'][resource]
@@ -181,8 +204,13 @@ def collection_pages(client):
         raise PluggyError('PAGE_LIMIT')
 
     for resource in ('resources', 'consents'):
-        yield from pages(resource, '', '/items/' + item_id + '/resources' if resource == 'resources' else '/consents',
-                         {} if resource == 'resources' else {'itemId': item_id})
+        consents=[]
+        for batch in pages(resource, '', '/items/' + item_id + '/resources' if resource == 'resources' else '/consents',
+                         {} if resource == 'resources' else {'itemId': item_id}):
+            if resource=='consents' and batch['state']=='AVAILABLE':consents.extend(batch['rows'])
+            yield batch
+        if consents and all(row.get('revokedAt') is not None or _expired(row.get('expiresAt')) for row in consents):
+            raise PluggyError('CONSENT_NOT_ACTIVE')
     accounts = []
     for batch in pages('accounts', '', '/accounts', {'itemId': item_id}, False):
         accounts.extend(batch['rows'])

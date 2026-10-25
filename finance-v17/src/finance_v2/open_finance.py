@@ -1,6 +1,8 @@
 """Manual staging synchronization. Only migration-009 tables may be written."""
 from hashlib import sha256
 from contextlib import nullcontext
+from datetime import datetime
+from math import ceil
 import json
 import re
 import sqlite3
@@ -54,7 +56,7 @@ class OpenFinanceService:
     def _binding(config):
         return sha256(json.dumps([config.client_id,config.item_id],separators=(',',':')).encode()).hexdigest()
 
-    def _claim(self,c,config,actor,start,end):
+    def _claim(self,c,config,actor,start,end,*,minimum_interval=0):
         epoch,stamp=self._time();token=uuid.uuid4().hex;run_id=uuid.uuid4().hex
         binding=self._binding(config)
         with immediate_transaction(c):
@@ -64,6 +66,15 @@ class OpenFinanceService:
                 if row['lease_until']>epoch:raise SyncError('SYNC_BUSY')
                 c.execute("UPDATE of_sync_runs SET state='INTERRUPTED',finished_at=?,error_code='LEASE_EXPIRED' "
                           "WHERE connection_id=? AND state='RUNNING'",(stamp,config.id))
+            if minimum_interval and actor == 'AUTO:coverage':
+                previous=c.execute("SELECT state,finished_at FROM of_sync_runs WHERE connection_id=? AND actor='AUTO:coverage' ORDER BY rowid DESC LIMIT 1",(config.id,)).fetchone()
+                if previous and previous['finished_at'] and previous['state'] in ('SUCCEEDED','FAILED'):
+                    elapsed=epoch-datetime.fromisoformat(previous['finished_at'].replace('Z','+00:00')).timestamp()
+                    interval=minimum_interval if previous['state']=='SUCCEEDED' else min(300,minimum_interval)
+                    if 0 <= elapsed < interval:
+                        error=SyncError('AUTO_SYNC_RECENT' if previous['state']=='SUCCEEDED' else 'AUTO_SYNC_BACKOFF')
+                        error.retry_after=max(1,ceil(interval-elapsed))
+                        raise error
             if row:
                 c.execute("UPDATE of_connections SET institution=?,enabled=1,sync_state='RUNNING',"
                           'lease_token=?,lease_until=?,updated_at=? WHERE id=?',
@@ -152,13 +163,14 @@ class OpenFinanceService:
             c.execute('UPDATE of_sync_runs SET inserted_count=inserted_count+?,updated_count=updated_count+?,page_count=page_count+1 WHERE id=?',
                       (inserted,updated,run_id))
 
-    def _finish(self,c,config,run_id,token,error=None):
+    def _finish(self,c,config,run_id,token,error=None,*,interrupted=False):
+        if interrupted and error is None:raise ValueError('INTERRUPTION_REASON_REQUIRED')
         epoch,stamp=self._time()
         with immediate_transaction(c):
             row=c.execute('SELECT lease_token,lease_until FROM of_connections WHERE id=?',(config.id,)).fetchone()
             if row and row['lease_token']==token:
                 if row['lease_until']<=epoch:error='LEASE_LOST'
-                state='FAILED' if error else 'SUCCEEDED'
+                state='INTERRUPTED' if interrupted else 'FAILED' if error else 'SUCCEEDED'
                 c.execute('UPDATE of_sync_runs SET state=?,finished_at=?,error_code=? WHERE id=? AND state=\'RUNNING\'',
                           (state,stamp,error,run_id))
                 c.execute('UPDATE of_connections SET sync_state=?,lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?',

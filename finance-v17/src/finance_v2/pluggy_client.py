@@ -23,7 +23,10 @@ class PluggyError(Exception):
                    'CONNECTION_DISABLED','AUTH_FAILED','INVALID_AUTH_RESPONSE',
                    'UNSUPPORTED_ACCOUNT_PAGINATION','ACCOUNT_SCOPE_MISMATCH','DUPLICATE_ACCOUNT',
                    'TRANSACTION_SCOPE_MISMATCH','INVALID_CURSOR','CURSOR_SCOPE_MISMATCH',
-                   'CURSOR_CYCLE','PAGE_LIMIT','PROVIDER_HTTP_ERROR'}
+                   'CURSOR_CYCLE','PAGE_LIMIT','PROVIDER_HTTP_ERROR',
+                   'AUTO_SYNC_CANCELLED','AUTO_SYNC_DEADLINE','AUTO_SYNC_IO_BUSY',
+                   'CONSENT_EXPIRED','CONSENT_NOT_ACTIVE','ITEM_REAUTH_REQUIRED',
+                   'ITEM_USER_ACTION_REQUIRED','ITEM_UPDATING','ITEM_STATUS_UNKNOWN'}
         self.code = code if isinstance(code,str) and code in allowed else 'TRANSPORT_FAILURE'
         super().__init__(self.code)
 

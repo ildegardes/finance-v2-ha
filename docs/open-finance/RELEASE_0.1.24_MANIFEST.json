@@ -1,0 +1,354 @@
+{
+  "contract": "FINANCE-0.1.24-PUBLICATION/1",
+  "version": "0.1.24-open-finance.1",
+  "schema": 10,
+  "base_commit": "7bec77f6dcff63f9a66f3c408d19c887febff690",
+  "new_migrations": [],
+  "protected_files": {
+    "finance-v17/run.sh": "7FBDCE1C1A73A97AD757042956512D76BC3FB0DF6BDB023E17CB7F06BEC0B070",
+    "finance-v17/src/finance_v2/PYTHON_REFERENCE_LICENSE.txt": "023163D4252112720E12757861BDD0272105EE1F67ED6A44130E652189A2F7AB",
+    "finance-v17/src/finance_v2/UNICODE13_NOTICES.md": "86FCFFEA7F6E15385B93E7BB390CD44CD7BB65D05F672C68E8D556EE88679134",
+    "finance-v17/src/finance_v2/UNICODE_DATA_LICENSE_2020.txt": "0EFACA9742A27A3F5A7F6F2B5C40A1D227295246E2483308BF83E05871FA202A",
+    "finance-v17/src/finance_v2/UNICODE_LICENSE_V3.txt": "E7A93B009565CFCE55919A381437AC4DB883E9DA2126FA28B91D12732BC53D96",
+    "finance-v17/src/finance_v2/unicode13_f06.py": "6C7EC1703A30FE81A9D577604DFC1B999D9AE48BF78B1318C20DE8E9662CBCD9",
+    "finance-v17/src/finance_v2/unicode13_manifest.json": "9A279ACA79B09F3CE3C49EEA630619BED88115F416F81A97324093B4D856F07A",
+    "finance-v17/src/finance_v2/unicode13_primitives.json": "DE81088662045384D1F0B07FDF53A40BEE297843782FE80BF1AAEA94383BAAA4"
+  },
+  "files": {
+    "finance-v17/.dockerignore": {
+      "sha256": "E9904728DA8956404E355E80B261B2B5BC2B584737907D94A3DEA72E595ECBD0",
+      "git_mode": "100644"
+    },
+    "finance-v17/CHANGELOG.md": {
+      "sha256": "76C8236F3AF23529A62B0FA01894365C0D60BF5C22468DC22AAB8DCC694E44CD",
+      "git_mode": "100644"
+    },
+    "finance-v17/config.yaml": {
+      "sha256": "C29E53EB33D58EE8C1818E2C2043DA421D9C819F87378B8D50EB38C5D93D91A2",
+      "git_mode": "100644"
+    },
+    "finance-v17/Dockerfile": {
+      "sha256": "98F9E1AF0DEAF640B577F9285DA4F5FF35C91928A99C81AEB3D37F062B98E5C1",
+      "git_mode": "100644"
+    },
+    "finance-v17/DOCS.md": {
+      "sha256": "200F674036E7DD1224DAB15AD0A38FB2AA6BA558E803ED5171AAD6DF8B356E6D",
+      "git_mode": "100644"
+    },
+    "finance-v17/migrate.sh": {
+      "sha256": "488C3E2915F3AA3E07D3622B1BC5C996296B1BF2ECC265DEF868107879BE90C6",
+      "git_mode": "100644"
+    },
+    "finance-v17/migrations/001_v16_schema.sql": {
+      "sha256": "4D007847DE4A76B0D190DE065782831E94A1DE698FEEDB8BE0CB14E42DF014B7",
+      "git_mode": "100644"
+    },
+    "finance-v17/migrations/002_v17_revenues.sql": {
+      "sha256": "E4C8972DBFE6271F0AD02897FFDDF5B1A3544EE5074B7315F390F1E9BD2B70C0",
+      "git_mode": "100644"
+    },
+    "finance-v17/migrations/003_v17_recurring_revenues.sql": {
+      "sha256": "F5F6D6AABF85F66B1AF2E44436E193404EC2FE6B6078EDB559272AC6166C6FD6",
+      "git_mode": "100644"
+    },
+    "finance-v17/migrations/004_v17_multimethod_installments.sql": {
+      "sha256": "500B389C804C259E5953B7E4719E07FF543E65D0EDF5D4C8CCB0B908F92620C8",
+      "git_mode": "100644"
+    },
+    "finance-v17/migrations/005_v17_expense_tombstone.sql": {
+      "sha256": "7D29C5151AD4703001F2C1F76482A48650EFD2D92E8976D7B93C3C54282B2F86",
+      "git_mode": "100644"
+    },
+    "finance-v17/migrations/006_v17_revenue_recurrence_versions.sql": {
+      "sha256": "E7DAA63B8B8174D416368062832EFC9EF57FBD841958311B3DBD3BC4AC8FC421",
+      "git_mode": "100644"
+    },
+    "finance-v17/migrations/007_v17_oauth_foundation.sql": {
+      "sha256": "A7D135CFD7DDA6F11A6D5A28317C24D7FB8B7476E73F70D3E0005BACFC5DD924",
+      "git_mode": "100644"
+    },
+    "finance-v17/migrations/008_v17_oauth_refresh.sql": {
+      "sha256": "3B2D818B0BCEBA9C57CB882E149A546E781DEE7DCB21F6CE0C4E9E006B6B111A",
+      "git_mode": "100644"
+    },
+    "finance-v17/migrations/009_open_finance_foundation.sql": {
+      "sha256": "F40BF2A455CAA70925C008EBC13CB9C36DBF4FB2CEE7AC309B3015C7F7975E72",
+      "git_mode": "100644"
+    },
+    "finance-v17/migrations/010_open_finance_coverage.sql": {
+      "sha256": "4608C15B0977C166CDA3EC7112E20D67BDF091706AB2C8AD860930D2B02FEC9E",
+      "git_mode": "100644"
+    },
+    "finance-v17/requirements-deploy.txt": {
+      "sha256": "7A375B056AD7AD462A5CB9C76C73CBDE0BB9AA1D0AF3C22275306DBFDB178DC6",
+      "git_mode": "100644"
+    },
+    "finance-v17/run.sh": {
+      "sha256": "7FBDCE1C1A73A97AD757042956512D76BC3FB0DF6BDB023E17CB7F06BEC0B070",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/__init__.py": {
+      "sha256": "669F2366DC76BB78FBB885F3624D2B99BF95FD99F6B56E19F3847E0202D5EC22",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/__main__.py": {
+      "sha256": "E826BF61A5BD24948BADF5FC63E48E9EA442AFF1B59AAC8B2DB98AB986246E0C",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/api.py": {
+      "sha256": "7BAABF04D08B60D219FDED88B68CEFE3C75C78C7BB763B88FC6CF67A1C452D9A",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/authorization.py": {
+      "sha256": "ACA9BBCEF76A877FFF384D1D8667CE10136ACDC948F364F5AAB87F56440DF281",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/config.py": {
+      "sha256": "9A1E326203C57DDD37BE92650DE560BD500E2F110BC8D218FEEBDE57E33564DB",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/db.py": {
+      "sha256": "CC857220F0BEEE6B325DE7D0D8B2E4DCD41A712589BA0A092F2305F2695CE79B",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/domain/__init__.py": {
+      "sha256": "7169BA116BD572790380EEB6C760299DE48384F2A8AC0A9793D766C6ADA6947A",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/domain/auto_debit.py": {
+      "sha256": "B125DBE0E9257742E45C35EC0F78B83BEC339902ACE22911D06219214943B72A",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/domain/automation.py": {
+      "sha256": "35ED337F5722DA998567384511A9749A65731A7A4081DFF382A24609F64DF92B",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/domain/calendar.py": {
+      "sha256": "5957DFE49DE2EE7816E7A8E056F577238DF8394A62E07B2572B75E5B3ACE876C",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/domain/catalog.py": {
+      "sha256": "A2CB5A085AC6C40C98B600CEA658EBA60EB9CF388DBA02A42E7BA63E35BF6475",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/domain/clock.py": {
+      "sha256": "899CA93E36215E972C9AE69C0F25FE36FAF9C8ACE784F9C993C988AF89CAEF7E",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/domain/errors.py": {
+      "sha256": "3EEFB0319A087EE6DC704015A414FEF6108F48C5399BB80DF77CA9E3508BEF63",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/domain/expenses.py": {
+      "sha256": "F7736E1D41F60A87D89A3C13D72DBCF330AE4A0F7C9C38DD67BCD5B83DA5960D",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/domain/idempotent.py": {
+      "sha256": "1D33612240F097AE4E5D17C753C752539FA312D4D35918228788F12AC510B7CC",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/domain/installments.py": {
+      "sha256": "0ADB3291DD888A36A7CE4B7E994AA9FE998CE0489340324889A00CC62D0F4629",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/domain/invoices.py": {
+      "sha256": "1A8E93856E819AFB767B8E78C72B903893B5E0CCFF555383BE97EB974E74EC25",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/domain/money.py": {
+      "sha256": "FD54361DE33FC7AEC997F96BF710BA3D9FB3E3430DCDE258B226C1518387B20C",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/domain/recurrence.py": {
+      "sha256": "207353508E083627053909DB27105896A5F0F48A7E391FA0ED0A3920A8B2D997",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/domain/recurrence_projection.py": {
+      "sha256": "AAC80FE2933274E3DE304BE0B720F73795C7F9D814795E8F4E2E9B1C0D52BF35",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/domain/reports.py": {
+      "sha256": "356018EC24872B62ED1CA707B14DB62457743F70A9E6F2C61C795CCE035CDDE6",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/domain/revenue_recurrence.py": {
+      "sha256": "621F5F1C26CE55D6300021D8392A835688F5DCFF76BC229BEBC6DC282FF78D98",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/domain/revenues.py": {
+      "sha256": "A281B1EC600B3CB72E39452AE121B045841E426C8EF720DF4518558C7787AD0F",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/domain/support.py": {
+      "sha256": "7E29871207ECAADE1CB9460F95E8C4247CFE07A3D8519A2D14D04CFA1C080BE1",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/ha_pluggy_options.py": {
+      "sha256": "BC0EA17B452B4804739B2DC2B66FA252DE6CA47C338B530934511E1E7E7EF4FB",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/http_runtime.py": {
+      "sha256": "389EB8677365EC1656DAAD177DB86855D4644C873EB80B9BF39B93065DC52AA3",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/idempotency.py": {
+      "sha256": "137FE167853D2F7AA647CC0E9D5D1DB4CC1278F715102D015D962796536F33A2",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/mcp_recurring.py": {
+      "sha256": "CBC61BBF7A006B68A71146CC032733958DD9868B939768AD67C05A44DEFBE696",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/migrations.py": {
+      "sha256": "1C55B1376776C7E5DD076EC818EF84D1B1AEE23E1AD9D1967956EAAD28435281",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/oauth.py": {
+      "sha256": "723578407440DC5A452C42F6263E53ABF79A2E73B45BCC07A8A123002D484BF6",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/oauth_server.py": {
+      "sha256": "60513B9DACF531AA3117518165B9C6D0DE4D605C6C6E52151B672EC14B518DB1",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/open_finance.py": {
+      "sha256": "39B92503BE8259AE7952CFC012D6ED38FCABE0E3230131FE985A4EE40F6B7A3B",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/open_finance_auto.py": {
+      "sha256": "C380136C5E1D976C7994D2869FD563CBB809455B9DE32CFCBD47CFC8B7462AC3",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/open_finance_coverage.py": {
+      "sha256": "4BE123FB4C45E23A0A648A759EDBB8A4F310737BB6BCCA2E2FBAFB56AD890653",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/open_finance_http.py": {
+      "sha256": "929BBCF802CF7351FEA5BB14046FA597723F74CD8FD946A29E19D84C53031C0C",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/open_finance_query.py": {
+      "sha256": "F7786A5DAB271C1E2C25E4B14B9D764A7D36B899C8E2D0F79D9A962D5805857A",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/pluggy_client.py": {
+      "sha256": "0EBC4006CEDD6B4736E50C7D490FF3B435870CB695D34BE8C900172CB56498F0",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/pluggy_config.py": {
+      "sha256": "A47A76A55A77424179D4F1AF2EA93A39AA6367FFEE63A4E3DF76BF554FD3323C",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/pluggy_coverage.py": {
+      "sha256": "3D50F23E822F9E58E461B648204555838B08198087BD9599579FF85AFCCC7639",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/pluggy_coverage_contracts.json": {
+      "sha256": "985404C7EC53EFE9F97DC9A8591C444D974BF14CF414F8BADEE4840E798F6419",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/PYTHON_REFERENCE_LICENSE.txt": {
+      "sha256": "023163D4252112720E12757861BDD0272105EE1F67ED6A44130E652189A2F7AB",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/scheduler/__init__.py": {
+      "sha256": "0F6C705603CAB360E2322532134405A1F486A78B90DFD376DA33F5F8419ED54C",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/scheduler/service.py": {
+      "sha256": "9BBE1117A01E9A53FBB2BDB7691A082F4A1A0C9C6413E26082065D43260150FA",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/unicode13_f06.py": {
+      "sha256": "6C7EC1703A30FE81A9D577604DFC1B999D9AE48BF78B1318C20DE8E9662CBCD9",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/unicode13_manifest.json": {
+      "sha256": "9A279ACA79B09F3CE3C49EEA630619BED88115F416F81A97324093B4D856F07A",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/UNICODE13_NOTICES.md": {
+      "sha256": "86FCFFEA7F6E15385B93E7BB390CD44CD7BB65D05F672C68E8D556EE88679134",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/unicode13_primitives.json": {
+      "sha256": "DE81088662045384D1F0B07FDF53A40BEE297843782FE80BF1AAEA94383BAAA4",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/UNICODE_DATA_LICENSE_2020.txt": {
+      "sha256": "0EFACA9742A27A3F5A7F6F2B5C40A1D227295246E2483308BF83E05871FA202A",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/UNICODE_LICENSE_V3.txt": {
+      "sha256": "E7A93B009565CFCE55919A381437AC4DB883E9DA2126FA28B91D12732BC53D96",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/web/app.js": {
+      "sha256": "8D64089AD5D4615A448EBADF1275414E49C111CBE0895DDF338DCD65307B831F",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/web/capabilities.js": {
+      "sha256": "74A7611FECFF5A8CCB55B2A065C162E54BBE5E9BF2CA02FF99E4EF3C100905B6",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/web/completion.css": {
+      "sha256": "A03B1C7195D7113F2BDF75E453879967CFA5A5183E12055D8C07CD100FCC8B73",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/web/completion.js": {
+      "sha256": "29F6AFA9D568FF4656E98F857D57001A741E9B2B3DE143B56AE3B1A34957E5BD",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/web/forms.css": {
+      "sha256": "2802E35BA26FE03463D93FBAD6BCCD9FC9F43C54ED19EE77C5F482E439CEC555",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/web/icons.js": {
+      "sha256": "6EAB9DA9EB654DBBA8B47564DC963D191340EA4431B716FEE73910002825077E",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/web/index.html": {
+      "sha256": "5F927A4D101CC95C2BBE08BAB1E6E189990C52982A7714814B0331B8294A8FE3",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/web/open-finance-coverage.js": {
+      "sha256": "025D40B6246D4FEBDE3C55136F6669F9D0680EA0C73372EC25F5879F5982598F",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/web/open-finance.css": {
+      "sha256": "F584CEE57B533F14EEDDC65FEA5AC4C71A807A123467333E5F124C2303923283",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/web/open-finance.js": {
+      "sha256": "8A08B322C8B6CB29D6B6A199A52E20EEE30E42296BB27508E38638CABDFC8E18",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/web/presentation.js": {
+      "sha256": "BED2EE2C3B3F57FA91A21AEC11BCCCD47D58FA1BD6CC5F996097F0F9FAD9DA2A",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/web/privacy.css": {
+      "sha256": "315E53E0F4E7DF96D47D94BF15D7645A83023BB7747D3E0444A8B9C00B47ECA1",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/web/privacy.js": {
+      "sha256": "2D6BFB4F89BFED54F29BD453C1E9FA8C77B6613993788336D1633D54D98F8999",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/web/revenues.js": {
+      "sha256": "9626603D886EF025CE1BD41791D86066473F447A1F0A97839401DB0C994F040A",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/web/styles.css": {
+      "sha256": "9CA8179C66C19C1D4044D0644CDC1F9D1E071EA72C01E20B283A1FD8AAA6DD46",
+      "git_mode": "100644"
+    },
+    "finance-v17/src/finance_v2/web/unlock.html": {
+      "sha256": "B2BE8B6548E357888C13EB4AB7F788EDEE66604798C71D27FB91E0700BBA79A5",
+      "git_mode": "100644"
+    }
+  },
+  "historical_build_lock_sha256": "946D69A77973B5EAB186D8438F449A87656BFFFB06A42988AD4518B133502ED2",
+  "configuration_activation": "New default true; explicit persisted false preserved; owner enables after update if still false.",
+  "commit_binding": "Git commit containing this manifest; exact commit recorded in PR and external verification."
+}
