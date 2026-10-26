@@ -22,7 +22,7 @@ FIXTURES.mkdir(parents=True, exist_ok=True)
 
 def audit(event, args):
     if event == 'sqlite3.connect':
-        raw = str(args[0])
+        raw = os.fsdecode(args[0])
         if raw == ':memory:':
             return
         path = Path(unquote(urlsplit(raw).path).lstrip('/') if os.name == 'nt' else unquote(urlsplit(raw).path)) if raw.startswith('file:') else Path(raw)

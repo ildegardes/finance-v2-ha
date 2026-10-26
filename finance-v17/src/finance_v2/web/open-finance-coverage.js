@@ -1,3 +1,4 @@
+import {openFinanceError} from './open-finance-errors.js';
 import {bankMoney,dateBR} from './privacy.js';
 
 const kinds={accounts:'Contas e saldos',item:'Instituição e conexão',resources:'Recursos autorizados',consents:'Consentimentos',transactions:'Movimentações completas',investments:'Posições de investimentos',investment_transactions:'Movimentos de investimentos',loans:'Crédito e obrigações',bills:'Faturas e pagamentos registrados',statements:'Referências de extratos'};
@@ -67,9 +68,10 @@ export function mountCoverage({host,api,esc,catalog}){
     if(!window.confirm('Consultar os produtos já disponíveis no cache Pluggy? Nenhuma atualização bancária será disparada.'))return;
     const buttons=[...manual.querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);
     const progress=manual.querySelector('[data-coverage-progress]');progress.textContent='Leitura manual em andamento…';
-    const poll=setInterval(async()=>{try{const r=await api('/open-finance/coverage');if(manual.isConnected)progress.textContent=`${r.coverage.filter(c=>c.state==='RUNNING').length} coleções em andamento; consulte os estados por recurso.`}catch(_){}},1500);
-    try{const r=await api('/open-finance/coverage-sync',{method:'POST',body:{connection_id:button.dataset.coverageSync}});progress.textContent=r.run.state==='SUCCEEDED'?'Coleta concluída. Confira cobertura e permissões de cada produto.':'Coleta terminou com falha. Dados anteriores preservados; confira o histórico.';}
-    catch(_){progress.textContent='Coleta não confirmada. Consulte o histórico antes de repetir.'}
-    finally{clearInterval(poll);buttons.forEach(b=>b.disabled=false)}
+    let collecting=true;
+    const poll=setInterval(async()=>{try{const r=await api('/open-finance/coverage');if(collecting&&manual.isConnected)progress.textContent=`${r.coverage.filter(c=>c.state==='RUNNING').length} coleções em andamento; consulte os estados por recurso.`}catch(_){}},1500);
+    try{const r=await api('/open-finance/coverage-sync',{method:'POST',body:{connection_id:button.dataset.coverageSync}});progress.textContent=r.run.state==='SUCCEEDED'?'Coleta concluída. Confira cobertura e permissões de cada produto.':openFinanceError(r.run.error_code);}
+    catch(error){progress.textContent=openFinanceError(error.code)}
+    finally{collecting=false;clearInterval(poll);buttons.forEach(b=>b.disabled=false)}
   });
 }

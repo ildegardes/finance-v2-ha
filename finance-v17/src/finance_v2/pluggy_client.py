@@ -152,10 +152,14 @@ class PluggyClient:
         if not cached_path(path):
             raise PluggyError('INVALID_ENDPOINT')
         for attempt in range(2):
+            key = self._api_key()
             status, data = self._bounded_send('GET', path,
-                {'X-API-KEY': self._api_key(), 'Accept': 'application/json'}, None)
+                {'X-API-KEY': key, 'Accept': 'application/json'}, None)
             if status == 401:
-                self._key, self._expires = None, 0
+                # A delayed failure belongs to the key used by this request,
+                # not a key another request may already have renewed.
+                with self._lock:
+                    if self._key == key: self._key, self._expires = None, 0
                 if attempt == 0:
                     continue
                 raise annotate(PluggyError('AUTH_FAILED'), stage='RESOURCE_QUERY', category='REPEATED_401', http_status=status, **describe_path(path))

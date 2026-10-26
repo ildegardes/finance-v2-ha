@@ -121,3 +121,12 @@ credencial, payload ou dados financeiros. Os códigos públicos e as guardas nã
 Opções, auto-sync, consentimentos e schema 10 continuam como na 0.1.24.
 Não iniciar novas sincronizações para validar este diagnóstico sem autorização.
 Procedimento e rollback: docs/open-finance/RELEASE_0.1.25.md no repositório.
+
+
+## D08 — candidata 0.1.26-open-finance.1
+
+A interface distingue recusa de autenticação sem causa confirmada, divergência de escopo, consentimento expirado/inativo, comunicação e falha interna. Não altere credenciais ou Item apenas por AUTH_FAILED. A guarda de escopo continua estrita; divergências reais Itaú/Santander dependem de diagnóstico autorizado. Nenhuma coleta inicia por abrir a tela.
+
+Uma falha pode ocorrer após páginas confirmadas no staging; consulte histórico e cobertura antes de repetir. Nenhum resultado bancário é promovido a lançamento oficial. Não há migration nova. O cache de API Key continua em memória por cliente, com expiração e uma renovação por GET 401; respostas antigas não invalidam chave diferente recém-renovada.
+
+Publicação e atualização requerem autorizações separadas. Preservar a instalação existente finance_v17, /data e configuração. Rollback de código para 0.1.25 é compatível com schema 10, mas incidente de dados exige recuperação coordenada com configuração e backup schema 10 contemporâneo; não usar backup schema 9. Os procedimentos detalhados acompanham D08_GITHUB_UPDATE_INSTRUCTIONS.md.
