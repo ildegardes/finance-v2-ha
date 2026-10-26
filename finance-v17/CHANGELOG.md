@@ -1,3 +1,10 @@
+# 0.1.26-open-finance.1 — D08 release candidate
+
+- Corrige a invalidação concorrente de API Key por resposta 401 tardia.
+- Preserva códigos de falha da coleta na interface e apresenta mensagens estáticas sanitizadas, sem atribuir credenciais inválidas a uma recusa genérica.
+- Schema 10, migrations, guards de escopo, lifecycle e dados oficiais preservados.
+- Santander/Itaú reais não verificados: esta release não promete corrigir rejeição externa ou divergência de Item.
+
 # Finance V17
 
 ## 0.1.25-open-finance.1

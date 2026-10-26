@@ -1,5 +1,6 @@
 // Imported bank staging only. No provider calls or official financial writes.
 import {bankMoney,dateBR} from './privacy.js';
+import {openFinanceError} from './open-finance-errors.js';
 import {mountCoverage} from './open-finance-coverage.js';
 export function createOpenFinance({api,view,heading,esc}) {
   const directionLabels={CREDIT:'Entrada',DEBIT:'Saída',UNKNOWN:'Desconhecida',CONFLICT:'Conflito'};
@@ -104,7 +105,7 @@ export function createOpenFinance({api,view,heading,esc}) {
     host.querySelector('[data-clear]').onclick=()=>{saved={};page=1;for(const n of names)choice(n).value=n==='direction'?'all':'';choice('end').setCustomValidity('');scopedOptions();load()};
     const history=host.querySelector('[data-history]');
     host.querySelector('.of-history > p').textContent='Últimas 25 sincronizações registradas. Nenhuma sincronização é iniciada ao abrir esta tela.';
-    history.innerHTML=catalog.runs.length?`<ul class="of-run-list">${catalog.runs.slice(0,25).map(r=>`<li><strong>${esc(catalog.connections.find(c=>c.id===r.connection_id)?.institution||'Instituição indisponível')}</strong> · ${esc(runLabels[r.state]||r.state)}<small>${dateBR(r.started_at)} · ${r.inserted_count} inseridas · ${r.updated_count} atualizadas · ${r.page_count} páginas${r.error_code?' · '+esc(r.error_code):''}</small></li>`).join('')}</ul>`:'<p class="empty">Nenhuma sincronização manual registrada.</p>';
+    history.innerHTML=catalog.runs.length?`<ul class="of-run-list">${catalog.runs.slice(0,25).map(r=>`<li><strong>${esc(catalog.connections.find(c=>c.id===r.connection_id)?.institution||'Instituição indisponível')}</strong> · ${esc(runLabels[r.state]||r.state)}<small>${dateBR(r.started_at)} · ${r.inserted_count} inseridas · ${r.updated_count} atualizadas · ${r.page_count} páginas${r.error_code?' · '+esc(openFinanceError(r.error_code)):''}</small></li>`).join('')}</ul>`:'<p class="empty">Nenhuma sincronização manual registrada.</p>';
     await load();
   };
 }

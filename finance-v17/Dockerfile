@@ -1,5 +1,5 @@
 FROM python:3.12.7-slim-bookworm@sha256:60d9996b6a8a3689d36db740b49f4327be3be09a21122bd02fb8895abb38b50d
-LABEL io.hass.version="0.1.25-open-finance.1" \
+LABEL io.hass.version="0.1.26-open-finance.1" \
       io.hass.type="app" \
       io.hass.arch="aarch64|amd64"
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/opt/finance-v2/src

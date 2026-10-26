@@ -44,16 +44,16 @@ class ReleaseMcpTests(unittest.TestCase):
     def test_initialize_exact_release_and_protocol(self):
         captured, payload = self.request()
         self.assertEqual(captured['status'], 200)
-        self.assertEqual(__version__, '0.1.25-open-finance.1')
+        self.assertEqual(__version__, '0.1.26-open-finance.1')
         self.assertEqual(payload, {'jsonrpc':'2.0','id':7,'result':{
             'protocolVersion':'2025-03-26','capabilities':{'tools':{'listChanged':False}},
-            'serverInfo':{'name':'Finance V2','version':'0.1.25-open-finance.1'}}})
+            'serverInfo':{'name':'Finance V2','version':'0.1.26-open-finance.1'}}})
 
     def test_sse_transport_preserves_initialize(self):
         captured, payload = self.request(accept='text/event-stream')
         self.assertEqual(captured['status'], 200)
         self.assertEqual(captured['headers']['Content-Type'], 'text/event-stream')
-        self.assertEqual(payload['result']['serverInfo']['version'], '0.1.25-open-finance.1')
+        self.assertEqual(payload['result']['serverInfo']['version'], '0.1.26-open-finance.1')
 
     def test_tools_contract_unchanged(self):
         captured, payload = self.request('tools/list')
