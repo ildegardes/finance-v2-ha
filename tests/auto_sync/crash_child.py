@@ -19,10 +19,15 @@ def crash_marker(active_write):
     os._exit(71)
 
 def check():
-    global checks
-    checks += 1
-    if kind == 'uncommitted-page' and checks == 3:
-        probe = connect(database, 0)
+    pass
+
+if kind == 'uncommitted-page':
+    import finance_v2.open_finance_coverage as coverage
+    original_batch=coverage._batch
+    def batch(*args,**kwargs):
+        # Real batch has written, and its outer transaction has not committed.
+        original_batch(*args,**kwargs)
+        probe=connect(database,0)
         try:
             try:
                 probe.execute('BEGIN IMMEDIATE')
@@ -31,8 +36,8 @@ def check():
                 crash_marker(True)
             else:
                 raise AssertionError('NO_ACTIVE_WRITE_LOCK')
-        finally:
-            probe.close()
+        finally:probe.close()
+    coverage._batch=batch
 
 if kind == 'committed-pages':
     provider = providers.banks['itau']

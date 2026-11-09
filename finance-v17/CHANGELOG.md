@@ -1,3 +1,23 @@
+# 0.1.27-open-finance.1
+
+- Cobertura completa dos recursos Pluggy disponíveis no staging, com paginação e vínculos verificáveis, sem promoção automática a registros oficiais.
+- Perfil explícito por conexão: strict (padrão), meupluggy_personal e sandbox, mantendo isolamento entre aplicações.
+- No perfil pessoal, coleta financeira e auditoria de consentimento têm apresentação independente: coleta concluída e consentimento não validado mantêm resultado geral PARTIAL. Consentimentos estrangeiros continuam rejeitados.
+- Preservação da moeda e proveniência temporal históricas, concorrência SQLite e proteção de navegação/geração por consulta.
+- Schema 11 com migration 011; atualização a partir do schema 10 exige backup coordenado. Sincronização automática permanece desativada por padrão.
+- Limitação conhecida: ITEM_ID_DIFFERENT na auditoria de consentimentos MeuPluggy, sem reassociação ou bypass de autorização.
+
+# 0.1.27-open-finance.1 — Gate B, candidata local não publicada
+
+- Projeções tipadas e navegação dos dez recursos de staging nas seis áreas existentes: contas/cartões, transações, faturas, posições/movimentos, crédito, extratos e consentimentos.
+- Migration 011 aditiva: vínculos de fatura exatos, histórico dos vínculos, checkpoints e auditoria de FULL/INCREMENTAL/RESUME. Tabelas oficiais e migrations 001–010 preservadas.
+- Reconciliação incremental por upsert de alterações e replay seguro de coleções; não usa createdAt como delta completo nem cursor persistido de snapshot mutável.
+- Revisão explícita de D09: metadados de paginação aceitam números integrais finitos, inclusive Decimal; bool, fração e totais inconsistentes continuam rejeitados.
+- Cache desatualizado, coleta vazia, indisponível, interrompida e não consultada são distintos. Nenhum patrimônio é inferido e nenhum extrato é baixado.
+- Guarda de consentimento estrangeiro preservada. Histórico pode ser consultado com aviso sem autorizar nova ingestão inconsistente.
+- Novo default de auto-sync false; opções já persistidas não são regravadas. Lifecycle, OAuth/MCP, scheduler e oito artefatos protegidos preservados.
+- Validação local e sintética. Nenhuma publicação, coleta real ou homologação Supervisor é implicada.
+
 # 0.1.26-open-finance.1 — D08 release candidate
 
 - Corrige a invalidação concorrente de API Key por resposta 401 tardia.

@@ -37,6 +37,7 @@ MIGRATIONS = (
     Migration(8, "v17_oauth_refresh", MIGRATIONS_DIR / "008_v17_oauth_refresh.sql", "3b2d818b0bceba9c57cb882e149a546e781dee7dcb21f6ce0c4e9e006b6b111a"),
     Migration(9, "open_finance_foundation", MIGRATIONS_DIR / "009_open_finance_foundation.sql", "f40bf2a455caa70925c008ebc13cb9c36dbf4fb2cee7ac309b3015c7f7975e72"),
     Migration(10, "open_finance_coverage", MIGRATIONS_DIR / "010_open_finance_coverage.sql", "4608c15b0977c166cda3ec7112e20d67bdf091706ab2c8ad860930d2b02fec9e"),
+    Migration(11, "open_finance_domain_links", MIGRATIONS_DIR / "011_open_finance_domain_links.sql", "8fcee297fb2d8e9ccee6b98c154d7f147ab83d48d991d9e1113819128a5dda65"),
 )
 
 

@@ -1,23 +1,26 @@
 // Imported bank staging only. No provider calls or official financial writes.
+import {createQueryGeneration} from './query-generation.js';
 import {bankMoney,dateBR} from './privacy.js';
 import {openFinanceError} from './open-finance-errors.js';
 import {mountCoverage} from './open-finance-coverage.js';
-export function createOpenFinance({api,view,heading,esc}) {
+import {runSummary} from './open-finance-status.js';
+export function createOpenFinance({api,view,heading,esc,navigation=null,state={}}) {
   const directionLabels={CREDIT:'Entrada',DEBIT:'Saída',UNKNOWN:'Desconhecida',CONFLICT:'Conflito'};
   const runLabels={SUCCEEDED:'Concluída',FAILED:'Falhou',INTERRUPTED:'Interrompida',RUNNING:'Em andamento'};
   const reasonLabels={DECLARED_PROVIDER_TYPE:'Tipo declarado pelo provedor',ZERO_UNCLASSIFIED:'Valor zero: direção não atribuída',TYPE_PRESENCE_UNRECOVERABLE:'Tipo ausente/nulo não distinguível',TYPE_UNKNOWN_VALUE:'Tipo não reconhecido',ACCOUNT_PRODUCT_CONFLICT:'Produto da conta incompatível',PRODUCT_NOT_COVERED:'Produto não abrangido',PRODUCT_CONTEXT_MISSING:'Produto da conta indisponível',ACCOUNT_IDENTITY_UNESTABLISHED:'Identidade da conta não comprovada',VALUE_UNSUPPORTED:'Representação de valor não abrangida',MONETARY_CONTEXT_MISSING:'Contexto monetário indisponível'};
   const option=(value,label)=>`<option value="${esc(value)}">${esc(label)}</option>`;
-  let saved={},page=1,selectedTab='overview';
+  let saved=state.saved||{},page=state.page||1,selectedTab=state.selectedTab||'overview',tabInitialized=false;
   return async function openFinance() {
     heading('Open Finance','Dados bancários importados — não são despesas ou receitas oficiais.');
     const host=document.createElement('section');host.className='of-screen';view.append(host);
     host.innerHTML='<p role="status">Carregando conexões bancárias…</p>';
     let catalog;
     try {catalog=await api('/open-finance/catalogs')} catch (_) {
+      if(navigation&&!navigation.current())return;
       if(view.contains(host))host.innerHTML='<p role="alert" class="attention">Não foi possível carregar o Open Finance. Verifique o armazenamento e tente novamente.</p><button type="button" data-retry>Recarregar</button>';
       host.querySelector('[data-retry]')?.addEventListener('click',openFinance);return;
     }
-    if(!view.contains(host))return;
+    if((navigation&&!navigation.current())||!view.contains(host))return;
     const connectionLabel=c=>`${c.institution||'Instituição indisponível'}${catalog.connections.filter(x=>x.institution===c.institution).length>1?' · Conexão '+(catalog.connections.indexOf(c)+1):''}${c.historical?' (histórica)':''}`;
     const accountLabel=a=>{
       const institution=catalog.connections.find(c=>c.id===a.connection_id)?.institution||'Instituição indisponível';
@@ -44,16 +47,15 @@ export function createOpenFinance({api,view,heading,esc}) {
       <div class="of-results" aria-live="polite"></div></section>`;
     const tabs=[...host.querySelectorAll('[data-of-tab]')];
     function selectTab(id,focus=false){
-      selectedTab=id;
+      const changed=!tabInitialized||selectedTab!==id;selectedTab=id;state.selectedTab=id;
       for(const tab of tabs){const active=tab.dataset.ofTab===id;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;host.querySelector('#'+tab.getAttribute('aria-controls')).hidden=!active;if(active&&focus)tab.focus()}
-      host.dispatchEvent(new CustomEvent('of-tab-selected',{detail:id}));
+      if(changed)host.dispatchEvent(new CustomEvent('of-tab-selected',{detail:id}));tabInitialized=true;
     }
     tabs.forEach((tab,index)=>{
       tab.onclick=()=>selectTab(tab.dataset.ofTab);
       tab.onkeydown=event=>{const next=event.key==='ArrowRight'?(index+1)%tabs.length:event.key==='ArrowLeft'?(index+tabs.length-1)%tabs.length:event.key==='Home'?0:event.key==='End'?tabs.length-1:null;if(next!==null){event.preventDefault();selectTab(tabs[next].dataset.ofTab,true)}};
     });
-    selectTab(selectedTab);
-    mountCoverage({host,api,esc,catalog});
+    mountCoverage({host,api,esc,catalog,navigation});
     const form=host.querySelector('#of-panel-flow form'),results=host.querySelector('.of-results');
     const names=['start','end','connection_id','external_account_id','direction','category_key','search','origin_run_id'];
     const choice=(name)=>form.elements.namedItem(name);
@@ -69,14 +71,14 @@ export function createOpenFinance({api,view,heading,esc}) {
     for(const name of ['start','end','connection_id','direction','search'])choice(name).value=saved[name]|| (name==='direction'?'all':'');
     scopedOptions();for(const name of ['external_account_id','category_key','origin_run_id'])choice(name).value=saved[name]||'';
     choice('connection_id').onchange=scopedOptions;
-    let generation=0;
+    let generation=0;const queries=createQueryGeneration(navigation);
     async function load() {
-      const current=++generation;
-      results.innerHTML='<p role="status">Carregando transações bancárias…</p>';
+      const query=queries.begin();state.saved=saved;state.page=page;const current=++generation;
+      results.setAttribute('aria-busy','true');results.innerHTML='<p role="status" data-query-loading>Carregando transações bancárias…</p>';
       const q=new URLSearchParams({contract:'of-l2-v2',metrics:'exact',page:String(page),page_size:'25',...saved});
       try {
-        const response=await api('/open-finance/transactions?'+q);
-        if(current!==generation||!view.contains(host))return;
+        const response=await api('/open-finance/transactions?'+q,{queryScope:query});
+        if(!query.current()||current!==generation||!view.contains(host))return;
         const meta=response.query_meta,counts=meta.counts;
         const qualifiers=[];
         if(meta.query_completeness!=='COMPLETE')qualifiers.push('Há registros cujo enquadramento nos filtros não pôde ser determinado. A lista não representa todas as possíveis correspondências.');
@@ -95,17 +97,18 @@ export function createOpenFinance({api,view,heading,esc}) {
           <div class="actions of-pagination"><button type="button" data-prev ${page===1?'disabled':''}>Anterior</button><button type="button" data-next ${!response.has_more?'disabled':''}>Próxima</button><button type="button" class="secondary" data-refresh>Atualizar consulta</button></div>`;
         results.querySelector('[data-prev]').onclick=()=>{page--;load()};results.querySelector('[data-next]').onclick=()=>{page++;load()};results.querySelector('[data-refresh]').onclick=load;
       } catch(error) {
-        if(current!==generation||!view.contains(host))return;
+        if(!query.current()||current!==generation||!view.contains(host))return;
         const message=error.code==='QUERY_PROFILE_UNAVAILABLE'?'Busca textual indisponível: o runtime não possui o perfil Unicode aprovado. Nenhum filtro foi ignorado.':'Não foi possível consultar as transações bancárias. Nenhum resultado parcial foi publicado.';
         results.innerHTML=`<p role="alert" class="attention">${esc(message)}</p><button type="button" data-retry>Repetir consulta</button>`;results.querySelector('button').onclick=load;
-      }
+      }finally{if(query.current()&&current===generation){results.removeAttribute('aria-busy');results.querySelector('[data-query-loading]')?.remove()}}
     }
     form.onsubmit=e=>{e.preventDefault();if(choice('start').value&&choice('end').value&&choice('start').value>choice('end').value){choice('end').setCustomValidity('A data final deve ser igual ou posterior à inicial.');choice('end').reportValidity();return}saved=Object.fromEntries(names.map(n=>[n,choice(n).value]).filter(([,v])=>v!==''));page=1;load()};
     choice('end').oninput=()=>choice('end').setCustomValidity('');choice('start').oninput=()=>choice('end').setCustomValidity('');
     host.querySelector('[data-clear]').onclick=()=>{saved={};page=1;for(const n of names)choice(n).value=n==='direction'?'all':'';choice('end').setCustomValidity('');scopedOptions();load()};
     const history=host.querySelector('[data-history]');
     host.querySelector('.of-history > p').textContent='Últimas 25 sincronizações registradas. Nenhuma sincronização é iniciada ao abrir esta tela.';
-    history.innerHTML=catalog.runs.length?`<ul class="of-run-list">${catalog.runs.slice(0,25).map(r=>`<li><strong>${esc(catalog.connections.find(c=>c.id===r.connection_id)?.institution||'Instituição indisponível')}</strong> · ${esc(runLabels[r.state]||r.state)}<small>${dateBR(r.started_at)} · ${r.inserted_count} inseridas · ${r.updated_count} atualizadas · ${r.page_count} páginas${r.error_code?' · '+esc(openFinanceError(r.error_code)):''}</small></li>`).join('')}</ul>`:'<p class="empty">Nenhuma sincronização manual registrada.</p>';
-    await load();
+    history.innerHTML=catalog.runs.length?`<ul class="of-run-list">${catalog.runs.slice(0,25).map(r=>`<li><strong>${esc(catalog.connections.find(c=>c.id===r.connection_id)?.institution||'Instituição indisponível')}</strong> · ${esc(runSummary(r,runLabels[r.state]||r.state))}<small>${dateBR(r.started_at)} · ${r.inserted_count} inseridas · ${r.updated_count} atualizadas · ${r.page_count} páginas${r.error_code?' · '+esc(openFinanceError(r.error_code)):''}</small></li>`).join('')}</ul>`:'<p class="empty">Nenhuma sincronização manual registrada.</p>';
+    selectTab(selectedTab);
+    await load(); // Preserve the existing local Flow prefetch; one request per mount.
   };
 }

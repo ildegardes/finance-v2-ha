@@ -43,7 +43,7 @@ class DatabaseCase(unittest.TestCase):
         self.directory = Path(tempfile.mkdtemp(prefix='new-synthetic-',dir=FIXTURES))
         self.path = self.directory / 'fixture.sqlite3'
         self.assertFalse(self.path.exists())
-        self.assertEqual(migrate(self.path), list(range(1,11)))
+        self.assertEqual(migrate(self.path), list(range(1,12)))
         self.config = settings(self.path)
         self.entities = seed_official(self.config)
         self.before = fingerprint(self.path)
@@ -55,13 +55,13 @@ class DatabaseCase(unittest.TestCase):
         with closing(connect(self.path)) as c:
             self.assertEqual(c.execute('PRAGMA integrity_check').fetchall()[0][0], 'ok')
             self.assertEqual(c.execute('PRAGMA foreign_key_check').fetchall(), [])
-            self.assertEqual(c.execute('PRAGMA user_version').fetchone()[0], 10)
+            self.assertEqual(c.execute('PRAGMA user_version').fetchone()[0], 11)
             self.assertTrue(migration_status(c)['up_to_date'])
             active = c.execute("SELECT count(*) FROM of_connections WHERE lease_token IS NOT NULL").fetchone()[0]
             counts = {name:c.execute('SELECT count(*) FROM '+name).fetchone()[0] for name in
                 ('of_accounts','of_transactions','of_transaction_revisions','of_resource_records','of_resource_revisions','of_sync_runs')}
         EVIDENCE.append({'test':self.id(),'database':self.path.relative_to(FIXTURES).as_posix(),
-            'integrity':'ok','fk_violations':0,'schema':10,'official_fingerprints':after,
+            'integrity':'ok','fk_violations':0,'schema':11,'official_fingerprints':after,
             'official_preserved':True,'active_leases_after_test':active,'staging_counts':counts})
     def automatic(self, bank):
         return sync_full_automatic(self.service, bank, check=lambda:None)
@@ -71,11 +71,11 @@ class DatabaseCase(unittest.TestCase):
                 ('of_accounts','of_transactions','of_transaction_revisions','of_resource_records','of_resource_revisions')]
 
 class SQLiteTests(DatabaseCase):
-    def test_schema10_migration_history_and_reapplication(self):
+    def test_schema11_migration_history_and_reapplication(self):
         require_current_schema(self.path)
         self.assertEqual(migrate(self.path), [])
         with closing(connect(self.path)) as c:
-            self.assertEqual([r[0] for r in c.execute('SELECT version FROM _finance_v2_schema_migrations ORDER BY version')], list(range(1,11)))
+            self.assertEqual([r[0] for r in c.execute('SELECT version FROM _finance_v2_schema_migrations ORDER BY version')], list(range(1,12)))
             self.assertGreater(sum(v['rows'] for v in self.before.values() if 'rows' in v), 10)
 
     def test_repeated_automatic_ingestion_no_duplicates_or_promotion(self):

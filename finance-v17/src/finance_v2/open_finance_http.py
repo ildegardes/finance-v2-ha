@@ -6,7 +6,8 @@ from urllib.parse import parse_qs
 
 from .open_finance import OpenFinanceService, SyncError, paged
 from .open_finance_query import catalogs, query_transactions
-from .open_finance_coverage import sync_full, query as query_resources, coverage_status
+from .open_finance_coverage import sync_full, sync_domain, query as query_resources, coverage_status
+from .open_finance_domain import query_domain, query_relations, openapi_paths as domain_paths
 from .pluggy_coverage import RESOURCES, CONTRACT, output_schema
 
 
@@ -18,6 +19,8 @@ OPERATIONS = (
     ('GET','catalogs','catalogs'),
     ('GET','resources','resources'), ('GET','coverage','coverage'),
     ('POST','coverage-sync','coverage_sync'),
+    ('GET','domain','domain'), ('GET','relations','relations'),
+    ('POST','domain-sync','domain_sync'),
 )
 
 
@@ -50,9 +53,28 @@ def request(e):
 
 
 def dispatch(app,operation,identity,body,query):
+    payload,status=_dispatch_raw(app,operation,identity,body,query)
+    from .open_finance_presentation import personal,present_payload
+    if any(personal(cfg) for cfg in app.settings.pluggy_connections):
+        with closing(app.db()) as c:
+            payload=present_payload(c,app.settings,payload,operation)
+    from .open_finance_output_privacy import public_payload
+    return public_payload(payload,app.settings),status
+
+
+def _dispatch_raw(app,operation,identity,body,query):
     if identity.role!='UI' or identity.client_id!='UI:local':raise SyncError('FORBIDDEN',403)
     service=OpenFinanceService(app.settings,app.clock)
     op=operation.removeprefix('open_finance_')
+    if op=='domain_sync':
+        if query or set(body)!={'connection_id','mode'} or not isinstance(body.get('connection_id'),str) or not re.fullmatch(r'[a-z][a-z0-9-]{1,63}',body['connection_id']) or not isinstance(body.get('mode'),str) or body['mode'] not in {'FULL','INCREMENTAL','RESUME'}:
+            raise SyncError('INVALID_REQUEST',422)
+        run=sync_domain(service,body['connection_id'],actor=identity.client_id,mode=body['mode'])
+        return {'run':run},200 if run['state']=='SUCCEEDED' else 502
+    if op in {'domain','relations'}:
+        if body:raise SyncError('GET_BODY_NOT_ALLOWED',422)
+        with closing(app.db()) as c:
+            return (query_domain(c,app.settings,query) if op=='domain' else query_relations(c,app.settings,query)),200
     if op=='coverage_sync':
         if query or set(body)!={'connection_id'} or not isinstance(body.get('connection_id'),str) or not re.fullmatch(r'[a-z][a-z0-9-]{1,63}',body['connection_id']):
             raise SyncError('INVALID_REQUEST',422)
@@ -142,13 +164,16 @@ def openapi_paths():
         'counts':counts,'coverage':obj({'membership':coverage_block,'direction':coverage_block}),
         'query_completeness':enum('COMPLETE','QUALIFIED_PARTIAL','NOT_ESTABLISHED'),'warnings':{'type':'array','items':text}})
     bank_connection=obj({'id':text,'institution':text,'enabled':{'type':'boolean'},'historical':{'type':'boolean'}})
+    from .open_finance_presentation import presentation_schema
+    run['properties']['operational_presentation']=presentation_schema()
+    bank_connection['properties']['presentation_profile']={'type':'string','enum':['meupluggy_personal']}
     bank_account=obj({'connection_id':text,'external_id':text,**{k:nullable for k in ('name','type','subtype','currency','provider_updated_at')}})
     bank_category=obj({'connection_id':text,'category_key':text,'provider':enum('PLUGGY'),
         **{k:nullable for k in ('external_id','original_name','display_name_pt')},
         'translation_status':enum('UNVERIFIED','VERIFIED','OWNER_OVERRIDE'),'updated_at':text})
     result={}
     for method,path,op in OPERATIONS:
-        if op in {'resources','coverage','coverage_sync'}:continue
+        if op in {'resources','coverage','coverage_sync','domain','relations','domain_sync'}:continue
         statuses=[200,401,403,422,503,500,405]
         parameters=[]
         spec={'operationId':'open_finance_'+op,'security':[{'bearerAuth':[]}],
@@ -207,6 +232,7 @@ def openapi_paths():
     coverage_response=obj({'coverage':{'type':'array','items':coverage_schema},
         'runs':{'type':'array','items':obj({k:nullable if k=='error_code' else text for k in ('id','connection_id','state','error_code')})},
         'automatic_sync':{'type':'boolean'},'remote_updates':{'type':'boolean','const':False}})
+    coverage_response['properties']['runs']['items']['properties']['operational_presentation']=presentation_schema()
     for method,path,op in OPERATIONS:
         if op not in {'resources','coverage','coverage_sync'}:continue
         response_schema=resource_response if op=='resources' else coverage_response if op=='coverage' else obj({'run':run})
@@ -226,4 +252,5 @@ def openapi_paths():
                 ('history',{'type':'string','enum':['0','1']}),('type',text_schema),('currency',text_schema),
                 ('page_size',{'type':'integer','enum':[25,50,100]}))]
         result[PREFIX+path]={method.lower():spec}
+    result.update(domain_paths())
     return result

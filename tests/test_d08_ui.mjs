@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
 import {openFinanceError,coverageFailureCode} from '../finance-v17/src/finance_v2/web/open-finance-errors.js';
+import {createQueryGeneration} from '../finance-v17/src/finance_v2/web/query-generation.js';
 const web=new URL('../finance-v17/src/finance_v2/web/',import.meta.url);
 const app=fs.readFileSync(new URL('app.js',web),'utf8');
 const apiSource=app.slice(app.indexOf('async function api('),app.indexOf('\nfunction busy('));
@@ -50,9 +51,9 @@ test('manual coverage handler renders the classified failure and always releases
   const button={dataset:{coverageSync:'synthetic'},disabled:false};
   const progress={textContent:''};let cleared=0,calls=0;
   const manual={querySelectorAll:()=>[button],querySelector:()=>progress,isConnected:true};
-  new Function('manual','api','window','setInterval','clearInterval','openFinanceError',handlerSource)(
+  new Function('manual','api','window','setInterval','clearInterval','openFinanceError','createQueryGeneration','navigation',handlerSource)(
     manual,async()=>{calls++;throw Object.assign(new Error('PRIVATE_CANARY'),{code:'ACCOUNT_SCOPE_MISMATCH'})},
-    {confirm:()=>true},()=>7,id=>{assert.equal(id,7);cleared++},openFinanceError);
+    {confirm:()=>true},()=>7,id=>{assert.equal(id,7);cleared++},openFinanceError,createQueryGeneration,null);
   await button.onclick();
   assert.equal(progress.textContent,openFinanceError('ACCOUNT_SCOPE_MISMATCH'));
   assert.equal(button.disabled,false);assert.equal(cleared,1);assert.equal(calls,1);
@@ -73,8 +74,8 @@ test('a late progress response cannot overwrite the final classified failure',as
   const api=path=>path==='/open-finance/coverage'
     ?new Promise(resolve=>{finishPoll=resolve})
     :new Promise((_,reject)=>{failSync=reject});
-  new Function('manual','api','window','setInterval','clearInterval','openFinanceError',handler)(manual,api,
-    {confirm:()=>true},fn=>{poll=fn;return 1},()=>{},openFinanceError);
+  new Function('manual','api','window','setInterval','clearInterval','openFinanceError','createQueryGeneration','navigation',handler)(manual,api,
+    {confirm:()=>true},fn=>{poll=fn;return 1},()=>{},openFinanceError,createQueryGeneration,null);
   const syncing=button.onclick();const polling=poll();
   failSync({code:'AUTH_FAILED'});await syncing;
   finishPoll({coverage:[{state:'RUNNING'}]});await polling;

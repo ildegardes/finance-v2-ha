@@ -56,16 +56,16 @@ class Provider:
             return 200, collection([{'id': 'consent-test', 'itemId': 'item-test', 'products': ['ACCOUNTS'], 'expiresAt': None}])
         if base == '/accounts':
             return 200, collection([{'id': 'account-' + kind, 'itemId': 'item-test', 'type': kind,
-                'name': 'Conta sintética', 'balance': self.balance, 'number': 'PRIVATE-NOT-PERSISTED',
+                'name': 'Conta sintÃ©tica', 'balance': self.balance, 'number': 'PRIVATE-NOT-PERSISTED',
                 'currencyCode': 'BRL', 'creditData': {'creditLimit': 1000, 'availableCreditLimit': 900} if kind == 'CREDIT' else None}
                 for kind in ('BANK', 'CREDIT')])
         if base == '/v2/transactions':
             from urllib.parse import parse_qs
             account = parse_qs(urlsplit(path).query)['accountId'][0]
             return 200, {'results': [{'id': 'transaction-test', 'accountId': account,
-                'description': 'Compra sintética', 'amount': 10, 'currencyCode': 'BRL', 'date': '2026-10-22',
+                'description': 'Compra sintÃ©tica', 'amount': 10, 'currencyCode': 'BRL', 'date': '2026-10-22',
                 'type': 'DEBIT', 'status': 'POSTED', 'categoryId': '1', 'category': 'Food',
-                'merchant': {'name': 'Sintético', 'cnpj': 'PRIVATE-NOT-PERSISTED'},
+                'merchant': {'name': 'SintÃ©tico', 'cnpj': 'PRIVATE-NOT-PERSISTED'},
                 'creditCardMetadata': {'installmentNumber': 1, 'totalInstallments': 2, 'cardNumber': 'PRIVATE-NOT-PERSISTED'}}], 'next': None}
         if base.endswith('/statements'):
             return 200, collection([{'id': 'statement-test', 'monthYear': '2026-10', 'url': 'https://invalid.example/private-signed-url'}])
@@ -73,12 +73,12 @@ class Provider:
             return 200, collection([{'id': 'bill-test', 'dueDate': '2026-11-10', 'totalAmount': 100,
                 'totalAmountCurrencyCode': 'BRL', 'payments': [{'amount': 25, 'currencyCode': 'BRL'}]}])
         if base == '/investments':
-            return 200, collection([{'id': 'investment-test', 'itemId': 'item-test', 'name': 'Ativo sintético',
+            return 200, collection([{'id': 'investment-test', 'itemId': 'item-test', 'name': 'Ativo sintÃ©tico',
                 'type': 'FIXED_INCOME', 'currencyCode': 'BRL', 'balance': 200, 'quantity': 2, 'annualRate': 1.2}] if self.investments else [])
         if base.endswith('/transactions'):
             return 200, collection([{'id': 'movement-test', 'date': '2026-10-20', 'amount': 200, 'quantity': 2}])
         if base == '/loans':
-            return 200, collection([{'id': 'loan-test', 'itemId': 'item-test', 'productName': 'Crédito sintético',
+            return 200, collection([{'id': 'loan-test', 'itemId': 'item-test', 'productName': 'CrÃ©dito sintÃ©tico',
                 'contractAmount': 500, 'currencyCode': 'BRL', 'contractNumber': 'PRIVATE-NOT-PERSISTED', 'CET': 2}])
         raise AssertionError('UNEXPECTED_ENDPOINT')
 
@@ -89,7 +89,7 @@ class CoverageTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.db = Path(self.temp.name) / 'new-synthetic.sqlite3'
         migrations.migrate(self.db)
-        self.config = PluggyConnection('bank-test', 'Banco sintético', 'synthetic-client', 'synthetic-secret', 'item-test', True)
+        self.config = PluggyConnection('bank-test', 'Banco sintÃ©tico', 'synthetic-client', 'synthetic-secret', 'item-test', True)
         self.settings = Settings(database_path=self.db, timezone='UTC', host='127.0.0.1', port=8766,
             busy_timeout_ms=500, ui_token='synthetic-owner-only', pluggy_connections=(self.config,),
             external_clients=(ExternalClientCredential('synthetic-client', 'synthetic-external-only', frozenset({'finance:read'})),))
@@ -121,10 +121,10 @@ class CoverageTests(unittest.TestCase):
 
     def test_all_products_projection_history_and_financial_preservation(self):
         with closing(connect(self.db)) as c:
-            c.execute("INSERT INTO accounts(name,active) VALUES('Conta financeira sintética',1)")
-            category = c.execute("INSERT INTO categories(name,normalized_name,active) VALUES('Sintética','sintetica',1)").lastrowid
+            c.execute("INSERT INTO accounts(name,active) VALUES('Conta financeira sintÃ©tica',1)")
+            category = c.execute("INSERT INTO categories(name,normalized_name,active) VALUES('SintÃ©tica','sintetica',1)").lastrowid
             from finance_v2.domain.expenses import create_expense
-            create_expense(c, description='Despesa oficial sintética', amount_cents=12345,
+            create_expense(c, description='Despesa oficial sintÃ©tica', amount_cents=12345,
                 expense_date=date(2026,10,20),due_date=date(2026,10,25),planned_payment_method='CASH',
                 category_id=category,account_id=None,card_id=None,notes=None,actor='UI:local',
                 correlation_id='synthetic-official',clock=self.service.clock)
@@ -133,7 +133,7 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(run['state'], 'SUCCEEDED', run)
         self.assertEqual(self.financial(), before)
         with closing(connect(self.db)) as c:
-            self.assertEqual(c.execute('PRAGMA user_version').fetchone()[0], 10)
+            self.assertEqual(c.execute('PRAGMA user_version').fetchone()[0], 11)
             self.assertEqual({r[0] for r in c.execute('SELECT DISTINCT resource FROM of_resource_records')}, set(CONTRACT['resources']))
             self.assertEqual(c.execute('SELECT count(*) FROM of_transactions').fetchone()[0], 2)
             self.assertEqual(c.execute('SELECT count(*) FROM of_transaction_revisions').fetchone()[0], 2)
@@ -301,14 +301,14 @@ class CoverageTests(unittest.TestCase):
             self.assertFalse(result['has_more'])
             self.assertEqual(c.execute('PRAGMA foreign_key_check').fetchall(), [])
 
-    def test_schema8_to10_preservation_reapply_and_rollback(self):
+    def test_schema8_to11_preservation_reapply_and_historical_010_rollback(self):
         fresh = Path(self.temp.name) / 'fresh-schema8.sqlite3'
         with patch.object(migrations, 'MIGRATIONS', migrations.MIGRATIONS[:8]):
             self.assertEqual(migrations.migrate(fresh), list(range(1, 9)))
         with closing(connect(fresh)) as c:
-            c.execute("INSERT INTO accounts(name,active) VALUES('Preservada sintética',1)")
+            c.execute("INSERT INTO accounts(name,active) VALUES('Preservada sintÃ©tica',1)")
             snapshot = list(c.execute('SELECT * FROM accounts'))
-        self.assertEqual(migrations.migrate(fresh), [9, 10])
+        self.assertEqual(migrations.migrate(fresh), [9, 10, 11])
         self.assertEqual(migrations.migrate(fresh), [])
         with closing(connect(fresh)) as c:
             self.assertEqual([tuple(r) for r in c.execute('SELECT * FROM accounts')], [tuple(r) for r in snapshot])
