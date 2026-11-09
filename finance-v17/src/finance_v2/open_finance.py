@@ -9,7 +9,8 @@ import re
 import sqlite3
 import uuid
 
-from .db import connect, immediate_transaction
+from .db import connect
+from .open_finance_write import staging_transaction
 from .domain.clock import SystemClock, utc_text
 from .pluggy_client import PluggyClient, PluggyError, _period
 
@@ -49,6 +50,10 @@ class OpenFinanceService:
         value=self.clock.now_utc()
         return value.timestamp(),utc_text(value)
 
+    def _write(self, c, *, check=lambda: None):
+        return staging_transaction(c, self.settings.database_path,
+            timeout_ms=self.settings.busy_timeout_ms, check=check)
+
     def _db(self):
         try:return connect(self.settings.database_path,self.settings.busy_timeout_ms)
         except (FileNotFoundError,sqlite3.Error):raise SyncError('STORAGE_UNAVAILABLE',503) from None
@@ -57,10 +62,10 @@ class OpenFinanceService:
     def _binding(config):
         return sha256(json.dumps([config.client_id,config.item_id],separators=(',',':')).encode()).hexdigest()
 
-    def _claim(self,c,config,actor,start,end,*,minimum_interval=0):
+    def _claim(self,c,config,actor,start,end,*,minimum_interval=0,check=lambda:None):
         epoch,stamp=self._time();token=uuid.uuid4().hex;run_id=uuid.uuid4().hex
         binding=self._binding(config)
-        with immediate_transaction(c):
+        with self._write(c, check=check):
             row=c.execute('SELECT * FROM of_connections WHERE id=?',(config.id,)).fetchone()
             if row and row['binding_hash']!=binding:raise SyncError('CONNECTION_BINDING_CHANGED')
             if row and row['lease_token'] is not None:
@@ -99,11 +104,11 @@ class OpenFinanceService:
         return stamp
 
     def _touch(self,c,connection_id,run_id,token):
-        with immediate_transaction(c):self._guard(c,connection_id,run_id,token)
+        with self._write(c):self._guard(c,connection_id,run_id,token)
 
     def _accounts(self,c,config,run_id,token,accounts,*,in_transaction=False):
         if in_transaction and not c.in_transaction:raise SyncError('STORAGE_TRANSACTION_REQUIRED',503)
-        with nullcontext() if in_transaction else immediate_transaction(c):
+        with nullcontext() if in_transaction else self._write(c):
             self._guard(c,config.id,run_id,token)
             for account in accounts:
                 if account.connection_id!=config.id:raise annotate(SyncError('ACCOUNT_SCOPE_MISMATCH',502), resource='accounts', operation='ACCOUNTS_PERSIST', stage='STAGING_CHECK', category='LOCAL_CONNECTION_MISMATCH')
@@ -133,7 +138,7 @@ class OpenFinanceService:
 
     def _page(self,c,config,run_id,token,account_id,records,*,in_transaction=False):
         if in_transaction and not c.in_transaction:raise SyncError('STORAGE_TRANSACTION_REQUIRED',503)
-        with nullcontext() if in_transaction else immediate_transaction(c):
+        with nullcontext() if in_transaction else self._write(c):
             stamp=self._guard(c,config.id,run_id,token)
             inserted=updated=0
             for record in records:
@@ -167,7 +172,7 @@ class OpenFinanceService:
     def _finish(self,c,config,run_id,token,error=None,*,interrupted=False):
         if interrupted and error is None:raise ValueError('INTERRUPTION_REASON_REQUIRED')
         epoch,stamp=self._time()
-        with immediate_transaction(c):
+        with self._write(c):
             row=c.execute('SELECT lease_token,lease_until FROM of_connections WHERE id=?',(config.id,)).fetchone()
             if row and row['lease_token']==token:
                 if row['lease_until']<=epoch:error='LEASE_LOST'
@@ -184,6 +189,11 @@ class OpenFinanceService:
         config=self.config.get(connection_id)
         if config is None:raise SyncError('CONNECTION_NOT_FOUND',404)
         if not config.enabled:raise SyncError('CONNECTION_DISABLED')
+        if config.access_mode != 'strict':
+            if start is not None or end is not None:
+                raise SyncError('PROFILE_PERIOD_FILTER_NOT_SUPPORTED',422)
+            from .open_finance_coverage import sync_full
+            return sync_full(self,connection_id,actor=actor)
         c=self._db()
         try:
             try:run_id,token=self._claim(c,config,actor,start,end)

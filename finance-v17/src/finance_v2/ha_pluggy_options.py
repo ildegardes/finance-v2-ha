@@ -30,7 +30,7 @@ def registry_from_options(options):
         # entered credentials. Stored HA options are not removed or rewritten.
         if not options.get('pluggy_'+slug+'_enabled',False):continue
         values={field:options.get('pluggy_'+slug+'_'+field,'') for field in ('client_id','client_secret','item_id')}
-        try:connection=PluggyConnection(slug,institution,**values,enabled=True)
+        try:connection=PluggyConnection(slug,institution,**values,enabled=True,access_mode=options.get('pluggy_'+slug+'_access_mode','strict'))
         except (PluggyConfigurationError,TypeError):
             # One incomplete institution must not stop the API or its peer.
             # No supplied option value is included in this diagnostic.
@@ -38,6 +38,8 @@ def registry_from_options(options):
             continue
         registry[connection.id]={'institution':connection.institution,'client_id':connection.client_id,
             'client_secret':connection.client_secret,'item_id':connection.item_id,'enabled':connection.enabled}
+        if connection.access_mode != 'strict':
+            registry[connection.id]['access_mode']=connection.access_mode
         if automatic:
             registry[connection.id]['auto_sync_enabled']=True
     result=json.dumps(registry,separators=(',',':'))

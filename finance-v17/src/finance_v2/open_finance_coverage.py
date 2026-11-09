@@ -4,18 +4,18 @@ import json
 import re
 import sqlite3
 
-from .db import immediate_transaction
 from .open_finance import SyncError, OpenFinanceService
 from .pluggy_client import ExternalAccount, PluggyError
 from .pluggy_coverage import RESOURCES, project
 from .open_finance_diagnostics import emit
+from .open_finance_relations import begin_collection, record_batch, reconcile_bill_links, fail_collection, audit_mode
 
 
 def _batch(service, c, config, run_id, token, batch, *, in_transaction=False):
     resource, parent = batch['resource'], batch['parent']
     if in_transaction and not c.in_transaction:
         raise SyncError('STORAGE_TRANSACTION_REQUIRED', 503)
-    with nullcontext() if in_transaction else immediate_transaction(c):
+    with nullcontext() if in_transaction else service._write(c):
         stamp = service._guard(c, config.id, run_id, token)
         c.execute('INSERT INTO of_resource_coverage(connection_id,resource,parent_id,run_id,state,observed_at) '
                   "VALUES(?,?,?,?,'RUNNING',?) ON CONFLICT(connection_id,resource,parent_id) DO UPDATE SET "
@@ -51,6 +51,13 @@ def _batch(service, c, config, run_id, token, batch, *, in_transaction=False):
                           "VALUES(?,?,?,?,?,?,?,?,'NOT_SEEN')", identity + (run_id, stamp, row['payload_json'], row['payload_hash']))
             if not c.execute("SELECT 1 FROM of_resource_records WHERE connection_id=? AND resource=? AND parent_id=? AND state='PRESENT'", (config.id, resource, parent)).fetchone():
                 c.execute("UPDATE of_resource_coverage SET state='EMPTY' WHERE connection_id=? AND resource=? AND parent_id=?", (config.id, resource, parent))
+        record_batch(c, config.id, batch, run_id, stamp)
+        if batch.get('error_code'):
+            for table in ('of_resource_coverage','of_collection_checkpoints'):
+                c.execute('UPDATE '+table+' SET error_code=? WHERE connection_id=? AND resource=? AND parent_id=? AND run_id=?',
+                    (batch['error_code'],config.id,resource,parent,run_id))
+        if resource in ('accounts', 'transactions', 'bills'):
+            reconcile_bill_links(c, config.id, run_id, stamp, parent if resource != 'accounts' else None)
 
 
 def sync_full(service, connection_id, *, actor):
@@ -67,7 +74,13 @@ def sync_full_automatic(service, connection_id, *, check, minimum_interval=0):
     return _sync_full(service, connection_id, actor='AUTO:coverage', check=check, minimum_interval=minimum_interval)
 
 
-def _sync_full(service, connection_id, *, actor, check=lambda: None, minimum_interval=0):
+def sync_domain(service, connection_id, *, actor, mode='FULL'):
+    if actor != 'UI:local': raise SyncError('OWNER_REQUIRED', 403)
+    if mode not in ('FULL', 'INCREMENTAL', 'RESUME'): raise SyncError('INVALID_SYNC_MODE', 422)
+    return _sync_full(service, connection_id, actor=actor, mode=mode)
+
+
+def _sync_full(service, connection_id, *, actor, check=lambda: None, minimum_interval=0, mode='FULL'):
     check()
     config = service.config.get(connection_id)
     if config is None:
@@ -76,17 +89,33 @@ def _sync_full(service, connection_id, *, actor, check=lambda: None, minimum_int
         raise SyncError('CONNECTION_DISABLED')
     with closing(service._db()) as c:
         try:
-            run_id, token = service._claim(c, config, actor, None, None, minimum_interval=minimum_interval)
+            run_id, token = service._claim(c, config, actor, None, None, minimum_interval=minimum_interval, check=check)
         except sqlite3.Error:
             raise SyncError('STORAGE_BUSY', 503) from None
         error = None
+        current = [None, None]
+        client = None
+        audit_state = None
+        warnings = []
+        def observer(resource, parent):
+            check()
+            with service._write(c, check=check):
+                stamp = service._guard(c, config.id, run_id, token)
+                begin_collection(c, config.id, resource, parent, run_id, stamp)
+            current[:] = [resource, parent]
         try:
+            with service._write(c, check=check):
+                stamp = service._guard(c, config.id, run_id, token)
+                audit_mode(c, config.id, run_id, mode, stamp)
             client = service.client_factory(config)
+            client.coverage_observer = observer
             for batch in client.coverage_pages():
                 check()
-                service._touch(c, config.id, run_id, token)
+                if batch['resource'] == 'consents':
+                    audit_state = batch['state']
+                    if batch.get('error_code'): warnings.append(batch['error_code'])
                 # Persist complete safe projections alongside existing OF-L2 rows.
-                with immediate_transaction(c):
+                with service._write(c, check=check):
                     if batch['resource'] == 'accounts':
                         accounts = [ExternalAccount(config.id, row['id'], row.get('name'), row.get('type'),
                             row.get('subtype'), row.get('currencyCode'), row.get('updatedAt')) for row in batch['rows']]
@@ -106,14 +135,25 @@ def _sync_full(service, connection_id, *, actor, check=lambda: None, minimum_int
             error = 'COVERAGE_INVALID_OR_STORAGE_FAILURE'
         except Exception:
             error = 'COVERAGE_INTERNAL_FAILURE'
+        finally:
+            if client is not None: client.coverage_observer = None
         interrupted = error == 'AUTO_SYNC_CANCELLED' and actor == 'AUTO:coverage'
         try:
             if error:
-                with immediate_transaction(c):
+                with service._write(c):
                     # An expired worker may not write over a newer worker's diagnostics.
                     stamp = service._guard(c, config.id, run_id, token)
+                    if current[0] is not None:
+                        fail_collection(c, config.id, current[0], current[1], run_id, error, stamp, interrupted)
+                    c.execute("UPDATE of_collection_checkpoints SET state=?,error_code=?,observed_at=? WHERE run_id=? AND state='RUNNING'",
+                              ('INTERRUPTED' if interrupted else 'FAILED', error, stamp, run_id))
                     c.execute("UPDATE of_resource_coverage SET state='FAILED',error_code=?,observed_at=? WHERE run_id=? AND state='RUNNING'", (error, stamp, run_id))
-            return service._finish(c, config, run_id, token, error, interrupted=interrupted)
+            result = service._finish(c, config, run_id, token, error, interrupted=interrupted)
+            result.update(consent_audit_state=audit_state, financial_collection_state='FAILED' if error else 'COMPLETED', warnings=warnings)
+            if config.access_mode=='meupluggy_personal':
+                from .open_finance_presentation import present_run
+                result=present_run(c,config,result)
+            return result
         except sqlite3.Error:
             if interrupted:
                 # Do not pretend the lease was released when storage refuses cleanup.
@@ -122,7 +162,7 @@ def _sync_full(service, connection_id, *, actor, check=lambda: None, minimum_int
             raise
 
 
-def query(c, settings, values):
+def query(c, settings, values, *, manage_transaction=True):
     allowed = {'resource', 'connection_id', 'parent_id', 'state', 'page', 'page_size', 'type', 'currency', 'history'}
     if set(values) - allowed or any(len(v) != 1 for v in values.values()):
         raise SyncError('INVALID_QUERY', 422)
@@ -162,7 +202,7 @@ def query(c, settings, values):
         raise SyncError('INVALID_QUERY', 422)
     where = ' AND '.join(clauses)
     # Counts, rows and coverage share one read view.
-    c.execute('BEGIN')
+    if manage_transaction: c.execute('BEGIN')
     try:
         table = 'of_resource_revisions' if history == '1' else 'of_resource_records'
         order = 'id DESC' if history == '1' else 'connection_id,parent_id,external_id'
@@ -178,7 +218,7 @@ def query(c, settings, values):
                 'has_more': page * size < total, 'history': history == '1', 'coverage': coverage, 'source': 'CACHED_STAGING',
                 'net_worth': {'state': 'NOT_ESTABLISHED', 'reason': 'CURRENCY_AND_OVERLAP_NOT_PROVEN'}}
     finally:
-        c.rollback()
+        if manage_transaction: c.rollback()
 
 
 def coverage_status(c, settings=None):

@@ -1,4 +1,31 @@
-# Finance V17 — Open Finance 0.1.25
+# Finance V17 — candidata local 0.1.27-open-finance.1
+
+Schema candidato 11, com migration 011 aditiva. Não instalar sem revisão e autorização posterior.
+O slug finance_v17, porta 8766 e persistência /data são preservados.
+
+As seis áreas consultam projeções tipadas do staging, sem criar lançamentos oficiais.
+Contas e cartões navegam para movimentos, faturas e referências de extratos;
+posições navegam para suas movimentações. Dados ausentes/null/zero e cache
+desatualizado são distintos. O histórico é de observações, não rentabilidade calculada.
+Downloads de extratos e consolidação patrimonial não comprovada permanecem desabilitados.
+
+GET domain e relations não autenticam na Pluggy nem coletam dados.
+Coleta completa, reconciliação incremental e retomada exigem ação explícita do proprietário.
+Incremental significa upsert/revisão das alterações numa varredura completa limitada;
+retomada repete coleções idempotentemente, sem confiar em cursor antigo.
+Consentimentos estrangeiros continuam rejeitados. O diagnóstico não autoriza ignorar a guarda.
+
+O default de open_finance_auto_sync_enabled nesta candidata é **false**.
+Isso não modifica opções existentes: uma configuração persistida true precisa de
+decisão operacional explícita antes de qualquer futura inicialização.
+Não iniciar esta candidata com configuração copiada da produção durante ensaios.
+
+Detalhes: ../docs/open-finance/GATE_B_CONTRACTS.md. A recuperação de schema11
+para schema10 exige restaurar juntos código 0.1.26, configuração e banco correspondentes;
+trocar somente o código não reverte a migration. Backup/restore real pelo Supervisor
+não foi executado no Gate B.
+
+## Documentação histórica de 0.1.25 (defaults anteriores)
 
 Schema 10; migrations 001–010 preservadas. Atualizar de 0.1.23 não exige migration nova.
 Python 3.12.7, oauthlib 3.3.1 e Unicode13 versionado. Notices em

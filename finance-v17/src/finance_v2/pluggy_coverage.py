@@ -3,6 +3,7 @@ from decimal import Decimal
 from datetime import datetime, timezone
 from hashlib import sha256
 import json
+import math
 from pathlib import Path
 import re
 from urllib.parse import urlencode
@@ -108,6 +109,100 @@ def _expired(value):
         raise PluggyError('INVALID_RESPONSE') from None
 
 
+def _notify(client, resource, parent):
+    observer = getattr(client, 'coverage_observer', None)
+    if observer is not None: observer(resource, parent)
+
+
+def _whole_number(value):
+    """Provider JSON numbers may decode as Decimal; reject boolean/non-finite/fractional values."""
+    if type(value) is int:
+        return True
+    if isinstance(value, Decimal):
+        return value.is_finite() and value == value.to_integral_value()
+    return type(value) is float and math.isfinite(value) and value.is_integer()
+
+
+def _collection_batches(client, item, item_id, get, PluggyError, _identifier, resource, parent, path, query, optional=True):
+    _notify(client, resource, parent)
+    spec = CONTRACT['resources'][resource]
+    paged = 'page' in spec['parameters']
+    cursor = resource == 'transactions'
+    seen = set()
+    seen_ids = set()
+    request_query = query.copy()
+    observed = 0
+    expected_total = None
+    for page in range(1, client.max_pages + 1):
+        if paged:
+            request_query.update(page=page, pageSize=500)
+        current = path + ('?' + urlencode(request_query) if request_query else '')
+        if current in seen:
+            raise PluggyError('CURSOR_CYCLE')
+        seen.add(current)
+        data, state = get(current, optional)
+        if state != 'AVAILABLE':
+            if observed:
+                raise PluggyError('INVALID_RESPONSE')
+            yield {'resource': resource, 'parent': parent, 'rows': [], 'state': state, 'last': True}
+            return
+        rows = client._rows(data)
+        for row in rows:
+            if resource in ('accounts','investments','loans','consents') and row.get('itemId') != item_id:
+                raise annotate(PluggyError('ACCOUNT_SCOPE_MISMATCH'), stage='SCOPE_CHECK', category=scope_category(row), **describe_resource(resource))
+            if 'itemId' in row and row['itemId'] != item_id:
+                raise annotate(PluggyError('ACCOUNT_SCOPE_MISMATCH'), stage='SCOPE_CHECK', category=scope_category(row), **describe_resource(resource))
+            if resource == 'transactions' and row.get('accountId') != parent:
+                raise PluggyError('TRANSACTION_SCOPE_MISMATCH')
+            identity = _identifier(row.get('resourceId') if resource == 'resources' else row.get('id'))
+            if identity in seen_ids:
+                raise PluggyError('INVALID_RESPONSE')
+            seen_ids.add(identity)
+        observed += len(rows)
+        if cursor:
+            if 'next' not in data:
+                raise PluggyError('INVALID_RESPONSE')
+            nxt = data.get('next')
+            if nxt is not None:
+                # The existing strict parser pins account and date scope, rejects hosts/traversal.
+                current_next = client._cursor(nxt, query)
+                request_query = dict(current_next)
+            last = nxt is None
+        else:
+            total = data.get('total')
+            total_pages = data.get('totalPages')
+            response_page = data.get('page')
+            if not _whole_number(total) or not _whole_number(total_pages) or not _whole_number(response_page) or total < 0 or total_pages < 0:
+                raise PluggyError('INVALID_RESPONSE')
+            if (total_pages == 0 and total != 0) or response_page != page:
+                raise PluggyError('INVALID_RESPONSE')
+            if expected_total is None:
+                expected_total = total
+            if total != expected_total or observed > total or (not rows and observed < total):
+                raise PluggyError('INVALID_RESPONSE')
+            if not paged and total_pages > 1:
+                raise PluggyError('UNSUPPORTED_ACCOUNT_PAGINATION')
+            last = page >= total_pages
+            if last and observed != total:
+                raise PluggyError('INVALID_RESPONSE')
+        if resource == 'resources' and not item.get('resourcesCollectedAt') and not rows:
+            state = 'NOT_COLLECTED'
+        yield {'resource': resource, 'parent': parent, 'rows': rows, 'state': state, 'last': last}
+        if last:
+            return
+    raise PluggyError('PAGE_LIMIT')
+
+def collection_batches(client, item, resource, parent, path, query, optional=True):
+    """Shared validator for a documented cached collection; no AST or duplicated guards."""
+    from .pluggy_client import PluggyError, _identifier
+    if resource not in RESOURCES: raise PluggyError('INVALID_ENDPOINT')
+    item_id = _identifier(client.connection.item_id)
+    if item.get('id') != item_id: raise PluggyError('ACCOUNT_SCOPE_MISMATCH')
+    yield from _collection_batches(client, item, item_id,
+        lambda current, optional=False: client.coverage_get(current, optional=optional),
+        PluggyError, _identifier, resource, parent, path, query, optional)
+
+
 def collection_pages(client):
     """Configured Item only, bounded pages. Complete snapshots; no misleading createdAt-only delta."""
     from .pluggy_client import PluggyError, _identifier
@@ -123,6 +218,7 @@ def collection_pages(client):
             raise PluggyError('PAGE_LIMIT')
         return client.coverage_get(path, optional=optional)
 
+    _notify(client, 'item', '')
     item, state = get('/items/' + item_id)
     if item.get('id') != item_id:
         raise annotate(PluggyError('ACCOUNT_SCOPE_MISMATCH'), resource='item', operation='ITEM_GET', stage='SCOPE_CHECK', category=scope_category(item, 'id'))
@@ -139,74 +235,16 @@ def collection_pages(client):
         raise PluggyError('ITEM_STATUS_UNKNOWN')
 
     def pages(resource, parent, path, query, optional=True):
-        spec = CONTRACT['resources'][resource]
-        paged = 'page' in spec['parameters']
-        cursor = resource == 'transactions'
-        seen = set()
-        seen_ids = set()
-        request_query = query.copy()
-        observed = 0
-        expected_total = None
-        for page in range(1, client.max_pages + 1):
-            if paged:
-                request_query.update(page=page, pageSize=500)
-            current = path + ('?' + urlencode(request_query) if request_query else '')
-            if current in seen:
-                raise PluggyError('CURSOR_CYCLE')
-            seen.add(current)
-            data, state = get(current, optional)
-            if state != 'AVAILABLE':
-                if observed:
-                    raise PluggyError('INVALID_RESPONSE')
-                yield {'resource': resource, 'parent': parent, 'rows': [], 'state': state, 'last': True}
-                return
-            rows = client._rows(data)
-            for row in rows:
-                if resource in ('accounts','investments','loans','consents') and row.get('itemId') != item_id:
-                    raise annotate(PluggyError('ACCOUNT_SCOPE_MISMATCH'), stage='SCOPE_CHECK', category=scope_category(row), **describe_resource(resource))
-                if 'itemId' in row and row['itemId'] != item_id:
-                    raise annotate(PluggyError('ACCOUNT_SCOPE_MISMATCH'), stage='SCOPE_CHECK', category=scope_category(row), **describe_resource(resource))
-                if resource == 'transactions' and row.get('accountId') != parent:
-                    raise PluggyError('TRANSACTION_SCOPE_MISMATCH')
-                identity = _identifier(row.get('resourceId') if resource == 'resources' else row.get('id'))
-                if identity in seen_ids:
-                    raise PluggyError('INVALID_RESPONSE')
-                seen_ids.add(identity)
-            observed += len(rows)
-            if cursor:
-                if 'next' not in data:
-                    raise PluggyError('INVALID_RESPONSE')
-                nxt = data.get('next')
-                if nxt is not None:
-                    # The existing strict parser pins account and date scope, rejects hosts/traversal.
-                    current_next = client._cursor(nxt, query)
-                    request_query = dict(current_next)
-                last = nxt is None
-            else:
-                total = data.get('total')
-                total_pages = data.get('totalPages')
-                if type(total) is not int or type(total_pages) is not int or total < 0 or total_pages < 0:
-                    raise PluggyError('INVALID_RESPONSE')
-                if (total_pages == 0 and total != 0) or data.get('page') != page:
-                    raise PluggyError('INVALID_RESPONSE')
-                if expected_total is None:
-                    expected_total = total
-                if total != expected_total or observed > total or (not rows and observed < total):
-                    raise PluggyError('INVALID_RESPONSE')
-                if not paged and total_pages > 1:
-                    raise PluggyError('UNSUPPORTED_ACCOUNT_PAGINATION')
-                last = page >= total_pages
-                if last and observed != total:
-                    raise PluggyError('INVALID_RESPONSE')
-            if resource == 'resources' and not item.get('resourcesCollectedAt') and not rows:
-                state = 'NOT_COLLECTED'
-            yield {'resource': resource, 'parent': parent, 'rows': rows, 'state': state, 'last': last}
-            if last:
-                return
-        raise PluggyError('PAGE_LIMIT')
+        yield from _collection_batches(client, item, item_id, get, PluggyError, _identifier,
+                                       resource, parent, path, query, optional)
 
+    from .pluggy_access_policy import validate_access_context, personal_consents
+    validate_access_context(client.connection, item)
     for resource in ('resources', 'consents'):
         consents=[]
+        if resource == 'consents' and client.connection.access_mode == 'meupluggy_personal':
+            yield from personal_consents(client, item, item_id, get)
+            continue
         for batch in pages(resource, '', '/items/' + item_id + '/resources' if resource == 'resources' else '/consents',
                          {} if resource == 'resources' else {'itemId': item_id}):
             if resource=='consents' and batch['state']=='AVAILABLE':consents.extend(batch['rows'])
