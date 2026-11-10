@@ -1,0 +1,481 @@
+{
+  "candidate_version": "0.1.28-open-finance.1",
+  "base_tag": "v0.1.27-open-finance.1",
+  "base_commit": "3672d20d5f6ec7262a506a3779805f7271bfc5c0",
+  "schema": 11,
+  "source_sha256": {
+    ".dockerignore": "e9904728da8956404e355e80b261b2b5bc2b584737907d94a3dea72e595ecbd0",
+    "CHANGELOG.md": "70f2d8a23a73d039448083c90521de5465cefe30cbd906672eee339957c4ff47",
+    "DOCS.md": "a1b8b45726b4db21ac8d610389f8e11aa35899106d2d7d5bbf3b616f74d4307e",
+    "Dockerfile": "60e6027abfbc1f9b0bd3fa2f10872c364d207cb3e0a4eebdd46f7af46ed6128f",
+    "config.yaml": "2cfc944dcd536da015ab1192fef0b88300d73bd0846a2208c90c57daf4b32003",
+    "migrate.sh": "488c3e2915f3aa3e07d3622b1bc5c996296b1bf2ecc265def868107879be90c6",
+    "requirements-deploy.txt": "7a375b056ad7ad462a5cb9c76c73cbde0bb9aa1d0af3c22275306dbfdb178dc6",
+    "run.sh": "7fbdce1c1a73a97ad757042956512d76bc3fb0df6bdb023e17cb7f06bec0b070",
+    "migrations/001_v16_schema.sql": "4d007847de4a76b0d190de065782831e94a1de698feedb8be0cb14e42df014b7",
+    "migrations/002_v17_revenues.sql": "e4c8972dbfe6271f0ad02897ffddf5b1a3544ee5074b7315f390f1e9bd2b70c0",
+    "migrations/003_v17_recurring_revenues.sql": "f5f6d6aabf85f66b1af2e44436e193404ec2fe6b6078edb559272ac6166c6fd6",
+    "migrations/004_v17_multimethod_installments.sql": "500b389c804c259e5953b7e4719e07ff543e65d0edf5d4c8ccb0b908f92620c8",
+    "migrations/005_v17_expense_tombstone.sql": "7d29c5151ad4703001f2c1f76482a48650efd2d92e8976d7b93c3c54282b2f86",
+    "migrations/006_v17_revenue_recurrence_versions.sql": "e7daa63b8b8174d416368062832efc9ef57fbd841958311b3dbd3bc4ac8fc421",
+    "migrations/007_v17_oauth_foundation.sql": "a7d135cfd7dda6f11a6d5a28317c24d7fb8b7476e73f70d3e0005bacfc5dd924",
+    "migrations/008_v17_oauth_refresh.sql": "3b2d818b0bceba9c57cb882e149a546e781dee7dcb21f6ce0c4e9e006b6b111a",
+    "migrations/009_open_finance_foundation.sql": "f40bf2a455caa70925c008ebc13cb9c36dbf4fb2cee7ac309b3015c7f7975e72",
+    "migrations/010_open_finance_coverage.sql": "4608c15b0977c166cda3ec7112e20d67bdf091706ab2c8ad860930d2b02fec9e",
+    "migrations/011_open_finance_domain_links.sql": "8fcee297fb2d8e9ccee6b98c154d7f147ab83d48d991d9e1113819128a5dda65",
+    "src/finance_v2/PYTHON_REFERENCE_LICENSE.txt": "023163d4252112720e12757861bdd0272105ee1f67ed6a44130e652189a2f7ab",
+    "src/finance_v2/UNICODE13_NOTICES.md": "86fcffea7f6e15385b93e7bb390cd44cd7bb65d05f672c68e8d556ee88679134",
+    "src/finance_v2/UNICODE_DATA_LICENSE_2020.txt": "0efaca9742a27a3f5a7f6f2b5c40a1d227295246e2483308bf83e05871fa202a",
+    "src/finance_v2/UNICODE_LICENSE_V3.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
+    "src/finance_v2/__init__.py": "9aa322bfd8ab28c718170dd95490e6dd6a79b8e6c7780dc53df59d3c2760a18d",
+    "src/finance_v2/__main__.py": "e826bf61a5bd24948badf5fc63e48e9ea442aff1b59aac8b2db98ab986246e0c",
+    "src/finance_v2/api.py": "8f9e561da2e718871d25e079f228ec843f989835621c2c75ed3121b310f386f1",
+    "src/finance_v2/authorization.py": "aca9bbcef76a877fff384d1d8667ce10136acdc948f364f5aab87f56440df281",
+    "src/finance_v2/config.py": "9a1e326203c57ddd37be92650de560bd500e2f110bc8d218feebde57e33564db",
+    "src/finance_v2/db.py": "cc857220f0beee6b325de7d0d8b2e4dcd41a712589ba0a092f2305f2695ce79b",
+    "src/finance_v2/ha_pluggy_options.py": "6bb4584759bf945a01587fcb88b425066c5a710a08d927fef9def8c453de47da",
+    "src/finance_v2/http_runtime.py": "389eb8677365ec1656daad177db86855d4644c873eb80b9bf39b93065dc52aa3",
+    "src/finance_v2/idempotency.py": "137fe167853d2f7aa647cc0e9d5d1db4cc1278f715102d015d962796536f33a2",
+    "src/finance_v2/mcp_recurring.py": "cbc61bbf7a006b68a71146cc032733958dd9868b939768ad67c05a44defbe696",
+    "src/finance_v2/migrations.py": "4b437748ee1f3fc6e79cb4c11ec77f2d510d056a5f52627e2989e12af9639e3c",
+    "src/finance_v2/oauth.py": "723578407440dc5a452c42f6263e53abf79a2e73b45bcc07a8a123002d484bf6",
+    "src/finance_v2/oauth_server.py": "60513b9dacf531aa3117518165b9c6d0de4d605c6c6e52151b672ec14b518db1",
+    "src/finance_v2/open_finance.py": "2e5b60f287ff14af2435c1e79c5ad1420733e521bd6d8253fc0912775e442fd1",
+    "src/finance_v2/open_finance_auto.py": "c380136c5e1d976c7994d2869fd563cbb809455b9de32cfcbd47cfc8b7462ac3",
+    "src/finance_v2/open_finance_coverage.py": "3a4e05da9e4e35441dab7b1cad59a2c738308865b3caf005f3323b9f7482faf8",
+    "src/finance_v2/open_finance_diagnostics.py": "8b75668a8baeb29af8d62061f4193b4703eef1342df7a98dce97c82e4bc51cfe",
+    "src/finance_v2/open_finance_domain.py": "cae8725a4dd5c5f74c8de3928964fc80afcf3b72c0a8afa8febb9fa53ab84322",
+    "src/finance_v2/open_finance_http.py": "6b1afb936cb612bd48c0b65ea7a0d83bdacbd7c95aacf0400f9e7397c7d241e8",
+    "src/finance_v2/open_finance_output_privacy.py": "2c3c2c9ec098ba60862709efa90d3811c58d09775575f81ad3c26dcfdd0ede82",
+    "src/finance_v2/open_finance_presentation.py": "c5b0c82f9c75925710b81dd0f7a36bca081d74bd56a267ce9dc3f9c4a169a21f",
+    "src/finance_v2/open_finance_query.py": "f7786a5dab271c1e2c25e4b14b9d764a7d36b899c8e2d0f79d9a962d5805857a",
+    "src/finance_v2/open_finance_relations.py": "c2801c62b8a801d652b2d716261e96f74a67841dd8f8c4d3eb291f9aada71367",
+    "src/finance_v2/open_finance_write.py": "5f30c7e67eb457e16df22184d7d2979d8fc3c48b8bfeaf7652cf8568dcb20b96",
+    "src/finance_v2/pluggy_access_policy.py": "d6cf195f05495b1897038e166b3b93e52ff5f647585d4d528f0bc3d6423fd092",
+    "src/finance_v2/pluggy_client.py": "078679a4acfca840c67ec43ce3718beb1f2e6ef2b0889769ad673b669923c85f",
+    "src/finance_v2/pluggy_config.py": "9ca8f368592a43de33adefc3b6b1615f4a40b56491a3965905152992e7dee4d6",
+    "src/finance_v2/pluggy_coverage.py": "20a8d12cabe7e3459531c6b903f368ff1cfd88e8f59fb514df0b8f1dae7db7a8",
+    "src/finance_v2/pluggy_coverage_contracts.json": "985404c7ec53efe9f97dc9a8591c444d974bf14cf414f8badee4840e798f6419",
+    "src/finance_v2/unicode13_f06.py": "6c7ec1703a30fe81a9d577604dfc1b999d9ae48bf78b1318c20de8e9662cbcd9",
+    "src/finance_v2/unicode13_manifest.json": "9a279aca79b09f3ce3c49eea630619bed88115f416f81a97324093b4d856f07a",
+    "src/finance_v2/unicode13_primitives.json": "de81088662045384d1f0b07fdf53a40bee297843782fe80bf1aaea94383baaa4",
+    "src/finance_v2/open_finance_recovery_schema.json": "bf640d233afab2af8cb2be1d1e7912d417db5b73bd5b8c48bd640174dd14155f",
+    "src/finance_v2/open_finance_recovery_checks.py": "6091a62d276920f538cb745e9a5e2414f9a7f5ece20a1931c0008a5941cfdea8",
+    "src/finance_v2/open_finance_recovery.py": "9c6ebf982d47d27c654a1a9a2d74113170661eaf012daaedf6af5968b7c00089",
+    "src/finance_v2/domain/__init__.py": "7169ba116bd572790380eeb6c760299de48384f2a8ac0a9793d766c6ada6947a",
+    "src/finance_v2/domain/auto_debit.py": "b125dbe0e9257742e45c35ec0f78b83bec339902ace22911d06219214943b72a",
+    "src/finance_v2/domain/automation.py": "35ed337f5722da998567384511a9749a65731a7a4081dff382a24609f64df92b",
+    "src/finance_v2/domain/calendar.py": "5957dfe49de2ee7816e7a8e056f577238df8394a62e07b2572b75e5b3ace876c",
+    "src/finance_v2/domain/catalog.py": "a2cb5a085ac6c40c98b600cea658eba60eb9cf388dba02a42e7ba63e35bf6475",
+    "src/finance_v2/domain/clock.py": "899ca93e36215e972c9ae69c0f25fe36faf9c8ace784f9c993c988af89caef7e",
+    "src/finance_v2/domain/errors.py": "3eefb0319a087ee6dc704015a414fef6108f48c5399bb80df77ca9e3508bef63",
+    "src/finance_v2/domain/expenses.py": "f7736e1d41f60a87d89a3c13d72dbcf330ae4a0f7c9c38dd67bcd5b83da5960d",
+    "src/finance_v2/domain/idempotent.py": "1d33612240f097ae4e5d17c753c752539fa312d4d35918228788f12ac510b7cc",
+    "src/finance_v2/domain/installments.py": "0adb3291dd888a36a7ce4b7e994aa9fe998ce0489340324889a00cc62d0f4629",
+    "src/finance_v2/domain/invoices.py": "1a8e93856e819afb767b8e78c72b903893b5e0ccff555383be97eb974e74ec25",
+    "src/finance_v2/domain/money.py": "fd54361de33fc7aec997f96bf710ba3d9fb3e3430dcde258b226c1518387b20c",
+    "src/finance_v2/domain/recurrence.py": "207353508e083627053909db27105896a5f0f48a7e391fa0ed0a3920a8b2d997",
+    "src/finance_v2/domain/recurrence_projection.py": "aac80fe2933274e3de304be0b720f73795c7f9d814795e8f4e2e9b1c0d52bf35",
+    "src/finance_v2/domain/reports.py": "356018ec24872b62ed1ca707b14db62457743f70a9e6f2c61c795cce035cdde6",
+    "src/finance_v2/domain/revenue_recurrence.py": "621f5f1c26ce55d6300021d8392a835688f5dcff76bc229bebc6dc282ff78d98",
+    "src/finance_v2/domain/revenues.py": "a281b1ec600b3cb72e39452ae121b045841e426c8ef720df4518558c7787ad0f",
+    "src/finance_v2/domain/support.py": "7e29871207ecaade1cb9460f95e8c4247cfe07a3d8519a2d14d04cfa1c080be1",
+    "src/finance_v2/scheduler/__init__.py": "0f6c705603cab360e2322532134405a1f486a78b90dfd376da33f5f8419ed54c",
+    "src/finance_v2/scheduler/service.py": "9bbe1117a01e9a53fbb2bdb7691a082f4a1a0c9c6413e26082065d43260150fa",
+    "src/finance_v2/web/app.js": "33f2b2c290dfe74314f4fb1dc8bf23ad4c87642444249e80096f6b2607831b3d",
+    "src/finance_v2/web/capabilities.js": "74a7611fecff5a8ccb55b2a065c162e54bbe5e9bf2ca02ff99e4ef3c100905b6",
+    "src/finance_v2/web/completion.css": "a03b1c7195d7113f2bdf75e453879967cfa5a5183e12055d8c07cd100fcc8b73",
+    "src/finance_v2/web/completion.js": "0fca983d69a53df2a28e2d05287fd76b105fce2cd9157956238680a53c112b09",
+    "src/finance_v2/web/forms.css": "2802e35ba26fe03463d93fbad6bccd9fc9f43c54ed19ee77c5f482e439cec555",
+    "src/finance_v2/web/icons.js": "6eab9da9eb654dbba8b47564dc963d191340ea4431b716fee73910002825077e",
+    "src/finance_v2/web/index.html": "5f927a4d101cc95c2bbe08bab1e6e189990c52982a7714814b0331b8294a8fe3",
+    "src/finance_v2/web/navigation.js": "f81d1731c7c41e4b4b921b0bcce7e67918254dceaaed0016a09ba051cd4d73a4",
+    "src/finance_v2/web/open-finance-coverage.js": "414ea476e873bb98dc1ce85ce1ddc962f5a212a4cd64e37aa705e1c763b45221",
+    "src/finance_v2/web/open-finance-domain.js": "40bf763866f88ff8f027637cf6535e529109c4a577a27b17f00cdaca851650dd",
+    "src/finance_v2/web/open-finance-errors.js": "576a2e144ff32d09b925f2d500a6e3fff6d661330605f7ff91b06a9e9dbb6d86",
+    "src/finance_v2/web/open-finance-status.js": "7dca2681c60f11d8e034969e6e89f1871c42b5d72db555efe0b7201a358755f4",
+    "src/finance_v2/web/open-finance.css": "f584cee57b533f14eeddc65fea5ac4c71a807a123467333e5f124c2303923283",
+    "src/finance_v2/web/open-finance.js": "822f3f5badb259a8c5f8097249b1520cf4cef7cfe284b86f8ff499d0db2a7521",
+    "src/finance_v2/web/presentation.js": "bed2ee2c3b3f57fa91a21aec11bcccd47d58fa1bd6cc5f996097f0f9fad9da2a",
+    "src/finance_v2/web/privacy.css": "315e53e0f4e7df96d47d94bf15d7645a83023bb7747d3e0444a8b9c00b47eca1",
+    "src/finance_v2/web/privacy.js": "2d6bfb4f89bfed54f29bd453c1e9fa8c77b6613993788336d1633d54d98f8999",
+    "src/finance_v2/web/query-generation.js": "a87b49264c5dc2232afa5d67498c21947fbf01ac0f2dce6d41186d89ba6abdbe",
+    "src/finance_v2/web/revenues.js": "9626603d886ef025ce1bd41791d86066473f447a1f0a97839401db0c994f040a",
+    "src/finance_v2/web/styles.css": "9ca8179c66c19c1d4044d0644cdc1f9d1e071ea72c01e20b283a1fd8aaa6dd46",
+    "src/finance_v2/web/unlock.html": "b2be8b6548e357888c13eb4ab7f788edee66604798c71d27fb91e0700bba79a5",
+    "src/finance_v2/web/santander-binding-recovery.js": "224b8c641c4c5230db3a2b234a13448a16d78425a271b36713199f1e785c4a08"
+  },
+  "protected_sha256": {
+    "finance-v17/run.sh": "7fbdce1c1a73a97ad757042956512d76bc3fb0df6bdb023e17cb7f06bec0b070",
+    "finance-v17/src/finance_v2/PYTHON_REFERENCE_LICENSE.txt": "023163d4252112720e12757861bdd0272105ee1f67ed6a44130e652189a2f7ab",
+    "finance-v17/src/finance_v2/UNICODE13_NOTICES.md": "86fcffea7f6e15385b93e7bb390cd44cd7bb65d05f672c68e8d556ee88679134",
+    "finance-v17/src/finance_v2/UNICODE_DATA_LICENSE_2020.txt": "0efaca9742a27a3f5a7f6f2b5c40a1d227295246e2483308bf83e05871fa202a",
+    "finance-v17/src/finance_v2/UNICODE_LICENSE_V3.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
+    "finance-v17/src/finance_v2/unicode13_f06.py": "6c7ec1703a30fe81a9d577604dfc1b999d9ae48bf78b1318c20de8e9662cbcd9",
+    "finance-v17/src/finance_v2/unicode13_manifest.json": "9a279aca79b09f3ce3c49eea630619bed88115f416f81a97324093b4d856f07a",
+    "finance-v17/src/finance_v2/unicode13_primitives.json": "de81088662045384d1f0b07fdf53a40bee297843782fe80bf1aaea94383baaa4"
+  },
+  "windows": {
+    "pass": 219,
+    "suites": [
+      {
+        "suite": "tests/auto_sync/test_cancellation.py",
+        "tests": 12,
+        "exit_code": 0,
+        "seconds": 7.81,
+        "status": "PASS",
+        "evidence_sha256": "4a6d78ad90a69566e5c52ded885569bd4576894a607e4612dac9b02df2f81343"
+      },
+      {
+        "suite": "tests/auto_sync/test_diagnostics.py",
+        "tests": 30,
+        "exit_code": 0,
+        "seconds": 2.55,
+        "status": "PASS",
+        "evidence_sha256": "50670c564f642e19410603a8ffe828fb86d642500e02e5002febeacf99d57ebc"
+      },
+      {
+        "suite": "tests/auto_sync/test_release_policy.py",
+        "tests": 10,
+        "exit_code": 0,
+        "seconds": 4.83,
+        "status": "PASS",
+        "evidence_sha256": "12e803a8f8decb6a305276a5eb61cd260a13a1734c1bfd9c9948fba8748f4972"
+      },
+      {
+        "suite": "tests/auto_sync/test_sqlite_validation.py",
+        "tests": 18,
+        "exit_code": 0,
+        "seconds": 10.14,
+        "status": "PASS",
+        "evidence_sha256": "9ba4e114d9922d6aac9b659945fa27f88bb153996cf9b9ebcab3334e0ead814c"
+      },
+      {
+        "suite": "tests/test_addon_config_integration.py",
+        "tests": 8,
+        "exit_code": 0,
+        "seconds": 0.61,
+        "status": "PASS",
+        "evidence_sha256": "0d2093bdbd30ea58d4b06d48cf649fd13689d1f6ee25ef253fccd6e026b0d57a"
+      },
+      {
+        "suite": "tests/test_consent_presentation.py",
+        "tests": 13,
+        "exit_code": 0,
+        "seconds": 1.66,
+        "status": "PASS",
+        "evidence_sha256": "2e81cd64972a811535622715c3bc72a89ef11391fe2b7421cc8f03162298fd7d"
+      },
+      {
+        "suite": "tests/test_d08_auth.py",
+        "tests": 8,
+        "exit_code": 0,
+        "seconds": 0.24,
+        "status": "PASS",
+        "evidence_sha256": "63e4a1e651274be9ff7d11a327f253e50d72b56377a0674bde7eb79c67aefa4d"
+      },
+      {
+        "suite": "tests/test_full_coverage.py",
+        "tests": 20,
+        "exit_code": 0,
+        "seconds": 2.58,
+        "status": "PASS",
+        "evidence_sha256": "03dd9a2d572bdf7132fe3469efa96b929fba1cd72c4bc4d51653193a8ad82b0a"
+      },
+      {
+        "suite": "tests/test_gate_b.py",
+        "tests": 18,
+        "exit_code": 0,
+        "seconds": 3.09,
+        "status": "PASS",
+        "baseline_fixture": "public_release_0.1.26_source",
+        "evidence_sha256": "5e0f791d6cbccdabac841fd5380ab640c057a8bf81aa509c89981ff469e4985e"
+      },
+      {
+        "suite": "tests/test_gate_c1.py",
+        "tests": 14,
+        "exit_code": 0,
+        "seconds": 2.38,
+        "status": "PASS",
+        "evidence_sha256": "d07d161faad9693b34ebbb81af9cd78e6bc3673af79e1e119bc5a261619c8c58"
+      },
+      {
+        "suite": "tests/test_gate_c6r.py",
+        "tests": 8,
+        "exit_code": 0,
+        "seconds": 4.67,
+        "status": "PASS",
+        "evidence_sha256": "7a6be74f0a5daf05f9b49ee7124ddf10923d46516163f0b82e1d1cfd5fcb18a8"
+      },
+      {
+        "suite": "tests/test_output_privacy.py",
+        "tests": 6,
+        "exit_code": 0,
+        "seconds": 1.66,
+        "status": "PASS",
+        "evidence_sha256": "5da1c596d73322e7aa232489cbdac842bd3a9c7d8f3c3c704ef60a4d2fb36f1f"
+      },
+      {
+        "suite": "tests/test_personal_proxy.py",
+        "tests": 22,
+        "exit_code": 0,
+        "seconds": 2.06,
+        "status": "PASS",
+        "evidence_sha256": "265ec4b65b33349ef130900caf5d34d667363100748b23733241db11eb455188"
+      },
+      {
+        "suite": "tests/test_santander_binding_recovery.py",
+        "tests": 32,
+        "exit_code": 0,
+        "seconds": 4.371,
+        "status": "PASS",
+        "log": "RECOVERY_FINAL_TEST_LOG.txt",
+        "evidence_sha256": "2c65f8e4de35680aa454079be5477d150c730b90384d832d575f77c828c49dae"
+      }
+    ]
+  },
+  "arm64": {
+    "pass": 219,
+    "architecture": "aarch64",
+    "python": "3.12.7",
+    "sqlite": "3.40.1",
+    "image": "finance-v17-santander-recovery:0.1.28-arm64",
+    "suites": [
+      {
+        "suite": "tests/auto_sync/test_cancellation.py",
+        "tests": 12,
+        "exit_code": 0,
+        "seconds": 33.38,
+        "evidence_sha256": "9d3a672a9a340664d40923a6bac1d3755850ec38d99999c4ecb9764e503805c1"
+      },
+      {
+        "suite": "tests/auto_sync/test_diagnostics.py",
+        "tests": 30,
+        "exit_code": 0,
+        "seconds": 19.3,
+        "evidence_sha256": "88e489bb80ccfe64368649c3138df8db4eeec25cb5b4e5ed1e7344a3349170a4"
+      },
+      {
+        "suite": "tests/auto_sync/test_release_policy.py",
+        "tests": 10,
+        "exit_code": 0,
+        "seconds": 23.19,
+        "evidence_sha256": "b4b9a791f062ac6855217167c14f12d927f10ecedaf049222b7698a54584e921"
+      },
+      {
+        "suite": "tests/auto_sync/test_sqlite_validation.py",
+        "tests": 18,
+        "exit_code": 0,
+        "seconds": 60.6,
+        "evidence_sha256": "5c2481dbfee1cc2cbbed419b680790da46fb11a0951626399a4ad4abc6ae0e74"
+      },
+      {
+        "suite": "tests/test_addon_config_integration.py",
+        "tests": 8,
+        "exit_code": 0,
+        "seconds": 11.59,
+        "evidence_sha256": "51710265602fc2aa311c68de28c1eb467091c4e5b14403e82d40d2168e02ef91"
+      },
+      {
+        "suite": "tests/test_consent_presentation.py",
+        "tests": 13,
+        "exit_code": 0,
+        "seconds": 19.52,
+        "evidence_sha256": "8d48bb77a07104691659421e763b91db31b45d89fd307a01c08d05e16c865cdd"
+      },
+      {
+        "suite": "tests/test_d08_auth.py",
+        "tests": 8,
+        "exit_code": 0,
+        "seconds": 4.93,
+        "evidence_sha256": "496408637ce59d304e26f954af5350736cecca7e53143e900b9185a9a7eee737"
+      },
+      {
+        "suite": "tests/test_full_coverage.py",
+        "tests": 20,
+        "exit_code": 0,
+        "seconds": 26.69,
+        "evidence_sha256": "4cb4e1954cae2da5ca532223cb06e1149cc10c7c1d54323df17abc7d81011f22"
+      },
+      {
+        "suite": "tests/test_gate_b.py",
+        "tests": 18,
+        "exit_code": 0,
+        "seconds": 35.57,
+        "evidence_sha256": "f6206cd96def5d40a1af9bc51d642b316624b82cc289325f31ed91cd8ea0b08b"
+      },
+      {
+        "suite": "tests/test_gate_c1.py",
+        "tests": 14,
+        "exit_code": 0,
+        "seconds": 17.56,
+        "evidence_sha256": "515b81498ebdf9285399f43e060b1d3efa3eb54287e88efcf6118c394155d1ce"
+      },
+      {
+        "suite": "tests/test_gate_c6r.py",
+        "tests": 8,
+        "exit_code": 0,
+        "seconds": 22.95,
+        "evidence_sha256": "c6300495e91efc5bb6c6b5e6e7383988fa225c2219bb7f30de151835fbc67e2b"
+      },
+      {
+        "suite": "tests/test_output_privacy.py",
+        "tests": 6,
+        "exit_code": 0,
+        "seconds": 20.77,
+        "evidence_sha256": "4300fb9162b99aba3f550d7388e936d2c2cb3099a82d4ab766db1ba7215dbe1e"
+      },
+      {
+        "suite": "tests/test_personal_proxy.py",
+        "tests": 22,
+        "exit_code": 0,
+        "seconds": 21.97,
+        "evidence_sha256": "4ae8461f693e9171c11b326a120aed6b1c93cea62a308fdb79f8190b84609503"
+      },
+      {
+        "suite": "tests/test_santander_binding_recovery.py",
+        "tests": 32,
+        "exit_code": 0,
+        "seconds": 43.78,
+        "evidence_sha256": "098c4588808930d73df652ef09475e995167f78f12b5337c4699dfe812aa70a0"
+      }
+    ]
+  },
+  "browser": {
+    "pass": 89,
+    "suites": [
+      {
+        "suite": "phase_a_ui.cjs",
+        "exit_code": 0,
+        "tests": 38,
+        "evidence_sha256": "f6cf8931eabba6dcf16901abc3d6d20c304d4dc8f0cd6327c25a32783a473e03"
+      },
+      {
+        "suite": "gate_b_ui.cjs",
+        "exit_code": 0,
+        "tests": 8,
+        "evidence_sha256": "04ae5258862cf2888b34d0b053d009887cc14847daf0f3e144f3a8297e297bac"
+      },
+      {
+        "suite": "test_d08_ui.mjs",
+        "exit_code": 0,
+        "tests": 7,
+        "evidence_sha256": "f99407e3ba78c57544bec4de100c90a3d0497b508a65e2301d523e98c6d5c7ed"
+      },
+      {
+        "suite": "test_gate_c6r_ui.cjs",
+        "exit_code": 0,
+        "tests": 7,
+        "evidence_sha256": "3cab354fd0484d44970c9fc25c6ffcb25dfec4c1cfff0c688daf51c10bf48225"
+      },
+      {
+        "suite": "test_gate_c7r_navigation.cjs",
+        "exit_code": 0,
+        "tests": 8,
+        "evidence_sha256": "d4b9df983c518db123afa09b79721ee5ccb9fbd5cbd28cffc2beddecceab36a3"
+      },
+      {
+        "suite": "test_gate_c8r_queries.cjs",
+        "exit_code": 0,
+        "tests": 12,
+        "evidence_sha256": "8db077940917e265da31e015901bf24b09a0685b19c4981c2dcc75277c31995d"
+      },
+      {
+        "suite": "test_santander_binding_recovery_ui.cjs",
+        "exit_code": 0,
+        "tests": 9,
+        "evidence_sha256": "770ee2398d94dd2b4e0ab2f529b5a292899eb4d079f909777128a3b39d31591f"
+      }
+    ]
+  },
+  "supervisor_lab": {
+    "SOURCE_IMAGE_MATCH": {
+      "observed": {
+        "status": "PASS",
+        "files_verified": 93,
+        "architecture": "aarch64",
+        "source_image_match": true
+      },
+      "evidence_sha256": "70e278cacbc06ac165c4a852424070df0c2685254e2bb76bb94ab08a792a423a"
+    },
+    "ACTUAL_HTTP_APPLY": {
+      "observed": {
+        "status": "PASS",
+        "mode": "apply",
+        "checks": [
+          "ACTUAL_APPLICATION_SETTINGS",
+          "ONE_FIELD_ONLY",
+          "26_SANTANDER_RUNS_PRESERVED",
+          "ITAU_AND_ALL_MANUAL_TABLES_PRESERVED",
+          "ALL_13_TABLES_CHECKED",
+          "IDEMPOTENT_NOOP",
+          "PRIVATE_AUDIT_PERMISSIONS",
+          "SQLITE_INTEGRITY",
+          "SCHEMA11_NO_MIGRATION",
+          "FOREIGN_KEYS"
+        ],
+        "bank_api_calls": 0,
+        "real_data": false
+      },
+      "evidence_sha256": "9cb52db19687b9b0f57a8fa0f9addd09a86f1c94156f1d1b2e61ccc3ef46e163"
+    },
+    "ACTUAL_HTTP_REVERT_AFTER_RESTART": {
+      "observed": {
+        "status": "PASS",
+        "mode": "revert",
+        "checks": [
+          "ACTUAL_APPLICATION_SETTINGS",
+          "PERSISTENCE_AFTER_SUPERVISOR_RESTART",
+          "SELECTIVE_REVERSAL",
+          "26_RUNS_STILL_PRESERVED",
+          "OTHER_DATA_UNCHANGED",
+          "SQLITE_INTEGRITY",
+          "SCHEMA11_NO_MIGRATION",
+          "FOREIGN_KEYS"
+        ],
+        "bank_api_calls": 0,
+        "real_data": false
+      },
+      "evidence_sha256": "7cff7916b4ee9be49e95193be051c6e59baadf4030e99eeef6eb335c570746a6"
+    },
+    "FINAL_SUPERVISOR": {
+      "observed": {
+        "version": "2026.10.5",
+        "arch": "aarch64",
+        "supported": true,
+        "healthy": true
+      },
+      "evidence_sha256": "99317caa7c69849b2d03cb0e5c4f835a15d2468859215128ee290e3454503071"
+    },
+    "FINAL_ADDON": {
+      "observed": {
+        "slug": "local_finance_v17",
+        "version": "0.1.28-open-finance.1",
+        "state": "started",
+        "watchdog": false,
+        "auto_update": false
+      },
+      "evidence_sha256": "834748545c7cb42fef4befdcb624092634429ef687cdbb0142342da7b9e0340a"
+    },
+    "GRACEFUL_ADDON_STOP": {
+      "observed": {
+        "status": "PASS"
+      },
+      "evidence_sha256": "86fe989d29a499e70a2b411b52efb85bc1f6b1ebf6520b2bd4fd27928b24b958"
+    }
+  },
+  "host_arm64_image_config_digest": "sha256:abab65f24760ec32b4a595fc561ea33da0b8cde6fe917f611c2e57d40787a6cb",
+  "supervisor_arm64_image_config_digest": "sha256:a1bd974c4db42d65622b00b6c4ba694755ef3bdc413741ce47e157c9d358916f",
+  "host_image_archive_sha256": "58917d4f164d65ef7b6a111840f346be3d3e61e749c60aed22c902670dfef83a",
+  "registry_publication": false,
+  "real_bank_requests": 0,
+  "vault_accessed": false,
+  "production_modified": false,
+  "production_recovery_authorized": false,
+  "baseline_0126_fixture": {
+    "commit": "3c4e131e6592a1155cb06910c5188bf2fd5793b2",
+    "files": 77,
+    "mismatches": [],
+    "comparison": "bytes except platform line ending normalization"
+  }
+}

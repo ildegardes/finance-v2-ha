@@ -13,6 +13,9 @@ from .pluggy_coverage import RESOURCES, CONTRACT, output_schema
 
 PREFIX = '/api/v2/open-finance/'
 OPERATIONS = (
+    ('GET','santander-binding-recovery','recovery_inspect'),
+    ('POST','santander-binding-recovery/prepare','recovery_prepare'),
+    ('POST','santander-binding-recovery/confirm','recovery_confirm'),
     ('GET','connections','connections'), ('POST','sync','sync'),
     ('POST','sync-all','sync_all'), ('GET','sync-runs','runs'),
     ('GET','sync-run','run'), ('GET','transactions','transactions'),
@@ -53,6 +56,24 @@ def request(e):
 
 
 def dispatch(app,operation,identity,body,query):
+    if operation.startswith('open_finance_recovery_'):
+        # The existing UI owner credential is the administrator; never expose
+        # this capability to scheduled jobs, external clients or MCP.
+        if identity.role!='UI' or identity.client_id!='UI:local':raise SyncError('FORBIDDEN',403)
+        if query:raise SyncError('INVALID_REQUEST',422)
+        recovery=app.santander_binding_recovery
+        actor=(identity.role,identity.client_id,identity.csrf)
+        if operation=='open_finance_recovery_inspect':
+            if body:raise SyncError('INVALID_REQUEST',422)
+            return recovery.inspect(),200
+        if operation=='open_finance_recovery_prepare':
+            if set(body)-{'action','backup_confirmed','operation'} or not {'action','backup_confirmed'}<=set(body):raise SyncError('INVALID_REQUEST',422)
+            if not isinstance(body['action'],str) or body['action'] not in {'APPLY','REVERT'} or body['action']=='APPLY' and 'operation' in body:raise SyncError('INVALID_REQUEST',422)
+            return recovery.prepare(actor,body['action'],body['backup_confirmed'],body.get('operation')),200
+        if operation=='open_finance_recovery_confirm':
+            if set(body)!={'confirmation','explicit_confirmation','backup_confirmed'}:raise SyncError('INVALID_REQUEST',422)
+            return recovery.execute(actor,body['confirmation'],body['explicit_confirmation'],body['backup_confirmed']),200
+        raise SyncError('NOT_FOUND',404)
     payload,status=_dispatch_raw(app,operation,identity,body,query)
     from .open_finance_presentation import personal,present_payload
     if any(personal(cfg) for cfg in app.settings.pluggy_connections):
@@ -173,6 +194,12 @@ def openapi_paths():
         'translation_status':enum('UNVERIFIED','VERIFIED','OWNER_OVERRIDE'),'updated_at':text})
     result={}
     for method,path,op in OPERATIONS:
+        if op.startswith('recovery_'):
+            properties={'action':enum('APPLY','REVERT'),'backup_confirmed':{'type':'boolean','const':True},'operation':{'type':'string','pattern':'^[0-9a-f]{32}$'}} if op=='recovery_prepare' else {'confirmation':{'type':'string','pattern':'^[0-9a-f]{64}$'},'explicit_confirmation':enum('CORRIGIR_BINDING_SANTANDER','REVERTER_BINDING_SANTANDER'),'backup_confirmed':{'type':'boolean','const':True}}
+            spec={'operationId':'open_finance_'+op,'security':[{'bearerAuth':[]}],'x-owner-only':True,'x-owner-admin-only':True,'x-external-capability':'not-available','description':'Explicit Santander-only maintenance. Uses live application Settings. No provider calls. Cookie POST requires CSRF. Backup is owner-attested; no generic SQL.'}
+            if method=='POST':spec['requestBody']={'required':True,'content':{'application/json':{'schema':{'type':'object','additionalProperties':False,'properties':properties,'required':['action','backup_confirmed'] if op=='recovery_prepare' else list(properties)}}}}
+            spec['responses']={str(s):{'description':'Sanitized recovery result' if s==200 else 'Sanitized error'} for s in (200,401,403,409,413,415,422,429,503)}
+            result[PREFIX+path]={method.lower():spec};continue
         if op in {'resources','coverage','coverage_sync','domain','relations','domain_sync'}:continue
         statuses=[200,401,403,422,503,500,405]
         parameters=[]

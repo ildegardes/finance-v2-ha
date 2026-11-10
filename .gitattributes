@@ -7,3 +7,12 @@ finance-v17/src/finance_v2/UNICODE_LICENSE_V3.txt -text
 finance-v17/src/finance_v2/unicode13_f06.py -text
 finance-v17/src/finance_v2/unicode13_manifest.json -text
 finance-v17/src/finance_v2/unicode13_primitives.json -text
+
+# Preserve published metadata line endings; avoid unrelated whole-file diffs.
+finance-v17/config.yaml -text whitespace=cr-at-eol
+finance-v17/CHANGELOG.md -text whitespace=cr-at-eol
+tests/test_addon_config_integration.py whitespace=cr-at-eol
+
+# Match the exact bytes of the qualified ARM64 source inputs.
+finance-v17/src/finance_v2/open_finance_recovery_checks.py -text whitespace=cr-at-eol
+finance-v17/src/finance_v2/open_finance_recovery_schema.json -text whitespace=cr-at-eol

@@ -59,7 +59,7 @@ class AddonConfigTests(unittest.TestCase):
   root=Path(__file__).resolve().parents[1]
   manifest=Path(os.environ.get('ADDON_MANIFEST_PATH',str(root/'finance-v17/config.yaml')))
   if not manifest.is_file() and 'ADDON_MANIFEST_PATH' not in os.environ:manifest=root.parent/'metadata/config.yaml'
-  new=manifest.read_text();old=(root.parent/'baseline/finance-v17/config.yaml').read_text()
+  new=manifest.read_text();old=(root/'tests/fixtures/addon-0.1.27-config.yaml').read_text()
   for bank in ('itau','santander'):
    for field,kind in (('client_id','str'),('client_secret','password'),('item_id','str')):
     line='  pluggy_'+bank+'_'+field+': '+kind

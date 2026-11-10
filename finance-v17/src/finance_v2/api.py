@@ -97,6 +97,8 @@ class Application:
  def __init__(self,settings,clock=None):
   verify_unicode13_profile()
   self.settings=settings;self.clock=clock or SystemClock(settings.timezone);self.oauth=OAuthService(settings,self.clock)
+  from .open_finance_recovery import SantanderBindingRecovery
+  self.santander_binding_recovery=SantanderBindingRecovery(settings)
  def __call__(self,environ,start_response)->Iterable[bytes]:
   rid=environ.get("HTTP_X_REQUEST_ID","local");origin=environ.get("HTTP_ORIGIN")
   try:
@@ -120,6 +122,9 @@ class Application:
    if route.operation.startswith('open_finance_'):
     if identity.role!='UI':raise HttpError(403,'FORBIDDEN','owner authorization required')
     if route.write and environ.get('finance_v2.cookie_auth') and environ.get('HTTP_X_CSRF_TOKEN')!=environ.get('finance_v2.csrf'):raise HttpError(403,'CSRF_INVALID','CSRF token is missing or invalid')
+    if route.operation.startswith('open_finance_recovery_') and route.write and origin:
+     expected_origin=environ.get('wsgi.url_scheme','http')+'://'+environ.get('HTTP_HOST','')
+     if origin!=expected_origin and origin not in self.settings.cors_origins:raise HttpError(403,'CSRF_ORIGIN_INVALID','origin is not allowed')
     body,query=open_finance_http.request(environ)
     try:payload,status=open_finance_http.dispatch(self,route.operation,identity,body,query)
     except SyncError:raise
