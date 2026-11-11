@@ -60,7 +60,7 @@ OPERATIONS = (
     ('GET','connections','connections'), ('POST','sync','sync'),
     ('POST','sync-all','sync_all'), ('GET','sync-runs','runs'),
     ('GET','sync-run','run'), ('GET','transactions','transactions'),
-    ('GET','catalogs','catalogs'),
+    ('GET','catalogs','catalogs'), ('GET','analytics','analytics'),
     ('GET','resources','resources'), ('GET','coverage','coverage'),
     ('POST','coverage-sync','coverage_sync'),
     ('GET','domain','domain'), ('GET','relations','relations'),
@@ -221,6 +221,9 @@ def _dispatch_raw(app,operation,identity,body,query):
         return {'runs':runs},(200 if not failures else 502 if failures==len(runs) else 207)
     if body:raise SyncError('GET_BODY_NOT_ALLOWED',422)
     with closing(app.db()) as c:
+        if op=='analytics':
+            from .open_finance_analytics import analytics
+            return analytics(c,app.settings,query),200
         if op=='catalogs':
             if query:raise SyncError('INVALID_QUERY',422)
             return catalogs(c,connection_views(c,app.settings).values()),200
@@ -369,6 +372,15 @@ def openapi_paths():
             schema={'type':'object','required':['items','page','page_size','has_more'],'properties':{'items':{'type':'array','items':run if op=='runs' else transaction},
                 'page':{'type':'integer'},'page_size':{'type':'integer'},'has_more':{'type':'boolean'}}}
             if op=='transactions':schema['properties']['query_meta']=query_meta
+            statuses.append(404)
+        elif op=='analytics':
+            from .open_finance_analytics import PARAMS
+            parameters=[{'name':name,'in':'query','required':False,'schema':text} for name in sorted(PARAMS)]
+            schema={'type':'object','required':['contract','filters','positions','flow','series','categories','items','total','page','has_more','coverage'],
+                    'properties':{'contract':{'type':'string','enum':['OF-ANALYTICS/1']},
+                    **{name:{'type':'object'} for name in ('filters','positions','flow')},
+                    **{name:{'type':'array','items':{'type':'object'}} for name in ('series','categories','items','coverage')},
+                    'total':integer,'page':integer,'has_more':{'type':'boolean'}}}
             statuses.append(404)
         elif op=='catalogs':
             schema=obj({k:{'type':'array','items':item} for k,item in

@@ -1,0 +1,60 @@
+name: Open Finance synthetic checks
+
+on:
+  pull_request:
+  push:
+    branches: [codex/open-finance-visual]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python-synthetic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: finance-v17/src:tests
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned deployment dependencies
+        run: python -m pip install --require-hashes -r finance-v17/requirements-deploy.txt
+      - name: Analytics
+        run: python -m unittest discover -s tests -p test_open_finance_analytics.py
+      - name: Authentication
+        run: python -m unittest discover -s tests -p test_d08_auth.py
+      - name: Output privacy
+        run: python -m unittest discover -s tests -p test_output_privacy.py
+      - name: Prepare schema 10 baseline
+        run: |
+          mkdir -p "$RUNNER_TEMP/schema10"
+          git archive 62fb50e finance-v17/src | tar -x -C "$RUNNER_TEMP/schema10"
+          test -f "$RUNNER_TEMP/schema10/finance-v17/src/finance_v2/migrations.py"
+          echo "FINANCE_SCHEMA10_BASELINE_SRC=$RUNNER_TEMP/schema10/finance-v17/src" >> "$GITHUB_ENV"
+      - name: Gate B
+        run: python -m unittest discover -s tests -p test_gate_b.py
+      - name: C6R synthetic concurrency
+        run: python -m unittest discover -s tests -p test_gate_c6r.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install synthetic browser test dependencies
+        run: |
+          npm install --no-save --ignore-scripts playwright@1.56.1
+          npx playwright install --with-deps chromium
+          echo "PLAYWRIGHT_MODULE=$PWD/node_modules/playwright" >> "$GITHUB_ENV"
+          echo "PLAYWRIGHT_CHROMIUM_EXECUTABLE=$(node -p "require('playwright').chromium.executablePath()")" >> "$GITHUB_ENV"
+      - name: Connections, institutions and concurrency in browser
+        run: |
+          node tests/open_finance_connections_ui.cjs
+          node --test tests/test_financial_institutions_ui.cjs
+          node tests/open_finance_product_concurrency_ui.cjs
+          node tests/open_finance_product_races_ui.cjs
+      - name: Browser with WSGI and synthetic SQLite
+        run: python -m unittest discover -s tests -p test_open_finance_integrated_ui.py
