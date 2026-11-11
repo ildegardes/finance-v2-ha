@@ -18,3 +18,14 @@ Base da campanha: WSGI real, SQLite criado em diretório temporário e provedor 
 | Integração WSGI | Sim | Parcial | `test_open_finance_integrated_ui.py` e `open_finance_integrated_ui.cjs` | Erros e consultas históricas ampliadas |
 
 Não há homologação completa, nem GO para o Marco 3. Valores econômicos permanecem não estabelecidos quando não há evidência confiável.
+
+## Campanha de concorrência e estados
+
+- **Implementado e aprovado nos cenários descritos:** alterar filtros invalida a consulta e remove o resultado anterior até nova aplicação; trocar de aba cancela consultas de produtos em andamento. `open_finance_product_races_ui.cjs` cobre três trocas de moeda com respostas fora de ordem, mudança de aba, erro/recuperação, troca de instituição com detalhes abertos e manutenção da máscara.
+- **Histórico — indisponibilidade deliberada e testada:** o atalho de fatura para transações é omitido em modo histórico e uma mensagem explica a limitação. `of_resource_link_revisions` registra mudanças do vínculo, mas não garante uma projeção completa e temporalmente alinhada para cada revisão da fatura e transação. Sem prova dessa correspondência, não é seguro oferecer o atalho. O teste de navegador cobre a mensagem e a ausência do botão; não prova todos os cenários históricos.
+- **Implementado e aprovado nos cenários descritos:** `open_finance_product_states_ui.cjs` testa zero, ausência de valor, recurso não disponível, falha de coleta, estado desatualizado e separação das datas de 2020 e 2026 nas três áreas. Moeda desconhecida também é coberta na suíte analítica.
+- **Acessibilidade parcialmente validada:** a integração automatiza setas entre abas, foco visível, contraste da aba selecionada e inspeção da árvore acessível quanto a alguns valores sintéticos. `SCREEN_READER_TEST=NOT_EXECUTED`; inspeção da árvore não equivale a teste com leitor de tela. Ordem integral, contraste geral e rótulos de todos os controles continuam pendentes.
+- **Privacidade parcialmente validada:** testes verificam máscaras após resposta e em mudança de contexto, mas não estabelecem ausência de exposição transitória em todas as alternâncias de visibilidade e todos os atributos acessíveis.
+- **Responsividade parcialmente validada:** a integração automatiza largura do documento em 390, 768 e 1440 px e expansão de detalhes. Não foi realizada inspeção sistemática de sobreposição e truncamento de todos os componentes e estados.
+
+Resultado: `MARCO_3_STATUS=NO_GO`. As pendências de acessibilidade, privacidade e responsividade acima não foram marcadas como aprovadas.
