@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 import sqlite3
+from types import SimpleNamespace
 
 from .db import connect
 
@@ -90,6 +91,16 @@ def migrate(database_path: Path, busy_timeout_ms: int = 5000) -> list[int]:
                 if previous["name"] != migration.name or previous["sha256"] != actual_hash:
                     raise MigrationError(f"migration {migration.version} history is inconsistent")
                 continue
+            if migration.name == "open_finance_registry":
+                from .open_finance import SyncError
+                from .open_finance_recovery import SantanderBindingRecovery
+                recovery = SantanderBindingRecovery(SimpleNamespace(database_path=database_path))
+                try:
+                    pending = recovery.pending_receipts(recovery.records())
+                except (OSError, SyncError):
+                    raise MigrationError("legacy Santander audit could not be verified") from None
+                if pending:
+                    raise MigrationError("reconcile the pending Santander audit on schema 11 before upgrading")
             sql = migration.path.read_text(encoding="utf-8")
             escaped_name = migration.name.replace("'", "''")
             script = (

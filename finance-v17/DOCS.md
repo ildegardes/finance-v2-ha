@@ -193,3 +193,6 @@ suporte. Valide uma restauração em instância descartável com o banco e a cha
 da mesma geração, confirmando integridade SQLite e leitura das credenciais
 sintéticas. Para retornar a uma versão que só aceita o schema 11, restaure um
 backup anterior à migração, após preservar os dados novos para conciliação.
+Recibos pendentes da recuperação Santander da versão 0.1.28 precisam ser
+reconciliados nessa versão antes da migração, pois seus fingerprints incluem
+o schema 11.
