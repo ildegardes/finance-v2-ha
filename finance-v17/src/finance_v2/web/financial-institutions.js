@@ -18,6 +18,7 @@ const messages = {
   ITEM_ENVIRONMENT_NOT_VERIFIED: 'O ambiente informado não corresponde ao Item retornado.',
   PROVIDER_VALIDATION_FAILED: 'A Pluggy não confirmou a conexão.',
   SYNC_BUSY: 'Há uma coleta ou um lease pendente nesta conexão.',
+  REGISTRY_RATE_LIMITED: 'Limite de tentativas atingido. Aguarde um minuto antes de repetir.',
   DELETION_RETENTION_REQUIRED: 'O histórico ou as dependências exigem que a conexão permaneça arquivada.',
 };
 

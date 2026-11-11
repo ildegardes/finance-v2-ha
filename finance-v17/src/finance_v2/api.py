@@ -97,6 +97,7 @@ class Application:
  def __init__(self,settings,clock=None):
   verify_unicode13_profile()
   self.settings=settings;self.clock=clock or SystemClock(settings.timezone);self.oauth=OAuthService(settings,self.clock)
+  self.registry_rate_limit=open_finance_http.RegistryRateLimiter()
   from .open_finance_recovery import SantanderBindingRecovery
   self.santander_binding_recovery=SantanderBindingRecovery(settings)
  def __call__(self,environ,start_response)->Iterable[bytes]:
@@ -128,6 +129,8 @@ class Application:
          or environ.get('HTTP_ORIGIN')!=self.settings.pluggy_admin_origin):
       raise HttpError(403,'PRIVATE_ADMIN_REQUIRED','private owner session required')
     if route.write and environ.get('finance_v2.cookie_auth') and environ.get('HTTP_X_CSRF_TOKEN')!=environ.get('finance_v2.csrf'):raise HttpError(403,'CSRF_INVALID','CSRF token is missing or invalid')
+    if route.operation.startswith('open_finance_registry_'):
+     self.registry_rate_limit.admit(route.operation)
     if route.operation.startswith('open_finance_recovery_') and route.write and origin:
      expected_origin=environ.get('wsgi.url_scheme','http')+'://'+environ.get('HTTP_HOST','')
      if origin!=expected_origin and origin not in self.settings.cors_origins:raise HttpError(403,'CSRF_ORIGIN_INVALID','origin is not allowed')
@@ -788,6 +791,6 @@ class Application:
   """Serialize a protocol document without the Finance API envelope."""
   raw=b"" if status==204 else json.dumps(payload,ensure_ascii=False,separators=(",",":"),default=str).encode();headers=[("Content-Type","application/json; charset=utf-8"),("Content-Length",str(len(raw))),("Cache-Control","no-store"),("X-Content-Type-Options","nosniff")]
   if origin in self.settings.cors_origins:headers += [("Access-Control-Allow-Origin",origin),("Vary","Origin"),("Access-Control-Allow-Headers","Authorization, Content-Type, Idempotency-Key, X-Request-ID"),("Access-Control-Allow-Methods","GET, POST, PATCH, OPTIONS")]
-  phrase={200:"OK",201:"Created",202:"Accepted",204:"No Content",207:"Multi-Status",400:"Bad Request",401:"Unauthorized",403:"Forbidden",404:"Not Found",405:"Method Not Allowed",409:"Conflict",413:"Payload Too Large",415:"Unsupported Media Type",422:"Unprocessable Entity",500:"Internal Server Error",502:"Bad Gateway",503:"Service Unavailable"}.get(status,"Error");start(f"{status} {phrase}",headers);return [raw]
+  phrase={200:"OK",201:"Created",202:"Accepted",204:"No Content",207:"Multi-Status",400:"Bad Request",401:"Unauthorized",403:"Forbidden",404:"Not Found",405:"Method Not Allowed",409:"Conflict",413:"Payload Too Large",415:"Unsupported Media Type",422:"Unprocessable Entity",429:"Too Many Requests",500:"Internal Server Error",502:"Bad Gateway",503:"Service Unavailable"}.get(status,"Error");start(f"{status} {phrase}",headers);return [raw]
 
 def create_app(settings=None,clock=None):return Application(settings or Settings.from_env(),clock)

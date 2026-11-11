@@ -1,7 +1,10 @@
 """Owner-only manual staging HTTP contracts; no official financial writes."""
+from collections import deque
 from contextlib import closing
 import json
 import re
+from threading import Lock
+from time import monotonic
 from urllib.parse import parse_qs
 
 from .open_finance import OpenFinanceService, SyncError, paged
@@ -13,6 +16,30 @@ from .pluggy_coverage import RESOURCES, CONTRACT, output_schema
 
 
 PREFIX = '/api/v2/open-finance/'
+
+
+class RegistryRateLimiter:
+    """The owner has a shared limit across sessions and server worker threads."""
+    def __init__(self, *, now=monotonic, provider_limit=8, local_limit=32):
+        self._now = now
+        self._lock = Lock()
+        self._provider = deque(maxlen=provider_limit)
+        self._local = deque(maxlen=local_limit)
+
+    def admit(self, operation):
+        uses_provider = operation in {
+            "open_finance_registry_activate", "open_finance_registry_rotate_credentials",
+        }
+        attempts = self._provider if uses_provider else self._local
+        with self._lock:
+            now = self._now()
+            while attempts and attempts[0] <= now - 60:
+                attempts.popleft()
+            if len(attempts) == attempts.maxlen:
+                raise SyncError("REGISTRY_RATE_LIMITED", 429)
+            attempts.append(now)
+
+
 OPERATIONS = (
     ('POST','registry/drafts','registry_create'),
     ('POST','registry/activate','registry_activate'),
@@ -284,7 +311,7 @@ def openapi_paths():
                       'type':'object','additionalProperties':False,'properties':fields,'required':required}}}},
                   'responses':{str(status):{'description':'Sanitized registry result' if status in (200,201)
                                             else 'Sanitized error'}
-                               for status in (200,201,401,403,404,409,413,415,422,502,503)}}
+                               for status in (200,201,401,403,404,409,413,415,422,429,502,503)}}
             result[PREFIX+path]={method.lower():spec};continue
         if op.startswith('recovery_'):
             properties={'action':enum('APPLY','REVERT','RECONCILE'),'backup_confirmed':{'type':'boolean','const':True},'operation':{'type':'string','pattern':'^[0-9a-f]{32}$'}} if op=='recovery_prepare' else {'confirmation':{'type':'string','pattern':'^[0-9a-f]{64}$'},'explicit_confirmation':enum('CORRIGIR_BINDING_SANTANDER','REVERTER_BINDING_SANTANDER','RECONCILIAR_AUDITORIA_SANTANDER'),'backup_confirmed':{'type':'boolean','const':True}}

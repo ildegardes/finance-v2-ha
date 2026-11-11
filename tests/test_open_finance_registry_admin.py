@@ -15,6 +15,7 @@ from finance_v2.api import Application
 from finance_v2.config import ConfigurationError, Settings
 from finance_v2.migrations import migrate
 from finance_v2.open_finance import OpenFinanceService, SyncError
+from finance_v2.open_finance_http import RegistryRateLimiter
 from finance_v2.open_finance_registry_admin import RegistryAdmin
 from finance_v2.pluggy_client import PluggyClient
 from finance_v2.pluggy_credential_protection import CredentialProtector
@@ -350,3 +351,14 @@ class RegistryEnrollmentTests(unittest.TestCase):
             replace(settings, pluggy_admin_origin="https://finance.example.invalid")
         with self.assertRaises(ConfigurationError):
             replace(settings, pluggy_admin_origin="http://192.168.1.5:8766")
+
+        ticks = [100.0]
+        app.registry_rate_limit = RegistryRateLimiter(now=lambda: ticks[0], provider_limit=1, local_limit=1)
+        self.assertEqual(invoke(extra={"HTTP_X_CSRF_TOKEN": "bad"})[0], 403)
+        self.assertEqual(invoke(body={**payload, "unexpected": True})[0], 422)
+        status, limited, read = invoke()
+        self.assertEqual((status, limited["error"]["code"], read), (429, "REGISTRY_RATE_LIMITED", 0))
+        self.assertEqual(invoke(endpoint="activate", body={})[0], 422)
+        self.assertEqual(invoke(endpoint="rotate-credentials", body={})[0], 429)
+        ticks[0] += 60
+        self.assertEqual(invoke(endpoint="activate", body={})[0], 422)
