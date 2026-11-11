@@ -184,6 +184,10 @@ verificação consulta apenas a primeira página de recursos e indica quando há
 mais páginas. A ativação exige confirmação separada. A coleta financeira pode
 ser iniciada manualmente após a ativação.
 
+Ao escolher **Arquivar**, confira a inspeção de dependências antes de confirmar.
+A confirmação verifica novamente integridade, dependências, execução e lease.
+Registros financeiros vinculados permanecem preservados e impedem a substituição.
+
 As regras de mapeamento de diretórios e portas são descritas na
 [referência de configuração do Supervisor](https://contributors.home-assistant.io/apps/reference/configuration/).
 

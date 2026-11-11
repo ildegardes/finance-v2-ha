@@ -138,6 +138,21 @@ class RegistryAdmin:
             raise SyncError("REGISTRY_WRITE_FAILED", 503) from None
         return {"id": connection_id, "lifecycle": "REMOVED", "revision": revision + 1}
 
+    def inspect_archive(self, connection_id, *, actor, revision):
+        self._owner(actor)
+        if type(revision) is not int or not 0 <= revision < 2**63 - 1:
+            raise SyncError("INVALID_REGISTRY_REVISION", 422)
+        try:
+            with closing(self.service._db()) as db:
+                db.execute("BEGIN")
+                row = _registered_row(db, connection_id, revision, {"ACTIVE", "DISABLED", "DRAFT"})
+                self._idle(db, connection_id, row)
+                report = self._dependency_report(db, connection_id)
+                return {"id": connection_id, "revision": revision, "lifecycle": row["lifecycle"],
+                        "dependencies": report["DEPENDENCIES"], "counts": report["COUNTS"]}
+        except sqlite3.Error:
+            raise SyncError("REGISTRY_READ_FAILED", 503) from None
+
     def archive(self, connection_id, *, actor, revision, confirmed):
         return self._update_registry(connection_id, actor, revision, confirmed, "ARCHIVE", "ARCHIVED",
                                      {"ACTIVE", "DISABLED", "DRAFT"})

@@ -244,6 +244,17 @@ class RegistryEnrollmentTests(unittest.TestCase):
         with self.assertRaisesRegex(SyncError, "^CONNECTION_NOT_ACTIVE$"):
             self.service.resolve_config("santander")
 
+    def test_prepare_archive_reports_dependencies_and_rechecks_active_lease(self):
+        self.seed_santander()
+        report = self.admin.inspect_archive("santander", actor="UI:local", revision=0)
+        self.assertEqual(report["dependencies"], "NO_FINANCIAL_ROWS_WITH_HISTORY")
+        self.assertEqual(report["counts"]["of_sync_runs"], 26)
+        with closing(self.service._db()) as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM of_connection_admin_events").fetchone()[0], 0)
+            db.execute("UPDATE of_connections SET sync_state='RUNNING',lease_token='fixture',lease_until=9999999999 WHERE id='santander'")
+        with self.assertRaisesRegex(SyncError, "SYNC_BUSY"):
+            self.archive_santander()
+
     def test_archive_preserves_partial_rows_and_blocks_replacement(self):
         self.seed_santander()
         with closing(self.service._db()) as db:
@@ -369,6 +380,10 @@ class RegistryEnrollmentTests(unittest.TestCase):
             status, active, _ = invoke(endpoint="activate", body=body)
             self.assertEqual((status, active["lifecycle"]), (200, "ACTIVE"))
             self.assertEqual(self.operations, [("POST", "/auth"), ("GET", "/items/fixture-item")])
+            inspection = {"connection_id": response["id"], "revision": 1}
+            self.assertEqual(invoke(endpoint="archive/inspect", extra={"HTTP_X_CSRF_TOKEN": "bad"}, body=inspection)[0], 403)
+            status, report, _ = invoke(endpoint="archive/inspect", body=inspection)
+            self.assertEqual((status, report["dependencies"]), (200, "NO_ASSOCIATED_DEPENDENTS"))
             self.assertEqual(invoke(endpoint="archive", body=body)[0], 409)
             status, archived, _ = invoke(endpoint="archive", body={**body, "revision": 1})
             self.assertEqual((status, archived["lifecycle"]), (200, "ARCHIVED"))

@@ -52,6 +52,7 @@ async function fixture(t, writable) {
       if (route.startsWith('/open-finance/sync-runs?')) return {items: [{
         state: 'FAILED', started_at: '2026-11-01T12:00:00Z', error_code: 'AUTH_FAILED',
       }], has_more: route.includes('page=1&')};
+      if (route.endsWith('/archive/inspect')) return {dependencies: 'NO_FINANCIAL_ROWS_WITH_HISTORY'};
       if (route.endsWith('/archive')) {
         const row = rows.find(row => row.id === options.body.connection_id);
         if (!row || row.revision !== options.body.revision || !options.body.confirmed) throw Error('Unexpected archive request');
@@ -130,7 +131,9 @@ test('archives, enrolls and activates a distinct replacement, then reads old his
   const page = await fixture(t, true);
   page.once('dialog', dialog => dialog.dismiss());
   await page.getByRole('button', {name: 'Arquivar', exact: true}).click();
-  assert.equal(await page.evaluate(() => calls.length), 1);
+  assert.deepEqual(await page.evaluate(() => calls.map(c => c.route)), [
+    '/open-finance/connections', '/open-finance/registry/archive/inspect',
+  ]);
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', {name: 'Arquivar', exact: true}).click();
   await page.getByRole('button', {name: 'Cadastrar substituta'}).click();
@@ -146,6 +149,7 @@ test('archives, enrolls and activates a distinct replacement, then reads old his
   await archived.getByRole('button', {name: 'Ver histórico'}).click();
   await page.getByRole('button', {name: 'Próxima página'}).click();
   assert.deepEqual(await page.evaluate(() => calls.filter(c => c.method === 'POST').map(c => c.route)), [
+    '/open-finance/registry/archive/inspect', '/open-finance/registry/archive/inspect',
     '/open-finance/registry/archive', '/open-finance/registry/drafts', '/open-finance/registry/activate',
   ]);
   assert((await page.evaluate(() => calls.at(-1).route)).includes('connection_id=santander&page=2'));

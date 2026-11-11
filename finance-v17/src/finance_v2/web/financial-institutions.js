@@ -241,8 +241,7 @@ export async function showFinancialInstitutions({api, view, heading, navigation}
         actions.append(button('Verificar Item e recursos', () => validate(row)));
         actions.append(button('Editar nome', () => openRename(row)));
         if (row.source === 'MANAGED') actions.append(button('Trocar credenciais', () => openRotate(row)));
-        actions.append(button('Arquivar', () => change(row, 'archive',
-          'Arquivar a conexão e preservar seu vínculo, dados e histórico?', 'Conexão arquivada.')));
+        actions.append(button('Arquivar', () => inspectArchive(row)));
         if (lifecycle === 'ACTIVE') {
           actions.append(button('Desativar', () => change(row, 'disable',
             'Suspender as coletas desta conexão e manter seus dados e histórico?', 'Conexão desativada.')));
@@ -270,6 +269,19 @@ export async function showFinancialInstitutions({api, view, heading, navigation}
     }));
     status.textContent = message || (!rows.length ? 'Nenhuma instituição cadastrada.'
       : writable ? '' : 'Administração disponível pelo acesso privado configurado.');
+  }
+
+  function inspectArchive(row) {
+    run(async () => {
+      const body = {connection_id: row.id, revision: row.revision};
+      const report = await api('/open-finance/registry/archive/inspect', {method: 'POST', body});
+      if (!current()) return;
+      const financial = report.dependencies === 'PRESENT';
+      const warning = financial ? ' Há registros financeiros associados. A substituição ficará bloqueada.' : '';
+      if (!window.confirm('Arquivar a conexão e preservar seu vínculo, dados e histórico?' + warning)) return;
+      await api('/open-finance/registry/archive', {method: 'POST', body: {...body, confirmed: true}});
+      await load('Conexão arquivada.');
+    });
   }
 
   function change(row, action, confirmation, message) {

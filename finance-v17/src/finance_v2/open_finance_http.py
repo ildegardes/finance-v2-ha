@@ -45,6 +45,7 @@ OPERATIONS = (
     ('POST','registry/drafts','registry_create'),
     ('POST','registry/activate','registry_activate'),
     ('POST','registry/validate','registry_validate'),
+    ('POST','registry/archive/inspect','registry_archive_inspect'),
     ('POST','registry/archive','registry_archive'),
     ('POST','registry/disable','registry_disable'),
     ('POST','registry/rename','registry_rename'),
@@ -117,10 +118,11 @@ def dispatch(app,operation,identity,body,query):
             if set(body) != {'connection_id','revision','confirmed','client_id','client_secret'} or not _connection_id(body['connection_id']):
                 raise SyncError('INVALID_REQUEST',422)
             return admin.rotate_credentials(actor=identity.client_id, **body),200
-        if operation in {'open_finance_registry_delete_inspect','open_finance_registry_delete'}:
+        if operation in {'open_finance_registry_archive_inspect','open_finance_registry_delete_inspect','open_finance_registry_delete'}:
             fields = {'connection_id','revision'}
             if operation.endswith('_inspect'):
-                action = admin.inspect_deletion
+                action = (admin.inspect_archive if operation == 'open_finance_registry_archive_inspect'
+                          else admin.inspect_deletion)
             else:
                 fields |= {'backup_confirmed','confirmation'}
                 action = admin.delete
@@ -301,7 +303,7 @@ def openapi_paths():
                 elif op=='registry_delete':
                     fields['backup_confirmed']={'type':'boolean','const':True}
                     fields['confirmation']=enum('EXCLUIR DEFINITIVAMENTE')
-                elif op!='registry_delete_inspect':
+                elif op not in {'registry_archive_inspect','registry_delete_inspect'}:
                     fields['confirmed']={'type':'boolean','const':True}
                 if op=='registry_rotate_credentials':
                     fields.update({name:{'type':'string','minLength':1,'maxLength':512,'writeOnly':True}
