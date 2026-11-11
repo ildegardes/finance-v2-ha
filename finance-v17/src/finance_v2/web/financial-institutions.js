@@ -21,6 +21,17 @@ const messages = {
   REGISTRY_RATE_LIMITED: 'Limite de tentativas atingido. Aguarde um minuto antes de repetir.',
   DELETION_RETENTION_REQUIRED: 'O histórico ou as dependências exigem que a conexão permaneça arquivada.',
 };
+const capabilityNames = {
+  ACCOUNT: 'Conta', CREDIT_CARD_ACCOUNT: 'Cartão de crédito', LOAN: 'Empréstimo',
+  FINANCING: 'Financiamento', UNARRANGED_ACCOUNT_OVERDRAFT: 'Adiantamento a depositante',
+  INVOICE_FINANCING: 'Financiamento de fatura', BANK_FIXED_INCOME: 'Renda fixa bancária',
+  CREDIT_FIXED_INCOME: 'Renda fixa de crédito', VARIABLE_INCOME: 'Renda variável',
+  TREASURE_TITLE: 'Tesouro', FUND: 'Fundo',
+};
+const capabilityStatuses = {
+  AVAILABLE: 'disponível', UNAVAILABLE: 'indisponível',
+  TEMPORARILY_UNAVAILABLE: 'temporariamente indisponível', PENDING_AUTHORISATION: 'autorização pendente',
+};
 
 export async function showFinancialInstitutions({api, view, heading, navigation}) {
   heading('Instituições Financeiras', 'Gerencie conexões Pluggy e consulte o histórico de coleta.');
@@ -216,6 +227,7 @@ export async function showFinancialInstitutions({api, view, heading, navigation}
           () => change(row, 'activate', 'Validar o Item na Pluggy e habilitar a conexão?', 'Conexão ativada.')));
       }
       if (writable && row.revision !== undefined && ['ACTIVE', 'DISABLED', 'DRAFT'].includes(lifecycle)) {
+        actions.append(button('Verificar Item e recursos', () => validate(row)));
         actions.append(button('Editar nome', () => openRename(row)));
         if (row.source === 'MANAGED') actions.append(button('Trocar credenciais', () => openRotate(row)));
         actions.append(button('Arquivar', () => change(row, 'archive',
@@ -256,6 +268,22 @@ export async function showFinancialInstitutions({api, view, heading, navigation}
         connection_id: row.id, revision: row.revision, confirmed: true,
       }});
       if (current()) await load(message);
+    });
+  }
+
+  function validate(row) {
+    if (!window.confirm('Consultar a Pluggy para verificar o Item e os recursos declarados?')) return;
+    run(async () => {
+      const result = await api('/open-finance/registry/validate', {method: 'POST', body: {
+        connection_id: row.id, revision: row.revision, confirmed: true,
+      }});
+      if (!current()) return;
+      const capabilities = result.capabilities.filter(resource =>
+        Object.hasOwn(capabilityNames, resource.type) && Object.hasOwn(capabilityStatuses, resource.status)
+      ).map(resource => capabilityNames[resource.type] + ' ' + capabilityStatuses[resource.status]);
+      const qualification = result.capabilities_state === 'PARTIAL' ? ' Consulta limitada à primeira página.' : '';
+      status.textContent = 'Item verificado. ' + (capabilities.length
+        ? capabilities.join(' · ') + '.' : 'Nenhuma capacidade confirmada nesta consulta.') + qualification;
     });
   }
 

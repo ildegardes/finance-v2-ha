@@ -12,7 +12,7 @@ from .open_finance_registry import ACCESS_MODES, load_keyring, managed_connectio
 from .pluggy_access_policy import validate_access_context
 from .pluggy_client import PluggyError
 from .pluggy_config import PluggyConfigurationError, PluggyConnection
-from .pluggy_coverage import _expired
+from .pluggy_coverage import CONTRACT, _expired, collection_batches
 from .pluggy_credential_protection import CredentialProtectionError
 
 
@@ -254,13 +254,10 @@ class RegistryAdmin:
             raise SyncError("REGISTRY_WRITE_FAILED", 503) from None
         return {"id": connection_id, "lifecycle": "DRAFT", "revision": 0}
 
-    def validate_and_activate(self, connection_id, *, actor, revision, confirmed):
-        self._owner(actor)
-        if confirmed is not True or type(revision) is not int or not 0 <= revision < 2**63 - 1:
-            raise SyncError("ACTIVATION_CONFIRMATION_REQUIRED", 422)
+    def _configuration_for_validation(self, connection_id, revision, states):
         try:
             with closing(self.service._db()) as db:
-                original = _registered_row(db, connection_id, revision, {"DRAFT", "DISABLED"})
+                original = _registered_row(db, connection_id, revision, states)
                 self._idle(db, connection_id, original)
                 if original["source"] == "MANAGED":
                     config = managed_connection(
@@ -272,11 +269,50 @@ class RegistryAdmin:
                         raise SyncError("CONNECTION_DISABLED")
                 if self.service._binding(config) != original["binding_hash"]:
                     raise SyncError("CONNECTION_BINDING_CHANGED")
+                return original, config
         except CredentialProtectionError as exc:
             raise SyncError(str(exc)) from None
         except sqlite3.Error:
             raise SyncError("REGISTRY_READ_FAILED", 503) from None
 
+    def validate_connection(self, connection_id, *, actor, revision, confirmed):
+        self._owner(actor)
+        if confirmed is not True or type(revision) is not int or not 0 <= revision < 2**63 - 1:
+            raise SyncError("VALIDATION_CONFIRMATION_REQUIRED", 422)
+        original, config = self._configuration_for_validation(connection_id, revision, {"DRAFT", "DISABLED", "ACTIVE"})
+        client, item = self._validate_item(config)
+        try:
+            with closing(collection_batches(
+                client, item, "resources", "", "/items/" + config.item_id + "/resources", {},
+            )) as batches:
+                batch = next(batches)
+            fields = CONTRACT["resources"]["resources"]["schema"]["properties"]
+            capabilities = set()
+            for row in batch["rows"]:
+                kind, status = row.get("type"), row.get("status")
+                if kind in fields["type"]["enum"] and status in fields["status"]["enum"]:
+                    capabilities.add((kind, status))
+        except PluggyError:
+            raise SyncError("PROVIDER_CAPABILITY_QUERY_FAILED", 502) from None
+        try:
+            with closing(self.service._db()) as db:
+                current = _registered_row(db, connection_id, revision, {original["lifecycle"]})
+                if current["binding_hash"] != original["binding_hash"]:
+                    raise SyncError("CONNECTION_CONFIGURATION_CHANGED")
+        except sqlite3.Error:
+            raise SyncError("REGISTRY_READ_FAILED", 503) from None
+        state = "PARTIAL" if not batch["last"] else batch["state"]
+        if state == "AVAILABLE" and not capabilities:
+            state = "NONE_REPORTED"
+        return {"id": connection_id, "revision": revision, "item_verified": True,
+                "capabilities_state": state,
+                "capabilities": [{"type": kind, "status": status} for kind, status in sorted(capabilities)]}
+
+    def validate_and_activate(self, connection_id, *, actor, revision, confirmed):
+        self._owner(actor)
+        if confirmed is not True or type(revision) is not int or not 0 <= revision < 2**63 - 1:
+            raise SyncError("ACTIVATION_CONFIRMATION_REQUIRED", 422)
+        original, config = self._configuration_for_validation(connection_id, revision, {"DRAFT", "DISABLED"})
         self._validate_item(config)
 
         _, stamp = self.service._time()
@@ -321,6 +357,7 @@ class RegistryAdmin:
                 raise SyncError("ITEM_NOT_READY")
         except PluggyError:
             raise SyncError("PROVIDER_VALIDATION_FAILED", 502) from None
+        return client, item
 
     def _rotation_context(self, db, connection_id, revision):
         row = _registered_row(db, connection_id, revision, {"DRAFT", "ACTIVE", "DISABLED"})

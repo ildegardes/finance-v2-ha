@@ -29,6 +29,7 @@ class RegistryRateLimiter:
     def admit(self, operation):
         uses_provider = operation in {
             "open_finance_registry_activate", "open_finance_registry_rotate_credentials",
+            "open_finance_registry_validate",
         }
         attempts = self._provider if uses_provider else self._local
         with self._lock:
@@ -43,6 +44,7 @@ class RegistryRateLimiter:
 OPERATIONS = (
     ('POST','registry/drafts','registry_create'),
     ('POST','registry/activate','registry_activate'),
+    ('POST','registry/validate','registry_validate'),
     ('POST','registry/archive','registry_archive'),
     ('POST','registry/disable','registry_disable'),
     ('POST','registry/rename','registry_rename'),
@@ -130,6 +132,8 @@ def dispatch(app,operation,identity,body,query):
         args = dict(actor=identity.client_id, revision=body['revision'], confirmed=body['confirmed'])
         if operation == 'open_finance_registry_activate':
             return admin.validate_and_activate(body['connection_id'], **args),200
+        if operation == 'open_finance_registry_validate':
+            return admin.validate_connection(body['connection_id'], **args),200
         if operation == 'open_finance_registry_archive':
             return admin.archive(body['connection_id'], **args),200
         if operation == 'open_finance_registry_disable':

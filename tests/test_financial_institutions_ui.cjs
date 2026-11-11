@@ -71,6 +71,11 @@ async function fixture(t, writable) {
         Object.assign(row, {lifecycle: 'ACTIVE', enabled: true, revision: row.revision + 1});
         return {};
       }
+      if (route.endsWith('/validate')) {
+        if (!options.body.confirmed) throw Error('Missing validation confirmation');
+        return {item_verified: true, capabilities_state: 'PARTIAL',
+          capabilities: [{type: 'ACCOUNT', status: 'AVAILABLE'}, {type: 'PRIVATE_VALUE', status: 'AVAILABLE'}]};
+      }
       if (route.endsWith('/rename') || route.endsWith('/disable')) {
         const row = rows.find(row => row.id === options.body.connection_id);
         if (!row || row.revision !== options.body.revision) throw Error('Unexpected revision');
@@ -164,6 +169,19 @@ test('edits the label and suspends and resumes only after confirmation', async t
   await page.getByRole('button', {name: 'Consultar cache Pluggy'}).waitFor();
   assert.deepEqual(await page.evaluate(() => calls.filter(c => c.method === 'POST').map(c => c.route)), [
     '/open-finance/registry/rename', '/open-finance/registry/disable', '/open-finance/registry/activate',
+  ]);
+});
+
+test('shows verified capabilities from a bounded preview without activating or collecting', async t => {
+  const page = await fixture(t, true);
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', {name: 'Verificar Item e recursos'}).click();
+  const status = page.getByRole('status').filter({hasText: 'Item verificado'});
+  await status.waitFor();
+  assert.match(await status.innerText(), /Conta disponível.*primeira página/);
+  assert(!((await status.innerText()).includes('PRIVATE_VALUE')));
+  assert.deepEqual(await page.evaluate(() => calls.filter(c => c.method === 'POST').map(c => c.route)), [
+    '/open-finance/registry/validate',
   ]);
 });
 

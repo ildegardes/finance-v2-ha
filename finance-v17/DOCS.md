@@ -178,6 +178,12 @@ com o token do proprietário. Mantenha a porta TLS fora do Cloudflare Tunnel
 e de encaminhamentos públicos. A porta HTTP 8766 continua atendendo as
 rotas existentes, com a administração do registro bloqueada.
 
+Em **Instituições Financeiras**, salve um rascunho e use **Verificar Item e
+recursos** para conferir o Item e os recursos declarados pela Pluggy. A
+verificação consulta apenas a primeira página de recursos e indica quando há
+mais páginas. A ativação exige confirmação separada. A coleta financeira pode
+ser iniciada manualmente após a ativação.
+
 As regras de mapeamento de diretórios e portas são descritas na
 [referência de configuração do Supervisor](https://contributors.home-assistant.io/apps/reference/configuration/).
 

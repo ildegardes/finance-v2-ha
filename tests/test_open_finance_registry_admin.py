@@ -98,6 +98,29 @@ class RegistryEnrollmentTests(unittest.TestCase):
             self.assertEqual(db.execute("SELECT lifecycle FROM of_connection_registry").fetchone()[0], "DRAFT")
             self.assertEqual(db.execute("SELECT enabled FROM of_connections").fetchone()[0], 0)
 
+    def test_preview_reports_only_known_capabilities_and_does_not_activate_or_import(self):
+        draft = self.draft()
+
+        def send(method, path, headers, body, timeout):
+            if path.startswith("/items/fixture-item/resources?"):
+                self.operations.append((method, path))
+                return 200, {"page": 1, "totalPages": 2, "total": 3, "results": [
+                    {"resourceId": "private-resource-id", "type": "ACCOUNT", "status": "AVAILABLE"},
+                    {"resourceId": "private-resource-id-2", "type": "fixture-secret", "status": "AVAILABLE"},
+                ]}
+            return self.send(method, path, headers, body, timeout)
+
+        self.service.client_factory = lambda config: PluggyClient(config, send=send)
+        result = self.admin.validate_connection(draft["id"], actor="UI:local", revision=0, confirmed=True)
+        self.assertEqual(result["capabilities"], [{"type": "ACCOUNT", "status": "AVAILABLE"}])
+        self.assertEqual(result["capabilities_state"], "PARTIAL")
+        self.assertNotIn("private-resource-id", json.dumps(result))
+        self.assertNotIn("fixture-secret", json.dumps(result))
+        self.assertEqual(len(self.operations), 3)
+        with closing(self.service._db()) as db:
+            self.assertEqual(db.execute("SELECT lifecycle FROM of_connection_registry").fetchone()[0], "DRAFT")
+            self.assertEqual(db.execute("SELECT count(*) FROM of_sync_runs").fetchone()[0], 0)
+
     def test_owner_confirmation_and_duplicate_binding_guards(self):
         with self.assertRaisesRegex(SyncError, "^OWNER_REQUIRED$"):
             self.draft(actor="CLIENT:fixture")
