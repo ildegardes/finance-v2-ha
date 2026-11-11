@@ -9,3 +9,5 @@ Cada posição distingue data financeira, atualização do provedor, coleta e fr
 O ranking representa saídas brutas elegíveis por moeda e produto; agrupa cinco categorias, outras e sem categoria antes da paginação. Não se trata de classificação econômica. Campos desconhecidos e dados indisponíveis exigem tratamento explícito pelo consumidor.
 
 Este contrato permanece experimental: a matriz completa de classificação, cobertura de movimentações, filtros, testes de segurança e compatibilidade ainda não está concluída. Não utilizar como critério de liberação ou publicar como versão homologada.
+
+O filtro `bill_id` exige `connection_id`, `account_id` e `product=CREDIT`; valida a fatura atual no escopo composto e retorna somente transações com vínculo persistido `MATCHED` àquela fatura e conta. Uma ligação sem referência, não resolvida ou de outra conta não satisfaz o filtro. Não se infere pagamento nem natureza econômica a partir do vínculo. O filtro não consulta revisões históricas; a interface não oferece o atalho para faturas históricas.

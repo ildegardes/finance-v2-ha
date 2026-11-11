@@ -29,7 +29,12 @@ class BrowserIntegration(unittest.TestCase):
                 return value
             def synthetic_send(*args):
                 status, payload=original_send(*args)
-                return status, repair(payload)
+                payload=repair(payload)
+                if '/v2/transactions?' in args[1] and 'accountId=account-CREDIT' in args[1]:
+                    payload['results'][0]['creditCardMetadata']['billId']='bill-test'
+                    other=dict(payload['results'][0]);other['id']='unlinked-card-transaction';other['description']='Sem vínculo sintético';other['creditCardMetadata']={}
+                    payload['results'].append(other)
+                return status, payload
             case.service=OpenFinanceService(case.settings,client_factory=lambda config: PluggyClient(config,send=synthetic_send,sleep=lambda _:None))
             case.sync()
             case.no_network.stop()  # The browser and server communicate only on loopback.

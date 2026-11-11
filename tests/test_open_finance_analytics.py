@@ -157,6 +157,25 @@ class AnalyticsTests(fixtures.CoverageTests):
             classes = result['positions']['investments']['by_class']
             self.assertEqual(classes, [{'type':'FIXED_INCOME', 'known':1, 'unavailable':0, 'value':'200'}])
 
+    def test_bill_filter_requires_scoped_proven_link(self):
+        self.sync()
+        with closing(connect(self.db)) as c:
+            row = c.execute("SELECT * FROM of_resource_records WHERE resource='transactions' AND parent_id='account-CREDIT'").fetchone()
+            data = json.loads(row['payload_json']); data['id']='unlinked'
+            c.execute("INSERT INTO of_resource_records(connection_id,resource,parent_id,external_id,payload_json,payload_hash,state,first_run_id,last_run_id,observed_at) VALUES (?,?,?,?,?,?,?,?,?,?)", (row['connection_id'],row['resource'],row['parent_id'],'unlinked',json.dumps(data),row['payload_hash'],'PRESENT',row['first_run_id'],row['last_run_id'],row['observed_at']))
+            c.execute("UPDATE of_resource_links SET state='MATCHED',referenced_external_id='bill-test',target_external_id='bill-test' WHERE source_parent_id='account-CREDIT'")
+            c.commit()
+            params={'connection_id':['bank-test'],'account_id':['account-CREDIT'],'product':['CREDIT'],'bill_id':['bill-test']}
+            result=analytics(c,self.settings,params)
+            self.assertEqual(result['total'],1)
+            self.assertEqual(result['items'][0]['external_id'],'transaction-test')
+            self.assertEqual(result['items'][0]['bill_relation']['state'],'MATCHED')
+            self.assertEqual(result['items'][0]['economic_classification'],'NOT_ESTABLISHED')
+        status,_=self.request('/api/v2/open-finance/analytics?bill_id=bill-test')
+        self.assertEqual(status,422)
+        status,_=self.request('/api/v2/open-finance/analytics?connection_id=bank-test&account_id=account-BANK&product=CREDIT&bill_id=bill-test')
+        self.assertEqual(status,404)
+
     def test_invalid_filters_rejected(self):
         self.sync()
         for query in ('start=2026-10-31&end=2026-10-01', 'page_size=3', 'currency=XYZ1'):

@@ -11,7 +11,7 @@ from .open_finance_registry import connection_views
 from .open_finance_domain import _origin, _context_at_origin, _freshness
 
 PARAMS = {'start', 'end', 'connection_id', 'account_id', 'category', 'product',
-          'status', 'direction', 'currency', 'search', 'page', 'page_size', 'history'}
+          'status', 'direction', 'currency', 'search', 'page', 'page_size', 'history', 'bill_id'}
 
 
 def _parameters(query):
@@ -40,10 +40,12 @@ def _parameters(query):
         q[key] = int(value)
     if q['page_size'] not in (25, 50, 100):
         raise SyncError('INVALID_PAGINATION', 422)
-    for key in ('connection_id', 'account_id', 'category', 'search'):
+    for key in ('connection_id', 'account_id', 'category', 'search', 'bill_id'):
         if key in q and (len(q[key]) > 256 or any(ord(ch) < 32 for ch in q[key])):
             raise SyncError('INVALID_QUERY', 422)
     if q.get('account_id') and not q.get('connection_id'):
+        raise SyncError('INVALID_FILTER_COMBINATION', 422)
+    if q.get('bill_id') and (not q.get('connection_id') or not q.get('account_id') or q['product'] != 'CREDIT'):
         raise SyncError('INVALID_FILTER_COMBINATION', 422)
     if 'search' in q:
         q['_search'] = search_key(q['search'], term=True)
@@ -90,6 +92,8 @@ def analytics(c, settings, query):
                 records.append({**dict(row), 'data': json.loads(row['payload_json'], parse_float=Decimal)})
         accounts = {(r['connection_id'], r['external_id']): r for r in records if r['resource'] == 'accounts'}
         if q.get('account_id') and (q['connection_id'], q['account_id']) not in accounts:
+            raise SyncError('RESOURCE_NOT_FOUND', 404)
+        if q.get('bill_id') and not c.execute("SELECT 1 FROM of_resource_records WHERE connection_id=? AND resource='bills' AND parent_id=? AND external_id=? AND state='PRESENT'", (q['connection_id'], q['account_id'], q['bill_id'])).fetchone():
             raise SyncError('RESOURCE_NOT_FOUND', 404)
         translations = {}
         for cat in c.execute("SELECT connection_id,external_id,display_name_pt,translation_status FROM of_categories WHERE external_id IS NOT NULL"):
@@ -162,6 +166,8 @@ def analytics(c, settings, query):
             amount = _amount(data.get('amount'))
             link = bill_links.get((r['connection_id'], r['parent_id'], r['external_id'])) if product == 'CREDIT' else None
             relation = {'state': link['state'], 'target_parent_id': link['target_parent_id'], 'target_external_id': link['target_external_id']} if link else {'state': 'NOT_ESTABLISHED'}
+            if q.get('bill_id') and (not link or link['state'] != 'MATCHED' or link['target_external_id'] != q['bill_id'] or link['target_parent_id'] != r['parent_id']):
+                continue
             items.append({'connection_id': r['connection_id'], 'account_id': r['parent_id'], 'external_id': r['external_id'],
                 'institution': views[r['connection_id']].institution, 'account_name': account['data'].get('name') if account else None,
                 'date': day, 'description': description, 'merchant': merchant, 'amount': str(amount) if amount is not None else None,
