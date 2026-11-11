@@ -71,6 +71,7 @@ export function createOpenFinance({api,view,heading,esc,navigation=null,state={}
       flow.update({connection_id:identity.connection_id,account_id:identity.parent_id,bill_id:identity.external_id,product:'CREDIT',status:'ALL',direction:'all',category:'',search:'',history:conn?.enabled&&!conn?.historical?'0':'1'});
       selectTab('flow',true);
     }});
+    organizeConnectionSections(host.querySelector('#of-panel-connections'));
     mountAnalyticsOverview({host,api,esc,catalog,navigation,state:analyticsState,onNavigate:context=>{flow.update(context);selectTab('flow',true)}});
     flow=mountAnalyticsFlow({host,api,esc,catalog,navigation,state:analyticsState,onRefresh:()=>{if(view.contains(host)){host.remove();openFinance()}}});
     const history=host.querySelector('[data-history]');
@@ -126,4 +127,17 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,on
   form.elements.end.oninput=()=>form.elements.end.setCustomValidity('');form.elements.start.oninput=()=>form.elements.end.setCustomValidity('');
   host.addEventListener('of-tab-selected',event=>{if(event.detail==='overview'){for(const key of ['start','end','connection_id','currency'])form.elements[key].value=state[key]||'';load()}});
   load();
+}
+
+
+// Keep the existing operational controls mounted while reducing visual noise.
+export function organizeConnectionSections(panel){
+  if(!panel)return;
+  const sections=[...panel.children].filter(node=>node.tagName==='SECTION');
+  for(const section of sections.slice(1)){
+    const heading=section.querySelector('h2');
+    const wrapper=document.createElement('details');wrapper.className='of-connection-section';
+    const summary=document.createElement('summary');summary.textContent=heading?.textContent||'Detalhes da conexão';
+    section.before(wrapper);wrapper.append(summary,section);
+  }
 }

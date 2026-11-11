@@ -17,3 +17,4 @@
 .of-institution-group{margin:1.25rem 0 .45rem;font-size:1rem;color:var(--brand-dark)}
 .of-selected-institution{display:block;color:var(--muted);font-weight:400;overflow-wrap:anywhere}.of-selected-institution:empty{display:none}
 .of-resource-filter label.of-history-choice{display:flex;align-items:center;gap:.5rem}.of-history-choice input[type=checkbox]{width:auto;flex:0 0 auto}
+.of-connection-section{margin-top:1rem;border:1px solid var(--line);border-radius:.85rem;background:var(--surface)}.of-connection-section>summary{padding:1rem;font-weight:700;color:var(--brand-dark);cursor:pointer}.of-connection-section>section{box-shadow:none;border:0;border-top:1px solid var(--line);border-radius:0;margin:0}
