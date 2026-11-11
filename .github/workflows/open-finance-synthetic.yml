@@ -18,6 +18,8 @@ jobs:
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -29,3 +31,13 @@ jobs:
         run: python -m unittest discover -s tests -p test_d08_auth.py
       - name: Output privacy
         run: python -m unittest discover -s tests -p test_output_privacy.py
+      - name: Prepare schema 10 baseline
+        run: |
+          mkdir -p "$RUNNER_TEMP/schema10"
+          git archive 62fb50e finance-v17/src | tar -x -C "$RUNNER_TEMP/schema10"
+          test -f "$RUNNER_TEMP/schema10/finance-v17/src/finance_v2/migrations.py"
+          echo "FINANCE_SCHEMA10_BASELINE_SRC=$RUNNER_TEMP/schema10/finance-v17/src" >> "$GITHUB_ENV"
+      - name: Gate B
+        run: python -m unittest discover -s tests -p test_gate_b.py
+      - name: C6R synthetic concurrency
+        run: python -m unittest discover -s tests -p test_gate_c6r.py

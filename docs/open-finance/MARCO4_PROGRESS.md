@@ -32,3 +32,10 @@
 - Analytics: 32; Gate B: 18; C6R Python: 8; autenticação: 8; privacidade de saída: 6; integração WSGI/SQLite e navegador: 1; C6R interface: 7; instituições: 10; conexões: 1 arquivo. Todos passaram na execução com suas dependências sintéticas configuradas.
 - Uma primeira execução de C6R interface sem `GATE_B_UI_FIXTURE` falhou antes dos testes por ausência da fixture. A execução posterior com a variável correta passou; o erro não foi omitido nem contado como teste aprovado.
 - A integração inclui três instituições sintéticas, histórico, cobertura indisponível e falha por recurso, verificação de identidade e ausência de escrita durante navegação. O teste isolado cobre erro de consulta, nova tentativa e resposta atrasada. Esses testes não substituem a matriz integrada completa solicitada.
+
+## Continuação: integração e laboratório
+
+- O navegador integrado ao WSGI e SQLite sintéticos agora recebe uma resposta HTTP 503 simulada para a consulta de cobertura, verifica a opção de nova tentativa e confirma a recuperação com a resposta real do backend sintético. O cenário mantém as verificações de escopo por conexão e de ausência de escrita na navegação.
+- Gate B (18 testes) e C6R (8 testes) passaram localmente com a baseline schema 10 extraída do commit `62fb50e`. O workflow passou a extrair a mesma baseline e executar essas suítes; a aprovação no GitHub depende da execução do novo commit.
+- O laboratório QEMU ARM64 anterior foi reativado com o contêiner `finance-dynamic-0129-build-arm64`; seu script aplica bloqueio de saída antes do boot. O guest agent respondeu após a inicialização. A resposta inicial do guest agent havia expirado durante o boot, portanto não foi tratada como aprovação do Supervisor.
+- Pendente: comprovar operações administrativas e concorrência em integração, auditoria consolidada e homologação da candidata no Supervisor. `MARCO_4_DEV_STATUS=NO_GO`; nenhuma qualificação final é presumida.
