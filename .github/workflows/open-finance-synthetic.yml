@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   python-synthetic:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       PYTHONPATH: finance-v17/src:tests
