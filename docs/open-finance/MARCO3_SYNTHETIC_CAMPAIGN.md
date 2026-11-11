@@ -29,3 +29,22 @@ Não há homologação completa, nem GO para o Marco 3. Valores econômicos perm
 - **Responsividade parcialmente validada:** a integração automatiza largura do documento em 390, 768 e 1440 px e expansão de detalhes. Não foi realizada inspeção sistemática de sobreposição e truncamento de todos os componentes e estados.
 
 Resultado: `MARCO_3_STATUS=NO_GO`. As pendências de acessibilidade, privacidade e responsividade acima não foram marcadas como aprovadas.
+
+## Auditoria de acessibilidade, privacidade e responsividade
+
+### Automação executada
+
+- `open_finance_privacy_attributes_ui.cjs`: valores numéricos em conteúdo e em `title`, `aria-label` e `aria-valuetext` de elementos privados; inspeção da árvore acessível, troca de visibilidade e substituição do conteúdo. A máscara é uma função de apresentação: o navegador recebe os dados necessários da API.
+- `open_finance_product_states_ui.cjs`: Cartões, Investimentos e Crédito, em 390, 768 e 1440 px, com valores visíveis e ocultos, carregamento, vazio, ausência de valor, recurso indisponível, falha, dado desatualizado e detalhes expandidos. Verifica largura do documento, limites horizontais de controles, botões truncados quando o overflow está oculto e sobreposição entre controles visíveis. Capturas isoladas em `artifacts/synthetic-audit` são dados sintéticos.
+- `test_open_finance_integrated_ui.py` e `open_finance_integrated_ui.cjs`: WSGI/SQLite sintético, navegação de abas por setas, Enter/Espaço em expansão, Tab/Shift+Tab em um trecho, foco visível, rótulos dos filtros de Cartões, contraste da aba selecionada e inspeção limitada da árvore acessível. As capturas da aplicação estão em `artifacts/synthetic-preview`.
+- `test_financial_institutions_ui.cjs`: dez cenários, incluindo revalidação das conexões ativas após atualizar a consulta.
+
+### Inspeção manual e defeitos corrigidos
+
+Foram inspecionadas capturas sintéticas da aplicação para Cartões em desktop e Investimentos e Crédito em celular. A inspeção detectou truncamento do nome da instituição selecionada; o texto completo agora aparece abaixo do seletor e foi testado na integração. O checkbox de histórico foi alinhado ao rótulo. A inspeção não cobriu todos os estados, tamanhos ou combinações.
+
+Foi corrigida a exposição de valores financeiros sem símbolo de moeda em atributos de elementos marcados como privados. Foi restaurada a atualização da consulta, revalidando conexões operacionais e removendo filtros dependentes inválidos. Uma conexão histórica não é aplicada de forma invisível à Visão geral, que consulta somente conexões ativas.
+
+### Não executado e limites
+
+`SCREEN_READER_TEST=NOT_EXECUTED`: NVDA não foi encontrado nos caminhos padrão; o executável do Narrador do Windows existe, mas não foi operado nesta campanha. A inspeção automatizada da árvore acessível não substitui o teste real com leitor de tela. Não foi executada auditoria manual integral WCAG 2.2 AA, nem comparação sistemática de sobreposição/truncamento de todos os textos, gráficos e estados. Os testes automatizados cobrem uma amostra de nomes acessíveis, contraste e estados de privacidade, não uma comprovação completa para todos os componentes. Não declarar conformidade integral de acessibilidade nem GO do Marco 3 com base nesta campanha.

@@ -15,3 +15,5 @@
 .of-advanced{flex:1 1 100%;min-width:0}.of-advanced>summary{color:var(--brand);font-weight:700;cursor:pointer;padding:.5rem 0}.of-advanced[open]>.of-overview-filters{padding:.5rem 0}
 .of-product-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr));gap:.75rem;margin:.8rem 0}.of-product-summary dt{color:var(--muted);font-size:.86rem}.of-product-summary dd{margin:.2rem 0 0;font-weight:700;overflow-wrap:anywhere}.of-domain-filters>summary{color:var(--brand);font-weight:700;cursor:pointer;margin:.8rem 0}
 .of-institution-group{margin:1.25rem 0 .45rem;font-size:1rem;color:var(--brand-dark)}
+.of-selected-institution{display:block;color:var(--muted);font-weight:400;overflow-wrap:anywhere}.of-selected-institution:empty{display:none}
+.of-resource-filter label.of-history-choice{display:flex;align-items:center;gap:.5rem}.of-history-choice input[type=checkbox]{width:auto;flex:0 0 auto}

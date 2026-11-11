@@ -45,7 +45,7 @@ export function mountDomains({host,api,esc,catalog,navigation=null,domainSelecti
     const panel=host.querySelector('#of-panel-'+area);if(!panel)continue;
     if(area==='overview'||area==='assets')panel.replaceChildren();
     const section=document.createElement('section');section.className='panel of-coverage';
-    section.innerHTML=`<h2>${esc({overview:'Contas, saldos e cobertura',cards:'Cartões e faturas',assets:'Carteira e movimentações',credit:'Crédito e obrigações',connections:'Diagnóstico de cobertura'}[area])}</h2><p class="of-notice">Staging bancário, separado dos lançamentos oficiais. Cache completo não significa dados atualizados. Ausência, indisponibilidade e zero são distintos. Saldos e investimentos não são somados como patrimônio: moedas e possíveis sobreposições não estão comprovadas.</p><form class="of-resource-filter form-grid"><label>Recurso<select name="resource">${Object.entries(kinds).map(([id,label])=>`<option value="${id}">${label}</option>`).join('')}</select></label><label>Instituição<select name="connection_id"><option value="">Todas</option>${active.map(c=>`<option value="${esc(c.id)}">${esc(connectionLabel(c,active))}</option>`).join('')}</select></label><label>Tipo / classe informado<input name="type" maxlength="64" pattern="[A-Za-z0-9_-]*" placeholder="Ex.: FIXED_INCOME"></label><label>Moeda<input name="currency" maxlength="3" pattern="[A-Z]{3}" placeholder="Ex.: BRL"></label><label><input name="history" type="checkbox"> Histórico de observações (não é rentabilidade calculada)</label><button type="submit">Consultar staging</button></form><div class="of-resource-result" aria-live="polite"></div>`;
+    section.innerHTML=`<h2>${esc({overview:'Contas, saldos e cobertura',cards:'Cartões e faturas',assets:'Carteira e movimentações',credit:'Crédito e obrigações',connections:'Diagnóstico de cobertura'}[area])}</h2><p class="of-notice">Staging bancário, separado dos lançamentos oficiais. Cache completo não significa dados atualizados. Ausência, indisponibilidade e zero são distintos. Saldos e investimentos não são somados como patrimônio: moedas e possíveis sobreposições não estão comprovadas.</p><form class="of-resource-filter form-grid"><label>Recurso<select name="resource">${Object.entries(kinds).map(([id,label])=>`<option value="${id}">${label}</option>`).join('')}</select></label><label>Instituição<select name="connection_id"><option value="">Todas</option>${active.map(c=>`<option value="${esc(c.id)}">${esc(connectionLabel(c,active))}</option>`).join('')}</select></label><label>Tipo / classe informado<input name="type" maxlength="64" pattern="[A-Za-z0-9_-]*" placeholder="Ex.: FIXED_INCOME"></label><label>Moeda<input name="currency" maxlength="3" pattern="[A-Z]{3}" placeholder="Ex.: BRL"></label><label class="of-history-choice"><input name="history" type="checkbox"> Histórico de observações (não é rentabilidade calculada)</label><button type="submit">Consultar staging</button></form><div class="of-resource-result" aria-live="polite"></div>`;
     panel.append(section);
     let loadInvestmentSummary=null,summaryQueries=null;
     if(area==='assets'){
@@ -76,6 +76,10 @@ export function mountDomains({host,api,esc,catalog,navigation=null,domainSelecti
     const selected=domainSelections[area];
     form.elements.connection_id.value=active.some(c=>c.id===selected)?selected:'';
     domainSelections[area]=form.elements.connection_id.value;
+    const selectedInstitution=document.createElement('small');selectedInstitution.className='of-selected-institution';
+    form.elements.connection_id.parentElement.append(selectedInstitution);
+    function showSelectedInstitution(){selectedInstitution.textContent=form.elements.connection_id.value?form.elements.connection_id.selectedOptions[0]?.textContent||'':''}
+    showSelectedInstitution();
     let page=1,generation=0,parent=null,parentConnection=null;const queries=createQueryGeneration(navigation);
     async function load(){
       const query=queries.begin(),mine=++generation;result.setAttribute('aria-busy','true');result.innerHTML='<p role="status" data-query-loading>Consultando dados importados…</p>';
@@ -94,13 +98,13 @@ export function mountDomains({host,api,esc,catalog,navigation=null,domainSelecti
         result.querySelector('[data-domain-back]')?.addEventListener('click',()=>{parent=null;page=1;load()});
         result.querySelectorAll('[data-card-flow]').forEach(button=>button.onclick=()=>onCardFlow(response.items[Number(button.dataset.cardFlow)].identity));
         result.querySelectorAll('[data-bill-flow]').forEach(button=>button.onclick=()=>onBillFlow(response.items[Number(button.dataset.billFlow)].identity));
-        result.querySelectorAll('[data-domain-child]').forEach(button=>button.onclick=()=>{const row=response.items[Number(button.dataset.row)];parent=row.identity.external_id;parentConnection=row.identity.connection_id;form.elements.connection_id.value=active.some(c=>c.id===parentConnection)?parentConnection:'';form.elements.resource.value=button.dataset.domainChild;form.elements.type.value='';form.elements.currency.value='';page=1;load()});
+        result.querySelectorAll('[data-domain-child]').forEach(button=>button.onclick=()=>{const row=response.items[Number(button.dataset.row)];parent=row.identity.external_id;parentConnection=row.identity.connection_id;form.elements.connection_id.value=active.some(c=>c.id===parentConnection)?parentConnection:'';showSelectedInstitution();form.elements.resource.value=button.dataset.domainChild;form.elements.type.value='';form.elements.currency.value='';page=1;load()});
       }catch(_){if(query.current()&&host.isConnected&&mine===generation)result.innerHTML='<p role="alert">Não foi possível consultar a cobertura. Nenhum valor foi estimado. Verifique schema e armazenamento.</p>'}finally{if(query.current()&&mine===generation){result.removeAttribute('aria-busy');result.querySelector('[data-query-loading]')?.remove()}}
     }
     function cancelPending(){generation++;queries.cancel();result.removeAttribute('aria-busy')}
     function filterChanged(){cancelPending();summaryQueries?.cancel();result.innerHTML='<p role="status">Filtros alterados. Aplique para consultar.</p>';if(area==='assets')panel.querySelector('.of-investment-overview').innerHTML='<p role="status">Filtros alterados. Aplique para consultar.</p>';}
     form.addEventListener('input',filterChanged);
-    form.elements.connection_id.onchange=()=>{domainSelections[area]=form.elements.connection_id.value;parent=null;parentConnection=null;page=1};
+    form.elements.connection_id.onchange=()=>{domainSelections[area]=form.elements.connection_id.value;showSelectedInstitution();parent=null;parentConnection=null;page=1};
     form.onsubmit=e=>{e.preventDefault();parent=null;page=1;load();if(loadInvestmentSummary)loadInvestmentSummary()};controllers.push({area,load,cancel:()=>{cancelPending();summaryQueries?.cancel()}});
   }
   host.addEventListener('of-tab-selected',event=>{controllers.forEach(c=>{if(c.area!==event.detail)c.cancel()});controllers.find(c=>c.area===event.detail)?.load()});

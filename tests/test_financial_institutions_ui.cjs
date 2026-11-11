@@ -7,7 +7,7 @@ const {chromium} = require(path.join(process.env.USERPROFILE, '.cache/codex-runt
 
 const web = path.resolve(__dirname, '../finance-v17/src/finance_v2/web');
 const assets = new Set(['financial-institutions.js', 'privacy.js', 'open-finance-errors.js', 'open-finance-status.js',
-  'open-finance.js', 'open-finance-coverage.js', 'open-finance-domain.js',
+  'open-finance.js', 'open-finance-flow.js', 'open-finance-coverage.js', 'open-finance-domain.js',
   'santander-binding-recovery.js', 'navigation.js', 'query-generation.js']);
 let server, browser, origin;
 
@@ -288,6 +288,7 @@ test('operational filters refresh by stable ID and keep archived history', async
         query_completeness:'COMPLETE', coverage:{direction:{state:'COMPLETE'}}, warnings:[],
         counts:{after_f04:{state:'EXACT',value:0}},
       }};
+      if (path.startsWith('/open-finance/analytics?')) return {positions:{accounts:{value:null,coverage_state:'PARTIAL',items:[]},investments:{value:null,coverage_state:'PARTIAL',items:[],by_class:[]}},flow:{BANK:{incoming:'0',outgoing:'0'},CREDIT:{incoming:'0',outgoing:'0'}},category_ranking:{BANK:[]},series:[],coverage:[],items:[],total:0,page:1,has_more:false};
       if (path.startsWith('/open-finance/domain?')) return {items:[],total:0};
       throw new Error('Unexpected route');
     };
@@ -296,7 +297,7 @@ test('operational filters refresh by stable ID and keep archived history', async
   const values = selector => page.locator(selector).evaluateAll(nodes => nodes.map(node => [node.value,node.textContent]));
   const flow = '#of-panel-flow select[name="connection_id"]';
   const domain = '#of-panel-assets select[name="connection_id"]';
-  const expected = [['','Todas as instituições'],['itau','Itaú'],['santander-new','Santander'],['partial','Parcial']];
+  const expected = [['','Todas as ativas'],['itau','Itaú'],['santander-new','Santander'],['partial','Parcial']];
   assert.deepEqual(await values(flow+' option'),expected);
   assert.deepEqual((await values(domain+' option')).slice(1),expected.slice(1));
   await page.locator('[data-of-tab="connections"]').click();
@@ -305,7 +306,7 @@ test('operational filters refresh by stable ID and keep archived history', async
   await page.locator(flow).selectOption('santander-new');
   await page.getByRole('button',{name:'Aplicar filtros'}).click();
   await page.getByRole('button',{name:'Atualizar consulta'}).waitFor();
-  const requests = () => page.evaluate(() => requests.filter(path => path.includes('/transactions?')));
+  const requests = () => page.evaluate(() => requests.filter(path => path.includes('/analytics?')));
   assert.match((await requests()).at(-1),/connection_id=santander-new(?:&|$)/);
   await page.getByRole('button',{name:'Atualizar consulta'}).click();
   await page.getByRole('button',{name:'Atualizar consulta'}).waitFor();
@@ -318,9 +319,9 @@ test('operational filters refresh by stable ID and keep archived history', async
   await page.evaluate(() => {connections.forEach(c=>c.enabled=false)});
   await page.getByRole('button',{name:'Atualizar consulta'}).click();
   await page.getByRole('button',{name:'Atualizar consulta'}).waitFor();
-  assert.deepEqual(await values(flow+' option'),[['','Todas as instituições']]);
+  assert.deepEqual(await values(flow+' option'),[['','Todas as ativas']]);
   await page.evaluate(() => {connections.find(c=>c.id==='santander-new').enabled=true});
   await page.getByRole('button',{name:'Atualizar consulta'}).click();
   await page.getByRole('button',{name:'Atualizar consulta'}).waitFor();
-  assert.deepEqual(await values(flow+' option'),[['','Todas as instituições'],['santander-new','Santander']]);
+  assert.deepEqual(await values(flow+' option'),[['','Todas as ativas'],['santander-new','Santander']]);
 });

@@ -33,6 +33,8 @@ const web=path.resolve('finance-v17/src/finance_v2/web');
   await page.waitForFunction(()=>window.testCalls.length===2);
   assert.match(await page.evaluate(()=>window.testCalls[1]),/start=2026-09-01/);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await page.evaluate(async()=>{const {mountAnalyticsOverview}=await import('/open-finance.js');const host=document.createElement('section');host.id='history-host';host.innerHTML='<section id="of-panel-overview"></section>';document.body.append(host);window.historyCalls=[];const state={start:'2026-10-01',end:'2026-10-31',currency:'BRL',connection_id:'archived',history:'1'};mountAnalyticsOverview({host,catalog:{connections:[{id:'archived',institution:'Histórica',enabled:false,historical:true}]},state,esc:String,api:async u=>{window.historyCalls.push(u);return {positions:{accounts:{value:null,coverage_state:'PARTIAL',items:[]},investments:{value:null,coverage_state:'PARTIAL',items:[]}},flow:{BANK:{incoming:'0',outgoing:'0'}},series:[],category_ranking:{BANK:[]},coverage:[]}}})});
+  await page.waitForFunction(()=>window.historyCalls?.length>0);assert(!new URL('http://synthetic.local/'+await page.evaluate(()=>window.historyCalls[0])).searchParams.has('connection_id'));assert.equal(await page.locator('#history-host select[name=connection_id]').inputValue(),'');
   process.stdout.write('PASS: overview, synthetic data, filters, privacy, 390px\n');
  }finally{await browser.close()}
 })().catch(e=>{console.error(e);process.exitCode=1});
