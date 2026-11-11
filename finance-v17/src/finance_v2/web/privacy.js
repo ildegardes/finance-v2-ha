@@ -67,7 +67,9 @@ export function installPrivacy(doc=document,win=window){
       let records=attributes.get(element);if(!records){records={};attributes.set(element,records)}
       for(const name of ['title','aria-label','aria-valuetext']){
         if(!element.hasAttribute(name)){delete records[name];continue}
-        const entry=project(element.getAttribute(name),records[name]);records[name]=entry;
+        const entry=project(element.getAttribute(name),records[name]);
+        if(element.closest('[data-private-financial]')&&entry.original.trim())entry.masked=MASK;
+        records[name]=entry;
         const next=visible?entry.original:entry.masked;
         if(element.getAttribute(name)!==next)element.setAttribute(name,next);
       }
