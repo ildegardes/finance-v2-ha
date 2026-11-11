@@ -17,3 +17,15 @@ test('selective revert requires audited operation and separate confirmation',asy
 test('audit finalization uncertainty is visible and cannot trigger automatic retry',async()=>{await page.evaluate(()=>outcome='COMMITTED_AUDIT_PENDING');await ready();page.once('dialog',d=>d.accept());await page.locator(b('apply')).click();await page.locator(b('status')).filter({hasText:'Não repetir'}).waitFor();assert.equal(await page.evaluate(()=>calls.length),3)});
 test('failure shows only category and clears eligibility',async()=>{await ready();await page.evaluate(()=>failure=true);await page.locator(b('apply')).click();await page.locator(b('status')).filter({hasText:'PRECHECK_BLOCKED'}).waitFor();assert.equal(await page.evaluate(()=>calls.length),2);assert(await page.locator(b('apply')).isDisabled())});
 test('stale navigation cannot submit correction after preparation',async()=>{await ready();await page.evaluate(()=>{const button=document.querySelector('[data-recovery-apply]');current=false;button.click()});assert.equal(await page.evaluate(()=>calls.length),2);assert(!(await page.evaluate(()=>calls)).some(x=>x.p.endsWith('/confirm')))});
+test('pending audit can only reconcile through an explicit confirmation',async()=>{
+ await page.evaluate(()=>{report.audit_pending=true;report.revert_operation='synthetic-operation';outcome='AUDIT_RECONCILED'});
+ await ready();
+ assert(await page.locator(b('apply')).isDisabled());
+ assert(await page.locator(b('revert')).isDisabled());
+ page.once('dialog',d=>d.accept());
+ await page.locator(b('reconcile')).click();
+ await page.locator(b('status')).filter({hasText:'Auditoria reconciliada'}).waitFor();
+ const calls=await page.evaluate(()=>window.calls);
+ assert.equal(calls[1].o.body.action,'RECONCILE');
+ assert.equal(calls[2].o.body.explicit_confirmation,'RECONCILIAR_AUDITORIA_SANTANDER');
+});

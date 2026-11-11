@@ -1,5 +1,7 @@
 # Evidências de qualificação da candidata
 
+A homologação Supervisor e o manifesto abaixo registram o commit 50e70d1. A revisão posterior da auditoria foi qualificada por regressões direcionadas e build ARM64 local.
+
 Resultados novos desta tarefa, com dados exclusivamente sintéticos:
 
 | Ambiente | Execuções aprovadas | Escopo |
@@ -29,3 +31,7 @@ No laboratório, a primeira carga sintética foi semeada antes de o Supervisor r
 Definir PYTHONPATH para finance-v17/src e executar cada test_*.py por arquivo, com unittest discover, em processo separado. Para test_gate_b.py, preparar ../baseline/finance-v17/src e migrations com o código público 0.1.26 do commit acima. Não usar um banco real como fixture. Em ARM64, usar a imagem candidata com rede none, checkout somente leitura, /tmp descartável e VALIDATION_FIXTURE_ROOT em /tmp.
 
 Executar `node --test tests/test_santander_binding_recovery_ui.cjs` para os nove casos novos. As suítes históricas de navegador exigem suas fixtures sintéticas qualificadas e Edge/Playwright. Não contam como verificações executadas pelo GitHub. Logs completos permanecem no diretório local de evidências; o JSON publicado traz resultados e SHA-256 desses artefatos, sem bancos, options.json, respostas financeiras ou recibos privados.
+
+## Revisão direcionada após 50e70d1
+
+Foram aprovados 37 testes de recuperação no Windows, os mesmos 37 no contêiner ARM64 com rede desabilitada, e 10 testes de interface. Os novos casos exercitam recibo persistido antes de falha e rollback, falha na finalização depois do commit, reinício, reconciliação de reversão interrompida, finalizador atrasado, 27ª falha histórica e origem HTTPS encaminhada a HTTP. O Supervisor isolado foi qualificado no commit anterior. A configuração efetiva do Cloudflare Tunnel permanece por verificar antes do uso administrativo pela rota pública.

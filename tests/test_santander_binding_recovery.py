@@ -153,8 +153,60 @@ class RecoveryTests(unittest.TestCase):
             return save(record,phase)
         with patch.object(self.r,'save',side_effect=fail_final):out=self.apply()
         self.assertEqual(out['status'],'COMMITTED_AUDIT_PENDING')
-        self.assertEqual(self.apply()['status'],'ALREADY_CORRECT')
+        self.r=Application(self.settings).santander_binding_recovery
+        before=self.snapshot()
+        self.assertTrue(self.r.inspect()['audit_pending'])
+        with self.assertRaisesRegex(SyncError,'AUDIT_RECONCILIATION_REQUIRED'):self.prepare()
+        result=self.execute(self.prepare('RECONCILE'),'RECONCILE')
+        self.assertEqual(result['status'],'AUDIT_RECONCILED')
+        self.assertEqual(result['sqlite_rows_changed'],0)
+        self.assertEqual(self.snapshot(),before)
         self.assertEqual(self.r.load(out['operation'])['phase'],'COMMITTED')
+    def test_prepared_before_failed_commit_reconciles_aborted_after_restart(self):
+        before=self.snapshot()
+        save=self.r.save
+        def fail_after_receipt(record,phase):
+            save(record,phase)
+            if phase=='PREPARED':raise OSError('synthetic precommit failure')
+        with patch.object(self.r,'save',side_effect=fail_after_receipt):
+            with self.assertRaises(SyncError):self.apply()
+        self.r=Application(self.settings).santander_binding_recovery
+        result=self.execute(self.prepare('RECONCILE'),'RECONCILE')
+        self.assertEqual(result['phase'],'ABORTED')
+        self.assertEqual(self.snapshot(),before)
+
+    def test_late_finalizer_cannot_overwrite_reverted_receipt(self):
+        with patch.object(self.r,'finalize_receipt',side_effect=OSError('synthetic')):
+            out=self.apply()
+        pending=self.r.load(out['operation'])
+        self.execute(self.prepare('RECONCILE'),'RECONCILE')
+        self.execute(self.prepare('REVERT',out['operation']),'REVERT')
+        before=self.r.load(out['operation'])
+        with self.r.connection(write=True) as c:self.r.finalize_receipt(c,pending)
+        self.assertEqual(before['phase'],'REVERTED')
+        self.assertEqual(self.r.load(out['operation']),before)
+
+    def test_interrupted_reversal_reconciliation_never_reapplies(self):
+        out=self.apply()
+        with patch.object(self.r,'finalize_receipt',side_effect=OSError('synthetic')):
+            result=self.execute(self.prepare('REVERT',out['operation']),'REVERT')
+        self.assertEqual(result['status'],'COMMITTED_AUDIT_PENDING')
+        self.r=Application(self.settings).santander_binding_recovery
+        path=self.r.audit_dir/(out['operation']+'.0123456789abcdef.tmp')
+        path.touch(mode=0o600)
+        before=self.snapshot()
+        result=self.execute(self.prepare('RECONCILE'),'RECONCILE')
+        self.assertEqual(result['phase'],'REVERTED')
+        self.assertEqual(self.snapshot(),before)
+
+    def test_additional_failed_history_blocks_before_preparation(self):
+        with closing(base.connect(self.db)) as c:
+            c.execute("INSERT INTO of_sync_runs(id,connection_id,actor,started_at,finished_at,state,error_code) VALUES(?,'santander','UI:local',?,?,'FAILED','AUTH_FAILED')",(secrets.token_hex(16),STAMP,STAMP))
+        before=self.snapshot()
+        self.assertIn('HISTORY_NOT_EXPECTED_26_FAILURES',self.r.inspect()['blockers'])
+        with self.assertRaisesRegex(SyncError,'PRECHECK_BLOCKED'):self.prepare()
+        self.assertEqual(self.snapshot(),before)
+
     def test_revert_preserves_later_manual_and_itau_changes(self):
         before=self.snapshot();out=self.apply()
         with closing(base.connect(self.db)) as c:
@@ -214,6 +266,15 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(self.http('/prepare','POST',body,token=None,extra=cookie)[0],403)
         self.assertEqual(self.http('/prepare','POST',body,token=None,extra={**cookie,'HTTP_X_CSRF_TOKEN':csrf,'HTTP_ORIGIN':'https://attacker.invalid'})[0],403)
         self.assertEqual(self.http('/prepare','POST',body,token=None,extra={**cookie,'HTTP_X_CSRF_TOKEN':csrf,'HTTP_ORIGIN':'http://127.0.0.1:8766'})[0],200)
+    def test_tunnel_origin_requires_explicit_configuration(self):
+        origin='https://finance.example.invalid'
+        body={'action':'APPLY','backup_confirmed':True}
+        headers={'HTTP_HOST':'finance.example.invalid','HTTP_ORIGIN':origin,'HTTP_X_FORWARDED_PROTO':'https','HTTP_CF_ACCESS_JWT_ASSERTION':'synthetic'}
+        self.assertEqual(self.http('/prepare','POST',body,token=None,extra=headers)[0],401)
+        self.assertEqual(self.http('/prepare','POST',body,extra=headers)[0],403)
+        self.app=Application(replace(self.settings,cors_origins=(origin,)))
+        self.assertEqual(self.http('/prepare','POST',body,extra=headers)[0],200)
+
     def test_http_full_explicit_flow_no_provider(self):
         status,prepared=self.http('/prepare','POST',{'action':'APPLY','backup_confirmed':True});self.assertEqual(status,200)
         body={'confirmation':prepared['confirmation'],'explicit_confirmation':CONFIRM['APPLY'],'backup_confirmed':True}

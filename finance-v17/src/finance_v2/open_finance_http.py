@@ -68,7 +68,7 @@ def dispatch(app,operation,identity,body,query):
             return recovery.inspect(),200
         if operation=='open_finance_recovery_prepare':
             if set(body)-{'action','backup_confirmed','operation'} or not {'action','backup_confirmed'}<=set(body):raise SyncError('INVALID_REQUEST',422)
-            if not isinstance(body['action'],str) or body['action'] not in {'APPLY','REVERT'} or body['action']=='APPLY' and 'operation' in body:raise SyncError('INVALID_REQUEST',422)
+            if not isinstance(body['action'],str) or body['action'] not in {'APPLY','REVERT','RECONCILE'} or body['action']!='REVERT' and 'operation' in body:raise SyncError('INVALID_REQUEST',422)
             return recovery.prepare(actor,body['action'],body['backup_confirmed'],body.get('operation')),200
         if operation=='open_finance_recovery_confirm':
             if set(body)!={'confirmation','explicit_confirmation','backup_confirmed'}:raise SyncError('INVALID_REQUEST',422)
@@ -195,7 +195,7 @@ def openapi_paths():
     result={}
     for method,path,op in OPERATIONS:
         if op.startswith('recovery_'):
-            properties={'action':enum('APPLY','REVERT'),'backup_confirmed':{'type':'boolean','const':True},'operation':{'type':'string','pattern':'^[0-9a-f]{32}$'}} if op=='recovery_prepare' else {'confirmation':{'type':'string','pattern':'^[0-9a-f]{64}$'},'explicit_confirmation':enum('CORRIGIR_BINDING_SANTANDER','REVERTER_BINDING_SANTANDER'),'backup_confirmed':{'type':'boolean','const':True}}
+            properties={'action':enum('APPLY','REVERT','RECONCILE'),'backup_confirmed':{'type':'boolean','const':True},'operation':{'type':'string','pattern':'^[0-9a-f]{32}$'}} if op=='recovery_prepare' else {'confirmation':{'type':'string','pattern':'^[0-9a-f]{64}$'},'explicit_confirmation':enum('CORRIGIR_BINDING_SANTANDER','REVERTER_BINDING_SANTANDER','RECONCILIAR_AUDITORIA_SANTANDER'),'backup_confirmed':{'type':'boolean','const':True}}
             spec={'operationId':'open_finance_'+op,'security':[{'bearerAuth':[]}],'x-owner-only':True,'x-owner-admin-only':True,'x-external-capability':'not-available','description':'Explicit Santander-only maintenance. Uses live application Settings. No provider calls. Cookie POST requires CSRF. Backup is owner-attested; no generic SQL.'}
             if method=='POST':spec['requestBody']={'required':True,'content':{'application/json':{'schema':{'type':'object','additionalProperties':False,'properties':properties,'required':['action','backup_confirmed'] if op=='recovery_prepare' else list(properties)}}}}
             spec['responses']={str(s):{'description':'Sanitized recovery result' if s==200 else 'Sanitized error'} for s in (200,401,403,409,413,415,422,429,503)}

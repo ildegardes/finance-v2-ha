@@ -52,7 +52,7 @@ NÃ£o hÃ¡ encerramento de jobs, limpeza de leases, alteraÃ§Ã£o de credenc
 
 ## AdministraÃ§Ã£o e CSRF
 
-GET /api/v2/open-finance/santander-binding-recovery inspeciona agregados somente apÃ³s aÃ§Ã£o explÃ­cita. POST .../prepare exige action APPLY ou REVERT e backup_confirmed=true. POST .../confirm exige o desafio de uso Ãºnico, a confirmaÃ§Ã£o literal correspondente e nova confirmaÃ§Ã£o de backup. Nenhum endpoint aceita SQL, conexÃ£o arbitrÃ¡ria, binding ou credenciais.
+GET /api/v2/open-finance/santander-binding-recovery inspeciona agregados somente apÃ³s aÃ§Ã£o explÃ­cita. POST .../prepare exige action APPLY, REVERT ou RECONCILE e backup_confirmed=true. POST .../confirm exige o desafio de uso Ãºnico, a confirmaÃ§Ã£o literal correspondente e nova confirmaÃ§Ã£o de backup. Nenhum endpoint aceita SQL, conexÃ£o arbitrÃ¡ria, binding ou credenciais.
 
 A credencial existente do proprietÃ¡rio da interface (UI:local) Ã© o administrador desta aplicaÃ§Ã£o. Clientes externos, MCP, OAuth externo e scheduler nÃ£o recebem a capacidade. SessÃµes por cookie exigem o CSRF existente; writes com Origin exigem a origem WSGI exata ou uma origem CORS explicitamente configurada. NÃ£o hÃ¡ confianÃ§a cega em X-Forwarded-*; um proxy incompatÃ­vel falha fechado. O desafio expira em cinco minutos, Ã© vinculado Ã  sessÃ£o e consumido mesmo em falha. O servidor padrÃ£o usa um processo com threads; reinicializaÃ§Ã£o perde desafios pendentes e exige nova preparaÃ§Ã£o.
 
@@ -71,11 +71,11 @@ A confirmaÃ§Ã£o de backup Ã© uma declaraÃ§Ã£o explÃ­cita do propriet
 | Arquivo | Função/linha |
 | --- | --- |
 | finance-v17/src/finance_v2/open_finance_recovery.py | def config — 61 |
-| finance-v17/src/finance_v2/open_finance_recovery.py | def bindings — 93 |
-| finance-v17/src/finance_v2/open_finance_recovery.py | def inspect_db — 103 |
-| finance-v17/src/finance_v2/open_finance_recovery.py | def prepare — 199 |
-| finance-v17/src/finance_v2/open_finance_recovery.py | def execute — 213 |
-| finance-v17/src/finance_v2/open_finance_recovery.py | def reconcile — 176 |
+| finance-v17/src/finance_v2/open_finance_recovery.py | def bindings — 96 |
+| finance-v17/src/finance_v2/open_finance_recovery.py | def inspect_db — 106 |
+| finance-v17/src/finance_v2/open_finance_recovery.py | def prepare — 233 |
+| finance-v17/src/finance_v2/open_finance_recovery.py | def execute — 250 |
+| finance-v17/src/finance_v2/open_finance_recovery.py | def reconcile — 210 |
 | finance-v17/src/finance_v2/open_finance_recovery_checks.py | def schema_check — 21 |
 | finance-v17/src/finance_v2/open_finance_recovery_checks.py | def dependencies — 54 |
 | finance-v17/src/finance_v2/open_finance_http.py | def dispatch — 58 |

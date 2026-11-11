@@ -13,7 +13,7 @@ from .open_finance_write import staging_transaction
 from .open_finance_recovery_checks import TABLES,Blocked,schema_check,dependencies
 
 EXPECTED=json.loads(Path(__file__).with_name('open_finance_recovery_schema.json').read_text(encoding='utf-8'))
-CONFIRM={'APPLY':'CORRIGIR_BINDING_SANTANDER','REVERT':'REVERTER_BINDING_SANTANDER'}
+CONFIRM={'APPLY':'CORRIGIR_BINDING_SANTANDER','REVERT':'REVERTER_BINDING_SANTANDER','RECONCILE':'RECONCILIAR_AUDITORIA_SANTANDER'}
 MAX_SECONDS=30
 
 def fail(code,status=409):raise SyncError('SANTANDER_RECOVERY_'+code,status)
@@ -79,7 +79,10 @@ class SantanderBindingRecovery:
         try:
             c=sqlite3.connect(path.as_uri()+('?mode=rw&cache=private' if write else '?mode=ro&cache=private'),uri=True,timeout=min(self.settings.busy_timeout_ms,2000)/1000,isolation_level=None)
             c.row_factory=sqlite3.Row;c.execute('PRAGMA foreign_keys=ON')
-            if not write:c.execute('PRAGMA query_only=ON')
+            if write:
+                c.execute('PRAGMA synchronous=FULL')
+            else:
+                c.execute('PRAGMA query_only=ON')
             c.set_authorizer(sql_guard)
             c.set_progress_handler(lambda:1 if self.now()>=deadline else 0,1000)
             yield c
@@ -146,10 +149,20 @@ class SantanderBindingRecovery:
         if not all(isinstance(record[k],str) and re.fullmatch('[0-9a-f]{64}',record[k]) for k in ('config','before','after')):fail('AUDIT_INVALID',503)
         return record
 
+    @staticmethod
+    def sync_directory(path):
+        if os.name == "posix":
+            fd = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+
     def save(self,record,phase):
         """Durable PREPARED before SQLite commit; reconcile crash ambiguity later."""
         self.audit_dir.mkdir(mode=0o700,exist_ok=True)
         self.check_private(self.audit_dir,True)
+        self.sync_directory(self.audit_dir.parent)
         record=dict(record);record['phase']=phase
         record['events']=[*record['events'],{'phase':phase,'time_ns':time.time_ns()}]
         path=self.audit_path(record['operation']);temp=self.audit_dir/(record['operation']+'.'+secrets.token_hex(8)+'.tmp')
@@ -158,10 +171,7 @@ class SantanderBindingRecovery:
             with os.fdopen(fd,'wb') as f:f.write(encoded(record));f.flush();os.fsync(f.fileno())
             if path.exists():self.check_private(path)
             os.replace(temp,path)
-            if os.name=='posix':
-                directory=os.open(self.audit_dir,os.O_RDONLY|getattr(os,'O_DIRECTORY',0))
-                try:os.fsync(directory)
-                finally:os.close(directory)
+            self.sync_directory(self.audit_dir)
         finally:
             if temp.exists():temp.unlink()
         return record
@@ -170,8 +180,32 @@ class SantanderBindingRecovery:
         if not self.audit_dir.exists():return []
         self.check_private(self.audit_dir,True)
         paths=list(self.audit_dir.iterdir())
-        if len(paths)>256 or any(p.suffix!='.json' for p in paths):fail('AUDIT_REVIEW_REQUIRED',503)
-        return [self.load(p.stem) for p in paths]
+        if len(paths)>256:fail('AUDIT_REVIEW_REQUIRED',503)
+        receipts = []
+        for path in paths:
+            if re.fullmatch(r'[0-9a-f]{32}\.[0-9a-f]{16}\.tmp', path.name):
+                # A process can stop before rename. Only the published JSON
+                # participates in commit recovery.
+                self.check_private(path)
+                if not path.is_file():fail('AUDIT_REVIEW_REQUIRED',503)
+                continue
+            if path.suffix != '.json':fail('AUDIT_REVIEW_REQUIRED',503)
+            receipts.append(self.load(path.stem))
+        return receipts
+
+    @staticmethod
+    def pending_receipts(receipts):
+        return [r for r in receipts if r['phase'] in ('PREPARED','REVERT_PREPARED')]
+
+    def finalize_receipt(self,c,record):
+        # Acquire the writer lock again and compare the durable record. A peer
+        # may have reconciled or advanced it since the SQLite commit.
+        with staging_transaction(c,self.settings.database_path,timeout_ms=min(self.settings.busy_timeout_ms,2000)):
+            current = self.load(record['operation'])
+            if current == record:
+                phase = "COMMITTED" if record["phase"] == "PREPARED" else "REVERTED"
+                self.save(current,phase)
+
 
     def reconcile(self,c,record):
         key=base64.b64decode(record['key'],validate=True)
@@ -203,6 +237,9 @@ class SantanderBindingRecovery:
             if len(self.pending)>=16:fail('TOO_MANY_CONFIRMATIONS',429)
             with self.connection() as c:
                 c.execute('BEGIN');report,_=self.inspect_db(c)
+                audit_pending = bool(self.pending_receipts(self.records()))
+                if audit_pending and action != 'RECONCILE':fail('AUDIT_RECONCILIATION_REQUIRED')
+                if action == 'RECONCILE' and not audit_pending:fail('NO_PENDING_AUDIT')
                 if action=='APPLY' and report['status'] not in ('ELIGIBLE','ALREADY_CORRECT'):fail('PRECHECK_BLOCKED')
                 if action=='REVERT':self.load(operation_id)
                 nonce=secrets.token_hex(32)
@@ -217,50 +254,52 @@ class SantanderBindingRecovery:
             action=pending['action']
             if backup_confirmed is not True or confirmation!=CONFIRM[action]:fail('EXPLICIT_CONFIRMATION_REQUIRED',422)
             with self.connection(write=True) as c:
-                record=None;committed=False
+                with staging_transaction(c,self.settings.database_path,timeout_ms=min(self.settings.busy_timeout_ms,2000),check=lambda:None):
+                    report,bindings=self.inspect_db(c)
+                    if pending['config']!=self.config_mac(self.session_key) or pending['snapshot']!=fingerprint(c,self.session_key,'santander'):fail('STATE_CHANGED_RECHECK_REQUIRED')
+                    receipts=self.records()
+                    audit_pending=self.pending_receipts(receipts)
+                    if action=='RECONCILE':
+                        if not report['integrity']:fail('PRECHECK_BLOCKED')
+                        if not audit_pending:fail('NO_PENDING_AUDIT')
+                        if len(audit_pending)!=1:fail('AUDIT_REVIEW_REQUIRED')
+                        result=self.reconcile(c,audit_pending[0])
+                        return {'status':'AUDIT_RECONCILED','phase':result['phase'],'sqlite_rows_changed':0}
+                    if audit_pending:fail('AUDIT_RECONCILIATION_REQUIRED')
+                    if sum(r['phase']=='COMMITTED' for r in receipts)>1:fail('AUDIT_REVIEW_REQUIRED')
+                    if action=='APPLY' and report['status']=='ALREADY_CORRECT':return {'status':'ALREADY_CORRECT','sqlite_rows_changed':0}
+                    if action=='APPLY' and report['status']!='ELIGIBLE':fail('PRECHECK_BLOCKED')
+                    if action=='REVERT' and any(x in report['blockers'] for x in ('ACTIVE_RUN','LEASE_PRESENT','INTEGRITY','INDIRECT_OR_CROSS_REFERENCE')):fail('PRECHECK_BLOCKED')
+                    if action=='APPLY':
+                        if any(r['phase']=='COMMITTED' for r in receipts):fail('PREVIOUS_OPERATION_REQUIRES_REVIEW')
+                        key=secrets.token_bytes(32)
+                        record={'version':1,'operation':secrets.token_hex(16),'key':base64.b64encode(key).decode(),'config':self.config_mac(key),'before':fingerprint(c,key,'santander'),'after':'0'*64,'phase':'PREPARED','events':[]}
+                        old,new=bindings[0],bindings[1]
+                    else:
+                        record=self.load(pending['operation'])
+                        key=base64.b64decode(record['key'],validate=True)
+                        if not hmac.compare_digest(record['config'],self.config_mac(key)):fail('CONFIGURATION_CHANGED')
+                        if record['phase']=='REVERTED' and fingerprint(c,key,'santander')==record['before']:return {'status':'ALREADY_REVERTED','sqlite_rows_changed':0,'operation':record['operation']}
+                        if record['phase']!='COMMITTED' or fingerprint(c,key,'santander')!=record['after']:fail('SANTANDER_CHANGED_SINCE_OPERATION')
+                        old,new=bindings[1],bindings[2]
+                        if bindings[0]!=old:fail('UNEXPECTED_CURRENT_BINDING')
+                    protected=fingerprint(c,key,'protected')
+                    before_row=c.execute("SELECT * FROM of_connections WHERE id='santander'").fetchone()
+                    if action=='REVERT':record=self.save(record,'REVERT_PREPARED')
+                    # For APPLY the actual post-MAC is captured before a durable receipt
+                    # and before commit; any audit failure rolls back this single update.
+                    c.execute('UPDATE of_connections SET binding_hash=? WHERE id=? AND binding_hash=? AND lease_token IS NULL AND lease_until IS NULL',(new,'santander',old))
+                    if c.execute('SELECT changes()').fetchone()[0]!=1:fail('COMPARE_AND_SWAP_FAILED')
+                    after_row=c.execute("SELECT * FROM of_connections WHERE id='santander'").fetchone()
+                    if any(before_row[k]!=after_row[k] for k in before_row.keys() if k!='binding_hash'):fail('UNEXPECTED_ROW_CHANGE')
+                    if protected!=fingerprint(c,key,'protected'):fail('PROTECTED_DATA_CHANGED')
+                    if c.execute('PRAGMA foreign_key_check').fetchall() or [tuple(r) for r in c.execute('PRAGMA integrity_check')]!=[('ok',)]:fail('INTEGRITY_FAILED')
+                    after=fingerprint(c,key,'santander')
+                    if action=='APPLY':record['after']=after;record=self.save(record,'PREPARED')
+                    elif after!=record['before']:fail('REVERSAL_INVARIANT_FAILED')
                 try:
-                    with staging_transaction(c,self.settings.database_path,timeout_ms=min(self.settings.busy_timeout_ms,2000),check=lambda:None):
-                        report,bindings=self.inspect_db(c)
-                        if pending['config']!=self.config_mac(self.session_key) or pending['snapshot']!=fingerprint(c,self.session_key,'santander'):fail('STATE_CHANGED_RECHECK_REQUIRED')
-                        receipts=[self.reconcile(c,r) for r in self.records()]
-                        if sum(r['phase']=='COMMITTED' for r in receipts)>1:fail('AUDIT_REVIEW_REQUIRED')
-                        if action=='APPLY' and report['status']=='ALREADY_CORRECT':return {'status':'ALREADY_CORRECT','sqlite_rows_changed':0}
-                        if action=='APPLY' and report['status']!='ELIGIBLE':fail('PRECHECK_BLOCKED')
-                        if action=='REVERT' and any(x in report['blockers'] for x in ('ACTIVE_RUN','LEASE_PRESENT','INTEGRITY','INDIRECT_OR_CROSS_REFERENCE')):fail('PRECHECK_BLOCKED')
-                        if action=='APPLY':
-                            if any(r['phase']=='COMMITTED' for r in receipts):fail('PREVIOUS_OPERATION_REQUIRES_REVIEW')
-                            key=secrets.token_bytes(32)
-                            record={'version':1,'operation':secrets.token_hex(16),'key':base64.b64encode(key).decode(),'config':self.config_mac(key),'before':fingerprint(c,key,'santander'),'after':'0'*64,'phase':'PREPARED','events':[]}
-                            old,new=bindings[0],bindings[1]
-                        else:
-                            record=self.reconcile(c,self.load(pending['operation']))
-                            key=base64.b64decode(record['key'],validate=True)
-                            if record['phase']=='REVERTED' and fingerprint(c,key,'santander')==record['before']:return {'status':'ALREADY_REVERTED','sqlite_rows_changed':0,'operation':record['operation']}
-                            if record['phase']!='COMMITTED' or fingerprint(c,key,'santander')!=record['after']:fail('SANTANDER_CHANGED_SINCE_OPERATION')
-                            old,new=bindings[1],bindings[2]
-                            if bindings[0]!=old:fail('UNEXPECTED_CURRENT_BINDING')
-                        protected=fingerprint(c,key,'protected')
-                        # Predict the exact post-image without writing SQLite.
-                        before_row=c.execute("SELECT * FROM of_connections WHERE id='santander'").fetchone()
-                        if action=='REVERT':record=self.save(record,'REVERT_PREPARED')
-                        # For APPLY the actual post-MAC is captured before a durable receipt
-                        # and before commit; any audit failure rolls back this single update.
-                        c.execute('UPDATE of_connections SET binding_hash=? WHERE id=? AND binding_hash=? AND lease_token IS NULL AND lease_until IS NULL',(new,'santander',old))
-                        if c.execute('SELECT changes()').fetchone()[0]!=1:fail('COMPARE_AND_SWAP_FAILED')
-                        after_row=c.execute("SELECT * FROM of_connections WHERE id='santander'").fetchone()
-                        if any(before_row[k]!=after_row[k] for k in before_row.keys() if k!='binding_hash'):fail('UNEXPECTED_ROW_CHANGE')
-                        if protected!=fingerprint(c,key,'protected'):fail('PROTECTED_DATA_CHANGED')
-                        if c.execute('PRAGMA foreign_key_check').fetchall() or [tuple(r) for r in c.execute('PRAGMA integrity_check')]!=[('ok',)]:fail('INTEGRITY_FAILED')
-                        after=fingerprint(c,key,'santander')
-                        if action=='APPLY':record['after']=after;record=self.save(record,'PREPARED')
-                        elif after!=record['before']:fail('REVERSAL_INVARIANT_FAILED')
-                    committed=True
-                except BaseException:
-                    if record is not None and not committed:
-                        try:self.reconcile(c,record)
-                        except Exception:pass  # Durable PREPARED is reconciled; never discarded.
-                    raise
-                phase='COMMITTED' if action=='APPLY' else 'REVERTED'
-                try:self.save(record,phase);status='APPLIED' if action=='APPLY' else 'REVERTED'
-                except Exception:status='COMMITTED_AUDIT_PENDING'
+                    self.finalize_receipt(c,record)
+                    status='APPLIED' if action=='APPLY' else 'REVERTED'
+                except Exception:
+                    status='COMMITTED_AUDIT_PENDING'
                 return {'status':status,'operation':record['operation'],'sqlite_rows_changed':1,'historical_runs_preserved':True,'protected_data_preserved':True,'backup_confirmed_by_owner':True,'provider_calls':0}
