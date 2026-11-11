@@ -1,7 +1,7 @@
 import {createQueryGeneration} from './query-generation.js';
 import {bankMoney,dateBR} from './privacy.js';
 import {openFinanceError} from './open-finance-errors.js';
-import {runSummary,consentNotice,collectionDiagnostic} from './open-finance-status.js';
+import {activeConnections,connectionLabel,runSummary,consentNotice,collectionDiagnostic} from './open-finance-status.js';
 
 const kinds={accounts:'Contas e saldos',item:'Instituição e conexão',resources:'Recursos declarados',consents:'Consentimentos',transactions:'Movimentações completas',investments:'Posições de investimentos',investment_transactions:'Movimentos de investimentos',loans:'Crédito e obrigações',bills:'Faturas e pagamentos registrados',statements:'Referências de extratos'};
 const states={COMPLETE:'Consulta completa',EMPTY:'Consulta completa sem registros',NOT_AUTHORIZED:'Acesso não autorizado',NOT_AVAILABLE:'Recurso não disponível',NOT_COLLECTED:'Ainda não coletado pelo provedor',NOT_QUERIED:'Consulta não realizada',RUNNING:'Leitura em andamento',FAILED:'Leitura falhou',INTERRUPTED:'Leitura interrompida'};
@@ -30,22 +30,26 @@ function fieldsHtml(nodes,esc){
   return list(present)+(absent.length?`<details class="of-absent-fields"><summary>Campos não fornecidos (${absent.length})</summary>${list(absent)}</details>`:'');
 }
 
-export function mountDomains({host,api,esc,catalog,navigation=null}){
+export function mountDomains({host,api,esc,catalog,navigation=null,domainSelections={}}){
+  const active=activeConnections(catalog);
   const areas={overview:'accounts',cards:'accounts',assets:'investments',credit:'loans',connections:'item'},controllers=[];
   for(const [area,initial]of Object.entries(areas)){
     const panel=host.querySelector('#of-panel-'+area);if(!panel)continue;
     if(area==='overview'||area==='assets')panel.replaceChildren();
     const section=document.createElement('section');section.className='panel of-coverage';
-    section.innerHTML=`<h2>${esc({overview:'Contas, saldos e cobertura',cards:'Cartões e faturas',assets:'Carteira e movimentações',credit:'Crédito e obrigações',connections:'Diagnóstico de cobertura'}[area])}</h2><p class="of-notice">Staging bancário, separado dos lançamentos oficiais. Cache completo não significa dados atualizados. Ausência, indisponibilidade e zero são distintos. Saldos e investimentos não são somados como patrimônio: moedas e possíveis sobreposições não estão comprovadas.</p><form class="of-resource-filter form-grid"><label>Recurso<select name="resource">${Object.entries(kinds).map(([id,label])=>`<option value="${id}">${label}</option>`).join('')}</select></label><label>Instituição<select name="connection_id"><option value="">Todas</option>${catalog.connections.map(c=>`<option value="${esc(c.id)}">${esc(c.institution)}</option>`).join('')}</select></label><label>Tipo / classe informado<input name="type" maxlength="64" pattern="[A-Za-z0-9_-]*" placeholder="Ex.: FIXED_INCOME"></label><label>Moeda<input name="currency" maxlength="3" pattern="[A-Z]{3}" placeholder="Ex.: BRL"></label><label><input name="history" type="checkbox"> Histórico de observações (não é rentabilidade calculada)</label><button type="submit">Consultar staging</button></form><div class="of-resource-result" aria-live="polite"></div>`;
+    section.innerHTML=`<h2>${esc({overview:'Contas, saldos e cobertura',cards:'Cartões e faturas',assets:'Carteira e movimentações',credit:'Crédito e obrigações',connections:'Diagnóstico de cobertura'}[area])}</h2><p class="of-notice">Staging bancário, separado dos lançamentos oficiais. Cache completo não significa dados atualizados. Ausência, indisponibilidade e zero são distintos. Saldos e investimentos não são somados como patrimônio: moedas e possíveis sobreposições não estão comprovadas.</p><form class="of-resource-filter form-grid"><label>Recurso<select name="resource">${Object.entries(kinds).map(([id,label])=>`<option value="${id}">${label}</option>`).join('')}</select></label><label>Instituição<select name="connection_id"><option value="">Todas</option>${active.map(c=>`<option value="${esc(c.id)}">${esc(connectionLabel(c,active))}</option>`).join('')}</select></label><label>Tipo / classe informado<input name="type" maxlength="64" pattern="[A-Za-z0-9_-]*" placeholder="Ex.: FIXED_INCOME"></label><label>Moeda<input name="currency" maxlength="3" pattern="[A-Z]{3}" placeholder="Ex.: BRL"></label><label><input name="history" type="checkbox"> Histórico de observações (não é rentabilidade calculada)</label><button type="submit">Consultar staging</button></form><div class="of-resource-result" aria-live="polite"></div>`;
     panel.append(section);
     const form=section.querySelector('form'),result=section.querySelector('.of-resource-result');form.elements.resource.value=initial;
-    let page=1,generation=0,parent=null;const queries=createQueryGeneration(navigation);
+    const selected=domainSelections[area];
+    form.elements.connection_id.value=active.some(c=>c.id===selected)?selected:'';
+    domainSelections[area]=form.elements.connection_id.value;
+    let page=1,generation=0,parent=null,parentConnection=null;const queries=createQueryGeneration(navigation);
     async function load(){
       const query=queries.begin(),mine=++generation;result.setAttribute('aria-busy','true');result.innerHTML='<p role="status" data-query-loading>Consultando dados importados…</p>';
       const q=new URLSearchParams({resource:form.elements.resource.value,page:String(page),page_size:'25'});
       for(const key of ['connection_id','type','currency'])if(form.elements[key].value)q.set(key,form.elements[key].value);
       if(form.elements.history.checked)q.set('history','1');
-      if(parent)q.set('parent_id',parent);
+      if(parent){q.set('parent_id',parent);q.set('connection_id',parentConnection);}
       if(area==='cards'&&q.get('resource')==='accounts')q.set('type','CREDIT');
       try{
         const response=await api('/open-finance/domain?'+q,{queryScope:query});
@@ -55,15 +59,16 @@ export function mountDomains({host,api,esc,catalog,navigation=null}){
         result.innerHTML=`<p>${esc(diagnostics||states.NOT_QUERIED)} · Página ${page} · ${response.total} registros preservados</p>${consent?`<p class="of-notice">${esc(consent)}</p>`:''}${parent?'<button type="button" data-domain-back>Remover filtro do produto</button>':''}${response.items.length?response.items.map((row,index)=>`<article class="of-resource-card" data-domain-kind="${esc(row.kind)}"><h3>${esc(row.name)}</h3><p>${esc(catalog.connections.find(c=>c.id===row.identity.connection_id)?.institution||'Instituição histórica')} · ${row.record_state==='NOT_SEEN'?'Não observado na última consulta completa; não significa exclusão':'Registro preservado'}</p><p>${esc(row.freshness.state==='STALE'?'Desatualização informada na coleta de origem deste conteúdo':'Frescor financeiro não estabelecido')}${row.freshness.provider_execution_partial?' · Execução parcial no provedor na coleta de origem deste conteúdo':''} · ${row.freshness.warning_count||0} avisos de qualidade</p>${relations[row.relation.state]?`<p>${esc(relations[row.relation.state])}</p>`:''}${fieldsHtml(row.fields,esc)}<div class="actions">${row.children.map(child=>`<button type="button" data-domain-child="${child}" data-row="${index}">Ver ${esc(kinds[child])}</button>`).join('')}</div>${response.resource==='statements'?'<p>Somente metadados; download de documento não habilitado.</p>':''}<details><summary>Proveniência</summary><p>Fonte: staging externo. ${temporalHtml(row,esc)} Histórico de revisões não representa evolução patrimonial nem rentabilidade calculada. Nenhum lançamento oficial foi criado.</p></details></article>`).join(''):`<p class="empty">${response.checkpoints?.some(c=>c.state==='EMPTY')?'Consulta concluída sem registros neste escopo.':'Nenhum registro preservado neste escopo; isso não comprova ausência do produto. Confira o estado da consulta.'}</p>`}<div class="actions"><button type="button" data-resource-prev ${page===1?'disabled':''}>Anterior</button><button type="button" data-resource-next ${!response.has_more?'disabled':''}>Próxima</button></div>`;
         result.querySelector('[data-resource-prev]').onclick=()=>{page--;load()};result.querySelector('[data-resource-next]').onclick=()=>{page++;load()};
         result.querySelector('[data-domain-back]')?.addEventListener('click',()=>{parent=null;page=1;load()});
-        result.querySelectorAll('[data-domain-child]').forEach(button=>button.onclick=()=>{const row=response.items[Number(button.dataset.row)];parent=row.identity.external_id;form.elements.connection_id.value=row.identity.connection_id;form.elements.resource.value=button.dataset.domainChild;form.elements.type.value='';form.elements.currency.value='';page=1;load()});
+        result.querySelectorAll('[data-domain-child]').forEach(button=>button.onclick=()=>{const row=response.items[Number(button.dataset.row)];parent=row.identity.external_id;parentConnection=row.identity.connection_id;form.elements.connection_id.value=active.some(c=>c.id===parentConnection)?parentConnection:'';form.elements.resource.value=button.dataset.domainChild;form.elements.type.value='';form.elements.currency.value='';page=1;load()});
       }catch(_){if(query.current()&&host.isConnected&&mine===generation)result.innerHTML='<p role="alert">Não foi possível consultar a cobertura. Nenhum valor foi estimado. Verifique schema e armazenamento.</p>'}finally{if(query.current()&&mine===generation){result.removeAttribute('aria-busy');result.querySelector('[data-query-loading]')?.remove()}}
     }
+    form.elements.connection_id.onchange=()=>{domainSelections[area]=form.elements.connection_id.value;parent=null;parentConnection=null;page=1};
     form.onsubmit=e=>{e.preventDefault();parent=null;page=1;load()};controllers.push({area,load});
   }
   host.addEventListener('of-tab-selected',event=>controllers.find(c=>c.area===event.detail)?.load());
   const connections=host.querySelector('#of-panel-connections');
   const actions=document.createElement('section');actions.className='panel';
-  actions.innerHTML=`<h2>Reconciliação e retomada</h2><p>Incremental reaplica o cache completo com upsert apenas das alterações. Retomada recomeça as coleções com segurança, sem reutilizar cursor antigo. Não atualiza o Item nem promove dados oficiais.</p>${catalog.connections.filter(c=>c.enabled&&!c.historical).map(c=>`<fieldset><legend>${esc(c.institution)}</legend>${['INCREMENTAL','RESUME'].map(mode=>`<button type="button" data-domain-sync="${mode}" data-connection="${esc(c.id)}">${mode==='RESUME'?'Retomar':'Reconciliar alterações'}</button>`).join('')}</fieldset>`).join('')}<p role="status" data-domain-sync-status>Nenhuma reconciliação iniciada.</p>`;
+  actions.innerHTML=`<h2>Reconciliação e retomada</h2><p>Incremental reaplica o cache completo com upsert apenas das alterações. Retomada recomeça as coleções com segurança, sem reutilizar cursor antigo. Não atualiza o Item nem promove dados oficiais.</p>${active.map(c=>`<fieldset><legend>${esc(c.institution)}</legend>${['INCREMENTAL','RESUME'].map(mode=>`<button type="button" data-domain-sync="${mode}" data-connection="${esc(c.id)}">${mode==='RESUME'?'Retomar':'Reconciliar alterações'}</button>`).join('')}</fieldset>`).join('')}<p role="status" data-domain-sync-status>Nenhuma reconciliação iniciada.</p>`;
   connections?.append(actions);
   actions.querySelectorAll('[data-domain-sync]').forEach(button=>button.onclick=async()=>{
     if(!window.confirm('Consultar o cache Pluggy e atualizar somente o staging desta instituição?'))return;

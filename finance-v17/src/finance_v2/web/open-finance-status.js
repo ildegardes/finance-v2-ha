@@ -25,3 +25,15 @@ export function collectionDiagnostic(checkpoint,diagnostics,fallback){
   }
   return fallback;
 }
+
+// The catalog also names historical rows. Limit only operational choices.
+export function activeConnections(catalog) {
+  return catalog.connections.filter(connection => connection.enabled === true && connection.historical === false);
+}
+
+export function connectionLabel(connection, choices) {
+  const name = connection.institution || 'Instituição indisponível';
+  const peers = choices.filter(row => (row.institution || 'Instituição indisponível') === name);
+  return name + (peers.length > 1 ? ' · Conexão ' + (peers.indexOf(connection) + 1) : '')
+    + (connection.historical ? ' (histórica)' : '');
+}

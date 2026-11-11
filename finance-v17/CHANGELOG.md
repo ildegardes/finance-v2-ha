@@ -1,3 +1,7 @@
+# 0.1.30-open-finance.1
+
+- Filtros operacionais do Open Finance mostram apenas conexões ativas. Todas mantém o histórico e a administração continua exibindo conexões arquivadas.
+
 # 0.1.29-open-finance.1 — candidata em homologação
 
 - Cadastro e administração privada de conexões Pluggy, com credenciais cifradas e versão por conexão.
