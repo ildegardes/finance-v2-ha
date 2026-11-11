@@ -1,5 +1,6 @@
 """Read-only Open Finance analytics over current provider observations."""
 import json
+from hashlib import sha256
 import re
 import time
 from decimal import Decimal, InvalidOperation, localcontext
@@ -66,7 +67,7 @@ def _category(data, connection):
     if isinstance(ident, str) and ident:
         return {'key': 'pluggy:' + ident, 'name': name or ident}
     if isinstance(name, str) and name:
-        return {'key': 'local:' + connection + ':' + name, 'name': name}
+        return {'key': 'local:' + connection + ':namehash:' + sha256(name.encode('utf-8')).hexdigest(), 'name': name}
     return {'key': 'missing', 'name': 'Sem categoria'}
 
 
@@ -87,6 +88,13 @@ def analytics(c, settings, query):
             if row['connection_id'] in selected:
                 records.append({**dict(row), 'data': json.loads(row['payload_json'], parse_float=Decimal)})
         accounts = {(r['connection_id'], r['external_id']): r for r in records if r['resource'] == 'accounts'}
+        if q.get('account_id') and (q['connection_id'], q['account_id']) not in accounts:
+            raise SyncError('RESOURCE_NOT_FOUND', 404)
+        translations = {}
+        for cat in c.execute("SELECT connection_id,external_id,display_name_pt,translation_status FROM of_categories WHERE external_id IS NOT NULL"):
+            if cat['translation_status'] in ('VERIFIED', 'OWNER_OVERRIDE') and cat['display_name_pt']:
+                translations[(cat['connection_id'], cat['external_id'])] = cat['display_name_pt']
+
         positions = {'accounts': [], 'investments': []}
         for r in records:
             kind = r['resource']
@@ -119,6 +127,9 @@ def analytics(c, settings, query):
             if day is None or day < q.get('start', '0001-01-01') or day > q.get('end', '9999-12-31'): continue
             if data.get('currencyCode') != q['currency']: continue
             category = _category(data, r['connection_id'])
+            translation = translations.get((r['connection_id'], data.get('categoryId')))
+            if translation:
+                category['name'] = translation
             if q.get('category') and q['category'] != category['key']: continue
             classification = {'CREDIT': 'incoming', 'DEBIT': 'outgoing'}.get(data.get('type'), 'unknown')
             if q['direction'] != 'all' and q['direction'] != classification: continue
@@ -130,7 +141,8 @@ def analytics(c, settings, query):
             items.append({'connection_id': r['connection_id'], 'account_id': r['parent_id'], 'external_id': r['external_id'],
                 'institution': views[r['connection_id']].institution, 'account_name': account['data'].get('name') if account else None,
                 'date': day, 'description': description, 'merchant': merchant, 'amount': str(amount) if amount is not None else None,
-                'currency': q['currency'], 'category': category, 'direction': classification, 'status': data.get('status'), 'product': product})
+                'currency': q['currency'], 'category': category, 'direction': classification, 'status': data.get('status'), 'product': product,
+                'economic_classification': 'NOT_ESTABLISHED', 'reconciliation': 'UNRECONCILED'})
         items.sort(key=lambda x: (x['date'], x['connection_id'], x['account_id'], x['external_id']), reverse=True)
         flow = {p: {'incoming': Decimal(0), 'outgoing': Decimal(0), 'unavailable': 0} for p in ('BANK', 'CREDIT')}
         series = {}; categories = {}
@@ -147,7 +159,16 @@ def analytics(c, settings, query):
         for total in flow.values():
             for name in ('incoming', 'outgoing'): total[name] = str(total[name])
         category_rows = [{'product': p, 'key': k, 'name': n, 'value': str(v)} for (p, k), (n, v) in categories.items()]
-        coverage = [dict(r) for r in c.execute('SELECT connection_id,resource,parent_id,state,observed_at FROM of_resource_coverage') if r['connection_id'] in selected]
+        coverage = [dict(r) for r in c.execute('SELECT connection_id,resource,parent_id,state,observed_at,omitted_field_count FROM of_resource_coverage') if r['connection_id'] in selected]
+        for kind in positions:
+            checkpoints = [x for x in coverage if x['resource'] == kind]
+            missing_connections = set(selected) - {x['connection_id'] for x in checkpoints}
+            state = 'PARTIAL' if missing_connections or any(x['state'] not in ('AVAILABLE', 'EMPTY') or x['omitted_field_count'] for x in checkpoints) or positions[kind]['unavailable'] else ('COMPLETE' if selected else 'NOT_ESTABLISHED')
+            positions[kind]['coverage_state'] = state
+        for product in flow:
+            flow[product]['economic_totals'] = {'state': 'NOT_ESTABLISHED', 'incoming': None, 'outgoing': None}
+            flow[product]['basis'] = 'DECLARED_GROSS_MOVEMENTS'
+
         start = (q['page'] - 1) * q['page_size']
         return {'contract': 'OF-ANALYTICS/1', 'filters': {k: v for k, v in q.items() if not k.startswith('_')},
             'positions': positions, 'flow': flow,

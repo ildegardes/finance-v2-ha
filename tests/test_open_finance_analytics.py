@@ -42,6 +42,47 @@ class AnalyticsTests(fixtures.CoverageTests):
             self.assertIsNone(empty['positions']['accounts']['value'])
             self.assertEqual(empty['total'], 0)
 
+    def test_categories_keep_identity_and_translation(self):
+        from finance_v2.open_finance_analytics import _category
+        one = _category({'categoryId':'123', 'category':'Food'}, 'bank-a')
+        two = _category({'categoryId':'123', 'category':'Alimentos'}, 'bank-b')
+        other = _category({'categoryId':'456', 'category':'Food'}, 'bank-a')
+        self.assertEqual(one['key'], two['key'])
+        self.assertNotEqual(one['key'], other['key'])
+        self.assertNotEqual(_category({'category':'Food'}, 'bank-a')['key'],
+                            _category({'category':'Food'}, 'bank-b')['key'])
+        self.assertEqual(_category({}, 'bank-a')['key'], 'missing')
+        self.sync()
+        with closing(connect(self.db)) as c:
+            c.execute("UPDATE of_categories SET display_name_pt='Alimentação',translation_status='VERIFIED' WHERE external_id='1'")
+            c.commit()
+            result = analytics(c, self.settings, {})
+            self.assertEqual(result['items'][0]['category']['name'], 'Alimentação')
+            self.assertEqual(result['items'][0]['economic_classification'], 'NOT_ESTABLISHED')
+            self.assertEqual(result['items'][0]['reconciliation'], 'UNRECONCILED')
+            self.assertIsNone(result['flow']['BANK']['economic_totals']['outgoing'])
+
+    def test_missing_values_and_partial_coverage_are_distinct(self):
+        self.sync()
+        with closing(connect(self.db)) as c:
+            row = c.execute("SELECT payload_json FROM of_resource_records WHERE resource='accounts' AND external_id='account-BANK'").fetchone()
+            data = json.loads(row['payload_json']); data.pop('balance', None)
+            c.execute("UPDATE of_resource_records SET payload_json=? WHERE resource='accounts' AND external_id='account-BANK'", (json.dumps(data),))
+            c.execute("UPDATE of_resource_coverage SET state='FAILED' WHERE resource='accounts'")
+            c.commit()
+            result = analytics(c, self.settings, {})
+            self.assertIsNone(result['positions']['accounts']['value'])
+            self.assertEqual(result['positions']['accounts']['unavailable'], 1)
+            self.assertEqual(result['positions']['accounts']['coverage_state'], 'PARTIAL')
+            self.assertTrue(any(r['state'] == 'FAILED' for r in result['coverage']))
+
+    def test_authentication_and_unknown_account(self):
+        self.sync()
+        status, _ = self.request('/api/v2/open-finance/analytics', token=None)
+        self.assertIn(status, (401, 403))
+        status, _ = self.request('/api/v2/open-finance/analytics?connection_id=bank-test&account_id=unknown')
+        self.assertEqual(status, 404)
+
     def test_invalid_filters_rejected(self):
         self.sync()
         for query in ('start=2026-10-31&end=2026-10-01', 'page_size=3', 'currency=XYZ1'):
