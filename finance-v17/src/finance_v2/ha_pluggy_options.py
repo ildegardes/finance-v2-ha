@@ -49,7 +49,7 @@ def registry_from_options(options):
     return result
 
 
-def load_registry(path):
+def load_options(path):
     try:
         with Path(path).open('rb') as source:raw=source.read(1_000_001)
         if len(raw)>1_000_000:raise ValueError()
@@ -57,7 +57,11 @@ def load_registry(path):
         options=json.loads(raw,object_pairs_hook=_unique_object,parse_constant=reject_constant)
     except (OSError,ValueError,UnicodeError,RecursionError):
         raise HaPluggyConfigurationError('OPEN_FINANCE_INVALID_OPTIONS_FILE') from None
-    return registry_from_options(options)
+    return options
+
+
+def load_registry(path):
+    return registry_from_options(load_options(path))
 
 
 def main(argv=None):

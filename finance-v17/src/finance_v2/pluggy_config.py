@@ -18,6 +18,7 @@ class PluggyConnection:
     enabled: bool = False
     auto_sync_enabled: bool = False
     access_mode: str = "strict"
+    registry_revision: int | None = field(default=None, repr=False)
 
     def __post_init__(self):
         valid = isinstance(self.id, str) and re.fullmatch(r'[a-z][a-z0-9-]{1,63}', self.id)

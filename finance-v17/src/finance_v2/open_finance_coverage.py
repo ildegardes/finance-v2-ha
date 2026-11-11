@@ -68,9 +68,6 @@ def sync_full(service, connection_id, *, actor):
 
 def sync_full_automatic(service, connection_id, *, check, minimum_interval=0):
     """Internal worker entry; never exposed through HTTP or MCP authorization."""
-    config = service.config.get(connection_id)
-    if config is None or not config.auto_sync_enabled:
-        raise SyncError('AUTO_SYNC_DISABLED', 403)
     return _sync_full(service, connection_id, actor='AUTO:coverage', check=check, minimum_interval=minimum_interval)
 
 
@@ -82,7 +79,9 @@ def sync_domain(service, connection_id, *, actor, mode='FULL'):
 
 def _sync_full(service, connection_id, *, actor, check=lambda: None, minimum_interval=0, mode='FULL'):
     check()
-    config = service.config.get(connection_id)
+    config = service.resolve_config(connection_id)
+    if actor == 'AUTO:coverage' and (config is None or not config.auto_sync_enabled):
+        raise SyncError('AUTO_SYNC_DISABLED', 403)
     if config is None:
         raise SyncError('CONNECTION_NOT_FOUND', 404)
     if not config.enabled:
@@ -163,6 +162,7 @@ def _sync_full(service, connection_id, *, actor, check=lambda: None, minimum_int
 
 
 def query(c, settings, values, *, manage_transaction=True):
+    from .open_finance_registry import connection_views
     allowed = {'resource', 'connection_id', 'parent_id', 'state', 'page', 'page_size', 'type', 'currency', 'history'}
     if set(values) - allowed or any(len(v) != 1 for v in values.values()):
         raise SyncError('INVALID_QUERY', 422)
@@ -185,7 +185,7 @@ def query(c, settings, values, *, manage_transaction=True):
                 raise SyncError('INVALID_QUERY', 422)
             if name == 'state' and value not in ('PRESENT', 'NOT_SEEN'):
                 raise SyncError('INVALID_QUERY', 422)
-            if name == 'connection_id' and value not in {x.id for x in settings.pluggy_connections}:
+            if name == 'connection_id' and value not in connection_views(c,settings):
                 raise SyncError('CONNECTION_NOT_FOUND', 404)
             clauses.append(name + '=?')
             args.append(value)
@@ -222,6 +222,7 @@ def query(c, settings, values, *, manage_transaction=True):
 
 
 def coverage_status(c, settings=None):
+    from .open_finance_registry import connection_views
     return {'coverage': [dict(row) for row in c.execute('SELECT * FROM of_resource_coverage ORDER BY connection_id,resource,parent_id')],
             'runs': [dict(row) for row in c.execute('SELECT id,connection_id,state,error_code FROM of_sync_runs ORDER BY rowid DESC LIMIT 25')],
-            'automatic_sync': bool(settings and any(x.enabled and x.auto_sync_enabled for x in settings.pluggy_connections)), 'remote_updates': False}
+            'automatic_sync': bool(settings and any(x.auto_sync_enabled for x in connection_views(c,settings).values())), 'remote_updates': False}

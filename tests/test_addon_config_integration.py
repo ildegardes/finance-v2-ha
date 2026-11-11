@@ -1,6 +1,7 @@
 """Supervisor options integration, all identifiers/keys are synthetic and in memory."""
 from pathlib import Path
 from contextlib import redirect_stderr
+from dataclasses import replace
 from unittest.mock import patch
 import io,json,os,tempfile,unittest
 import test_personal_proxy as personal
@@ -8,6 +9,7 @@ from finance_v2.ha_pluggy_options import registry_from_options,load_registry
 from finance_v2.config import Settings
 from finance_v2.pluggy_client import PluggyClient
 from finance_v2.open_finance_auto import CoverageWorkers
+from finance_v2.migrations import migrate
 class AddonConfigTests(unittest.TestCase):
  def options(self):
   o={'timezone':'UTC','ui_token':'synthetic-ui-only','open_finance_enabled':True,'open_finance_auto_sync_enabled':False}
@@ -40,8 +42,11 @@ class AddonConfigTests(unittest.TestCase):
   with redirect_stderr(log):cfg=self.settings(o)
   self.assertEqual([c.id for c in cfg.pluggy_connections],['santander']);self.assertNotIn('synthetic-secret',log.getvalue());self.assertNotIn(personal.A,log.getvalue())
  def test_auto_sync_off_even_with_complete_credentials(self):
-  cfg=self.settings(self.options());workers=CoverageWorkers(cfg,send=lambda *a: self.fail('UNEXPECTED_AUTH'))
-  workers.start();self.assertEqual(workers.threads,[]);workers.stop()
+  with tempfile.TemporaryDirectory() as folder:
+   database=Path(folder)/'fixture.sqlite3';migrate(database)
+   cfg=replace(self.settings(self.options()),database_path=database)
+   workers=CoverageWorkers(cfg,send=lambda *a: self.fail('UNEXPECTED_AUTH'))
+   workers.start();self.assertEqual(workers.threads,[]);workers.stop()
  def test_missing_new_profile_defaults_strict_and_preserves_existing_values(self):
   o=self.options()
   for bank in ('itau','santander'):del o['pluggy_'+bank+'_access_mode']

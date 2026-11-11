@@ -1,10 +1,13 @@
 """HTTP projection only. Internal identity, scope guards and storage stay intact."""
+from .open_finance_registry import load_keyring
+from .pluggy_credential_protection import CredentialProtectionError, ProtectedCredential
 
 _PRIVATE_KEYS=frozenset(('itemid','item_id','clientid','client_id','clientsecret',
-                        'client_secret','apikey','api_key','access_token','authorization'))
+                        'client_secret','apikey','api_key','access_token','authorization',
+                        'binding_hash','ciphertext','nonce'))
 
 
-def public_payload(payload,settings):
+def public_payload(payload,settings,*,db=None):
     """Do not expose configured credentials/Item IDs in owner-facing HTTP views.
 
     Optional provider association fields are omitted. Item rows retain their
@@ -20,6 +23,23 @@ def public_payload(payload,settings):
             if value:values.add(value)
         item=getattr(config,'item_id','')
         if item:values.update((item.lower(),item.upper()))
+    if db is not None:
+        for (item,) in db.execute("SELECT DISTINCT item_id FROM of_managed_pluggy_items"):
+            values.update((item,item.lower(),item.upper()))
+        if settings.pluggy_keyring_path is not None:
+            try:
+                protector=load_keyring(settings.pluggy_keyring_path)
+            except CredentialProtectionError:
+                protector=None
+            if protector is not None:
+                for application,revision,key,nonce,ciphertext in db.execute(
+                    "SELECT application_id,revision,key_id,nonce,ciphertext FROM of_connection_credentials"
+                ):
+                    try:
+                        values.update(protector.open(application,revision,ProtectedCredential(key,nonce,ciphertext)))
+                    except CredentialProtectionError:
+                        # Historical rotations may outlive a key. Never reveal envelope data.
+                        continue
     values=tuple(sorted(values,key=len,reverse=True))
 
     def clean(value):

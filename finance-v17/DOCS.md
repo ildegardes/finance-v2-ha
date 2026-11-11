@@ -1,6 +1,6 @@
-# Finance V17 — candidata local 0.1.27-open-finance.1
+# Finance V17 — candidata 0.1.29-open-finance.1
 
-Schema candidato 11, com migration 011 aditiva. Não instalar sem revisão e autorização posterior.
+Schema 12, com migração aditiva do registro de conexões. A instalação operacional depende de homologação e autorização.
 O slug finance_v17, porta 8766 e persistência /data são preservados.
 
 As seis áreas consultam projeções tipadas do staging, sem criar lançamentos oficiais.
@@ -157,3 +157,39 @@ A interface distingue recusa de autenticação sem causa confirmada, divergênci
 Uma falha pode ocorrer após páginas confirmadas no staging; consulte histórico e cobertura antes de repetir. Nenhum resultado bancário é promovido a lançamento oficial. Não há migration nova. O cache de API Key continua em memória por cliente, com expiração e uma renovação por GET 401; respostas antigas não invalidam chave diferente recém-renovada.
 
 Publicação e atualização requerem autorizações separadas. Preservar a instalação existente finance_v17, /data e configuração. Rollback de código para 0.1.25 é compatível com schema 10, mas incidente de dados exige recuperação coordenada com configuração e backup schema 10 contemporâneo; não usar backup schema 9. Os procedimentos detalhados acompanham D08_GITHUB_UPDATE_INSTRUCTIONS.md.
+# Chave das conexões Pluggy gerenciadas
+
+O add-on guarda as credenciais gerenciadas cifradas no SQLite e usa
+`/data/pluggy-keyring.json` como arquivo de chave separado. O arquivo tem
+permissão `0600` e pertence ao usuário efetivo do serviço. O provisionamento
+cria a primeira chave somente quando a origem administrativa privada está
+configurada e ainda não existem credenciais gerenciadas. Reiniciar o add-on
+preserva a chave existente. A opção `pluggy_admin_origin` fica vazia por padrão.
+
+Para administrar conexões no Supervisor, use uma conexão direta pela rede
+privada. Em `/ssl`, instale um certificado dedicado
+`finance-v17-admin.pem` e a chave correspondente
+`finance-v17-admin-key.pem`. O certificado deve conter o endereço IP privado
+no Subject Alternative Name e ser confiável no navegador. O Supervisor monta
+`/ssl` somente para leitura. Na configuração do add-on, informe a origem exata,
+por exemplo `https://192.168.1.10:8767`, e habilite o mapeamento da porta
+`8767/tcp`, que vem desativado. Acesse `/app/` nessa origem e autentique-se
+com o token do proprietário. Mantenha a porta TLS fora do Cloudflare Tunnel
+e de encaminhamentos públicos. A porta HTTP 8766 continua atendendo as
+rotas existentes, com a administração do registro bloqueada.
+
+As regras de mapeamento de diretórios e portas são descritas na
+[referência de configuração do Supervisor](https://contributors.home-assistant.io/apps/reference/configuration/).
+
+Em caso de `CREDENTIAL_KEY_RESTORE_REQUIRED`, recupere o arquivo da mesma
+geração do banco. Uma chave perdida não pode ser derivada dos dados cifrados.
+O add-on mantém as consultas locais e as conexões legadas disponíveis enquanto
+o acesso às credenciais gerenciadas falha com diagnóstico sanitizado.
+
+Um backup que contém o banco e o arquivo de chave permite decifrar as credenciais.
+Proteja o backup com criptografia e acesso restrito. Mantenha o material de
+recuperação da chave protegido e fora de logs, repositórios e chamados de
+suporte. Valide uma restauração em instância descartável com o banco e a chave
+da mesma geração, confirmando integridade SQLite e leitura das credenciais
+sintéticas. Para retornar a uma versão que só aceita o schema 11, restaure um
+backup anterior à migração, após preservar os dados novos para conciliação.

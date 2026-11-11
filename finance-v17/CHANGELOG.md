@@ -1,3 +1,9 @@
+# 0.1.29-open-finance.1 — candidata em homologação
+
+- Cadastro e administração privada de conexões Pluggy, com credenciais cifradas e versão por conexão.
+- Arquivamento e substituição com novo identificador interno, mantendo o histórico e o vínculo arquivados.
+- Migração aditiva para schema 12. Preserve um backup recuperável de schema 11 antes da atualização.
+
 # 0.1.28-open-finance.1 — candidata em revisão
 
 - Operação administrativa explícita para corrigir somente o binding Santander quando a inversão inicial for comprovada e não houver registros importados.

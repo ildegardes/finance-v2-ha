@@ -4,6 +4,7 @@ Raw run/checkpoint values stay unchanged. Evidence from another run cannot certi
 an old run's consent. Only the explicitly configured personal profile is affected.
 """
 import sqlite3
+from .open_finance_registry import connection_views
 
 PROFILE='meupluggy_personal'
 
@@ -48,7 +49,7 @@ def present_run(c,config,run):
 
 
 def present_payload(c,settings,payload,operation):
-    configs={cfg.id:cfg for cfg in settings.pluggy_connections}
+    configs=connection_views(c,settings)
     def run(value):
         cfg=configs.get(value.get('connection_id'))
         return present_run(c,cfg,value) if cfg is not None else value
