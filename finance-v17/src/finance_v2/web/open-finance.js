@@ -3,7 +3,7 @@ import {createQueryGeneration} from './query-generation.js';
 import {bankMoney,dateBR} from './privacy.js';
 import {openFinanceError} from './open-finance-errors.js';
 import {mountCoverage} from './open-finance-coverage.js';
-import {runSummary} from './open-finance-status.js';
+import {activeConnections,connectionLabel,runSummary} from './open-finance-status.js';
 export function createOpenFinance({api,view,heading,esc,navigation=null,state={}}) {
   const directionLabels={CREDIT:'Entrada',DEBIT:'Saída',UNKNOWN:'Desconhecida',CONFLICT:'Conflito'};
   const runLabels={SUCCEEDED:'Concluída',FAILED:'Falhou',INTERRUPTED:'Interrompida',RUNNING:'Em andamento'};
@@ -21,7 +21,11 @@ export function createOpenFinance({api,view,heading,esc,navigation=null,state={}
       host.querySelector('[data-retry]')?.addEventListener('click',openFinance);return;
     }
     if((navigation&&!navigation.current())||!view.contains(host))return;
-    const connectionLabel=c=>`${c.institution||'Instituição indisponível'}${catalog.connections.filter(x=>x.institution===c.institution).length>1?' · Conexão '+(catalog.connections.indexOf(c)+1):''}${c.historical?' (histórica)':''}`;
+    const active=activeConnections(catalog);
+    if(saved.connection_id && !active.some(c=>c.id===saved.connection_id)){
+      const {connection_id,external_account_id,category_key,origin_run_id,...unscoped}=saved;
+      saved=unscoped;page=1;state.saved=saved;state.page=page;
+    }
     const accountLabel=a=>{
       const institution=catalog.connections.find(c=>c.id===a.connection_id)?.institution||'Instituição indisponível';
       const peers=catalog.accounts.filter(x=>x.connection_id===a.connection_id&&(x.name||'Conta sem nome')===(a.name||'Conta sem nome'));
@@ -33,11 +37,11 @@ export function createOpenFinance({api,view,heading,esc,navigation=null,state={}
       <section role="tabpanel" id="of-panel-credit" aria-labelledby="of-tab-credit" class="of-panel"></section>
       <section role="tabpanel" id="of-panel-overview" aria-labelledby="of-tab-overview" class="panel of-panel"><h2>Visão geral</h2><p>Conexões e contas de staging disponíveis para consulta. Não representam o patrimônio nem o saldo consolidado.</p><p>${catalog.connections.length} conexões · ${catalog.accounts.length} contas cadastradas no catálogo.</p><p class="of-notice">Resumo de saldos indisponível: não há contrato implementado para saldos consolidados. Consulte as movimentações na aba Fluxo.</p></section>
       <section role="tabpanel" id="of-panel-assets" aria-labelledby="of-tab-assets" class="panel of-panel"><h2>Ativos</h2><p class="empty">Consulta de ativos indisponível. O contrato de posições, investimentos e avaliação patrimonial ainda não está implementado.</p><p>Nenhum saldo ou valor estimado é apresentado.</p></section>
-      <section role="tabpanel" id="of-panel-connections" aria-labelledby="of-tab-connections" class="of-panel"><section class="panel"><h2>Conexões bancárias</h2><p>Informações já registradas no catálogo. Esta tela não consulta a Pluggy nem inicia sincronizações.</p>${catalog.connections.length?`<ul class="of-run-list">${catalog.connections.map(c=>`<li><strong>${esc(connectionLabel(c))}</strong><small>${c.enabled?'Habilitada na configuração':'Desabilitada na configuração'} · ${catalog.accounts.filter(a=>a.connection_id===c.id).length} contas registradas</small></li>`).join('')}</ul>`:'<p class="empty">Nenhuma conexão registrada.</p>'}</section><section class="panel of-history"><h2>Histórico das sincronizações manuais</h2><p>Nenhuma sincronização é iniciada ao abrir esta tela.</p><div data-history></div></section></section>
+      <section role="tabpanel" id="of-panel-connections" aria-labelledby="of-tab-connections" class="of-panel"><section class="panel"><h2>Conexões bancárias</h2><p>Informações já registradas no catálogo. Esta tela não consulta a Pluggy nem inicia sincronizações.</p>${catalog.connections.length?`<ul class="of-run-list">${catalog.connections.map(c=>`<li><strong>${esc(connectionLabel(c,catalog.connections))}</strong><small>${c.enabled?'Habilitada na configuração':'Desabilitada na configuração'} · ${catalog.accounts.filter(a=>a.connection_id===c.id).length} contas registradas</small></li>`).join('')}</ul>`:'<p class="empty">Nenhuma conexão registrada.</p>'}</section><section class="panel of-history"><h2>Histórico das sincronizações manuais</h2><p>Nenhuma sincronização é iniciada ao abrir esta tela.</p><div data-history></div></section></section>
       <section role="tabpanel" id="of-panel-flow" aria-labelledby="of-tab-flow" class="of-panel">
       <form class="form-card of-filters" aria-label="Filtros bancários"><div class="form-grid">
       <label>Data inicial<input type="date" name="start"></label><label>Data final<input type="date" name="end"></label>
-      <label>Instituição / conexão<select name="connection_id">${option('','Todas as instituições')}${catalog.connections.map(c=>option(c.id,connectionLabel(c))).join('')}</select></label>
+      <label>Instituição / conexão<select name="connection_id">${option('','Todas as instituições')}${active.map(c=>option(c.id,connectionLabel(c,active))).join('')}</select></label>
       <label>Conta bancária<select name="external_account_id"></select></label>
       <label>Movimentação<select name="direction">${option('all','Todas, incluindo desconhecidas/conflitos')}${option('incoming','Entradas (CREDIT)')}${option('outgoing','Saídas (DEBIT)')}</select></label>
       <label>Categoria bancária<select name="category_key"></select></label>
@@ -55,7 +59,7 @@ export function createOpenFinance({api,view,heading,esc,navigation=null,state={}
       tab.onclick=()=>selectTab(tab.dataset.ofTab);
       tab.onkeydown=event=>{const next=event.key==='ArrowRight'?(index+1)%tabs.length:event.key==='ArrowLeft'?(index+tabs.length-1)%tabs.length:event.key==='Home'?0:event.key==='End'?tabs.length-1:null;if(next!==null){event.preventDefault();selectTab(tabs[next].dataset.ofTab,true)}};
     });
-    mountCoverage({host,api,esc,catalog,navigation});
+    mountCoverage({host,api,esc,catalog,navigation,domainSelections:state.domainSelections??={}});
     const form=host.querySelector('#of-panel-flow form'),results=host.querySelector('.of-results');
     const names=['start','end','connection_id','external_account_id','direction','category_key','search','origin_run_id'];
     const choice=(name)=>form.elements.namedItem(name);
@@ -95,7 +99,7 @@ export function createOpenFinance({api,view,heading,esc,navigation=null,state={}
           return `<tr>${values.map((v,i)=>`<td data-label="${['Data','Instituição','Conta','Descrição','Categoria','Valor','Direção'][i]}"><bdi>${esc(v)}</bdi>${i===6?`<small>${esc(reasonLabels[tx.direction.reason_code]||'Direção não comprovada')}${tx.direction.warnings.includes('CARD_SIGN_DOCUMENTATION_UNRESOLVED')?' · Perspectiva da conta do cartão':''}</small>`:''}</td>`).join('')}</tr>`;
         }).join('')}</tbody></table>`:'<p class="empty">Nenhuma transação encontrada para os filtros selecionados.</p>'}
           <div class="actions of-pagination"><button type="button" data-prev ${page===1?'disabled':''}>Anterior</button><button type="button" data-next ${!response.has_more?'disabled':''}>Próxima</button><button type="button" class="secondary" data-refresh>Atualizar consulta</button></div>`;
-        results.querySelector('[data-prev]').onclick=()=>{page--;load()};results.querySelector('[data-next]').onclick=()=>{page++;load()};results.querySelector('[data-refresh]').onclick=load;
+        results.querySelector('[data-prev]').onclick=()=>{page--;load()};results.querySelector('[data-next]').onclick=()=>{page++;load()};results.querySelector('[data-refresh]').onclick=()=>{if(view.contains(host)){host.remove();openFinance()}};
       } catch(error) {
         if(!query.current()||current!==generation||!view.contains(host))return;
         const message=error.code==='QUERY_PROFILE_UNAVAILABLE'?'Busca textual indisponível: o runtime não possui o perfil Unicode aprovado. Nenhum filtro foi ignorado.':'Não foi possível consultar as transações bancárias. Nenhum resultado parcial foi publicado.';

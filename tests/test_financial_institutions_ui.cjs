@@ -6,7 +6,9 @@ const path = require('node:path');
 const {chromium} = require(path.join(process.env.USERPROFILE, '.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright'));
 
 const web = path.resolve(__dirname, '../finance-v17/src/finance_v2/web');
-const assets = new Set(['financial-institutions.js', 'privacy.js', 'open-finance-errors.js', 'open-finance-status.js']);
+const assets = new Set(['financial-institutions.js', 'privacy.js', 'open-finance-errors.js', 'open-finance-status.js',
+  'open-finance.js', 'open-finance-coverage.js', 'open-finance-domain.js',
+  'santander-binding-recovery.js', 'navigation.js', 'query-generation.js']);
 let server, browser, origin;
 
 before(async () => {
@@ -255,4 +257,70 @@ test('deletes an eligible archived draft after inspection and reinforced confirm
   await page.getByRole('status').filter({hasText: 'Conexão excluída'}).waitFor();
   assert.equal(await row.count(), 0);
   assert.equal(await page.getByText('Santander', {exact: true}).count(), 1);
+});
+
+test('operational filters refresh by stable ID and keep archived history', async t => {
+  const context = await browser.newContext();
+  t.after(() => context.close());
+  await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
+  const page = await context.newPage();
+  await page.goto(origin);
+  await page.evaluate(async () => {
+    const {createOpenFinance} = await import('/open-finance.js');
+    const view = document.querySelector('main');
+    const row = (id, institution, enabled, historical, state) => ({id, institution, enabled, historical, state});
+    window.connections = [
+      row('itau', 'Itaú', true, false),
+      row('santander', 'Santander', false, true, 'FAILED'),
+      row('santander-new', 'Santander', true, false, 'FAILED'),
+      row('partial', 'Parcial', true, false, 'PARTIAL'),
+      row('disabled', 'Desativada', false, false),
+      row('unknown', 'Desconhecida', undefined, false),
+    ];
+    window.requests = [];
+    const state = {};
+    const api = async path => {
+      requests.push(path);
+      if (path === '/open-finance/catalogs') return {connections, accounts: [], categories: [], runs: [
+        {connection_id:'santander', id:'old-run', state:'FAILED', started_at:'2026-11-01', inserted_count:0, updated_count:0, page_count:0},
+      ]};
+      if (path.startsWith('/open-finance/transactions?')) return {items:[], query_meta:{
+        query_completeness:'COMPLETE', coverage:{direction:{state:'COMPLETE'}}, warnings:[],
+        counts:{after_f04:{state:'EXACT',value:0}},
+      }};
+      if (path.startsWith('/open-finance/domain?')) return {items:[],total:0};
+      throw new Error('Unexpected route');
+    };
+    await createOpenFinance({api, view, state, heading(){}, esc:String})();
+  });
+  const values = selector => page.locator(selector).evaluateAll(nodes => nodes.map(node => [node.value,node.textContent]));
+  const flow = '#of-panel-flow select[name="connection_id"]';
+  const domain = '#of-panel-assets select[name="connection_id"]';
+  const expected = [['','Todas as instituições'],['itau','Itaú'],['santander-new','Santander'],['partial','Parcial']];
+  assert.deepEqual(await values(flow+' option'),expected);
+  assert.deepEqual((await values(domain+' option')).slice(1),expected.slice(1));
+  await page.locator('[data-of-tab="connections"]').click();
+  assert.match(await page.locator('[data-history]').textContent(),/Santander.*Falhou/);
+  await page.locator('[data-of-tab="flow"]').click();
+  await page.locator(flow).selectOption('santander-new');
+  await page.getByRole('button',{name:'Aplicar filtros'}).click();
+  await page.getByRole('button',{name:'Atualizar consulta'}).waitFor();
+  const requests = () => page.evaluate(() => requests.filter(path => path.includes('/transactions?')));
+  assert.match((await requests()).at(-1),/connection_id=santander-new(?:&|$)/);
+  await page.getByRole('button',{name:'Atualizar consulta'}).click();
+  await page.getByRole('button',{name:'Atualizar consulta'}).waitFor();
+  assert.equal(await page.locator(flow).inputValue(),'santander-new');
+  await page.evaluate(() => {connections.find(c=>c.id==='santander-new').enabled=false});
+  await page.getByRole('button',{name:'Atualizar consulta'}).click();
+  await page.getByRole('button',{name:'Atualizar consulta'}).waitFor();
+  assert.equal(await page.locator(flow).inputValue(),'');
+  assert.doesNotMatch((await requests()).at(-1),/connection_id=/);
+  await page.evaluate(() => {connections.forEach(c=>c.enabled=false)});
+  await page.getByRole('button',{name:'Atualizar consulta'}).click();
+  await page.getByRole('button',{name:'Atualizar consulta'}).waitFor();
+  assert.deepEqual(await values(flow+' option'),[['','Todas as instituições']]);
+  await page.evaluate(() => {connections.find(c=>c.id==='santander-new').enabled=true});
+  await page.getByRole('button',{name:'Atualizar consulta'}).click();
+  await page.getByRole('button',{name:'Atualizar consulta'}).waitFor();
+  assert.deepEqual(await values(flow+' option'),[['','Todas as instituições'],['santander-new','Santander']]);
 });

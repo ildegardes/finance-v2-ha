@@ -1,4 +1,6 @@
-# Finance V17 — candidata 0.1.29-open-finance.1
+# Finance V17 — 0.1.30-open-finance.1
+
+Os filtros de instituição do Open Finance oferecem conexões ativas. A opção **Todas** mantém o escopo histórico e **Instituições Financeiras** continua exibindo conexões arquivadas para consulta e auditoria.
 
 Schema 12, com migração aditiva do registro de conexões. A instalação operacional depende de homologação e autorização.
 O slug finance_v17, porta 8766 e persistência /data são preservados.
