@@ -66,6 +66,12 @@ class OpenFinanceService:
         epoch,stamp=self._time();token=uuid.uuid4().hex;run_id=uuid.uuid4().hex
         binding=self._binding(config)
         with self._write(c, check=check):
+            registry = c.execute(
+                'SELECT lifecycle FROM of_connection_registry WHERE connection_id=?',
+                (config.id,),
+            ).fetchone()
+            if registry is not None and registry['lifecycle'] != 'ACTIVE':
+                raise SyncError('CONNECTION_NOT_ACTIVE')
             row=c.execute('SELECT * FROM of_connections WHERE id=?',(config.id,)).fetchone()
             if row and row['binding_hash']!=binding:raise SyncError('CONNECTION_BINDING_CHANGED')
             if row and row['lease_token'] is not None:
