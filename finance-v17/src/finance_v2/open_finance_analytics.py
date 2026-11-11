@@ -122,6 +122,18 @@ def analytics(c, settings, query):
             values = [Decimal(x['value']) for x in items if x['value'] is not None]
             positions[kind] = {'value': str(sum(values, Decimal(0))) if values else None,
                                'known': len(values), 'unavailable': len(items) - len(values), 'unknown_currency': unknown_currency[kind], 'items': items}
+            if kind == 'investments':
+                classes = {}
+                for item in items:
+                    label = item.get('type') or 'Não informada'
+                    group = classes.setdefault(label, {'type': label, 'known': 0, 'unavailable': 0, '_total': Decimal(0)})
+                    if item['value'] is None:
+                        group['unavailable'] += 1
+                    else:
+                        group['known'] += 1
+                        group['_total'] += Decimal(item['value'])
+                positions[kind]['by_class'] = [{**{k:v for k,v in group.items() if k != '_total'},
+                    'value': str(group['_total']) if group['known'] else None} for group in classes.values()]
         bill_links = {(row['connection_id'], row['source_parent_id'], row['source_external_id']): dict(row)
                       for row in c.execute("SELECT connection_id,source_parent_id,source_external_id,state,target_parent_id,target_external_id FROM of_resource_links WHERE source_resource='transactions' AND kind='TRANSACTION_BILL'")}
         items = []

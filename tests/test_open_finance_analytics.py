@@ -148,6 +148,15 @@ class AnalyticsTests(fixtures.CoverageTests):
             self.assertEqual(card['items'][0]['economic_classification'], 'NOT_ESTABLISHED')
         self.assertEqual(self.financial(), before)
 
+    def test_investment_classes_are_exact_and_position_ignores_flow_period(self):
+        self.sync()
+        with closing(connect(self.db)) as c:
+            result = analytics(c, self.settings, {'start':['2020-01-01'], 'end':['2020-01-31']})
+            self.assertEqual(result['total'], 0)
+            self.assertEqual(result['positions']['investments']['value'], '200')
+            classes = result['positions']['investments']['by_class']
+            self.assertEqual(classes, [{'type':'FIXED_INCOME', 'known':1, 'unavailable':0, 'value':'200'}])
+
     def test_invalid_filters_rejected(self):
         self.sync()
         for query in ('start=2026-10-31&end=2026-10-01', 'page_size=3', 'currency=XYZ1'):
