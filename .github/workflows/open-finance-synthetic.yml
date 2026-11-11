@@ -41,3 +41,20 @@ jobs:
         run: python -m unittest discover -s tests -p test_gate_b.py
       - name: C6R synthetic concurrency
         run: python -m unittest discover -s tests -p test_gate_c6r.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install synthetic browser test dependencies
+        run: |
+          npm install --no-save --ignore-scripts playwright@1.56.1
+          npx playwright install --with-deps chromium
+          echo "PLAYWRIGHT_MODULE=$PWD/node_modules/playwright" >> "$GITHUB_ENV"
+          echo "PLAYWRIGHT_CHROMIUM_EXECUTABLE=$(node -p "require('playwright').chromium.executablePath()")" >> "$GITHUB_ENV"
+      - name: Connections, institutions and concurrency in browser
+        run: |
+          node tests/open_finance_connections_ui.cjs
+          node --test tests/test_financial_institutions_ui.cjs
+          node tests/open_finance_product_concurrency_ui.cjs
+          node tests/open_finance_product_races_ui.cjs
+      - name: Browser with WSGI and synthetic SQLite
+        run: python -m unittest discover -s tests -p test_open_finance_integrated_ui.py
