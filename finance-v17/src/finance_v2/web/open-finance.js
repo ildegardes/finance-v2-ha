@@ -60,9 +60,13 @@ export function createOpenFinance({api,view,heading,esc,navigation=null,state={}
       tab.onclick=()=>selectTab(tab.dataset.ofTab);
       tab.onkeydown=event=>{const next=event.key==='ArrowRight'?(index+1)%tabs.length:event.key==='ArrowLeft'?(index+tabs.length-1)%tabs.length:event.key==='Home'?0:event.key==='End'?tabs.length-1:null;if(next!==null){event.preventDefault();selectTab(tabs[next].dataset.ofTab,true)}};
     });
-    mountCoverage({host,api,esc,catalog,navigation,domainSelections:state.domainSelections??={}});
     const analyticsState=state.analytics??={};
     let flow;
+    mountCoverage({host,api,esc,catalog,navigation,analyticsState,domainSelections:state.domainSelections??={},onCardFlow:identity=>{
+      const conn=catalog.connections.find(c=>c.id===identity.connection_id);
+      flow.update({connection_id:identity.connection_id,account_id:identity.external_id,product:'CREDIT',status:'ALL',direction:'all',category:'',search:'',history:conn?.enabled&&!conn?.historical?'0':'1'});
+      selectTab('flow',true);
+    }});
     mountAnalyticsOverview({host,api,esc,catalog,navigation,state:analyticsState,onNavigate:context=>{flow.update(context);selectTab('flow',true)}});
     flow=mountAnalyticsFlow({host,api,esc,catalog,navigation,state:analyticsState});
     const history=host.querySelector('[data-history]');
