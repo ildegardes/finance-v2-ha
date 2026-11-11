@@ -1,5 +1,5 @@
 name: Finance V17
-version: "0.1.28-open-finance.1"
+version: "0.1.29-open-finance.1"
 slug: finance_v17
 description: Finance V17 local API and scheduler
 url: https://github.com/ildegardes/finance-v2-ha
@@ -11,8 +11,13 @@ boot: auto
 init: false
 ports:
   8766/tcp: 8766
+  8767/tcp: null
 ports_description:
   8766/tcp: Finance V17 HTTP API
+  8767/tcp: Finance V17 administração privada TLS
+map:
+  - type: ssl
+    read_only: true
 options:
   timezone: America/Sao_Paulo
   ui_token: ""
@@ -20,6 +25,7 @@ options:
   oauth_clients: "{}"
   open_finance_enabled: false
   open_finance_auto_sync_enabled: false
+  pluggy_admin_origin: ""
   pluggy_itau_access_mode: strict
   pluggy_itau_enabled: false
   pluggy_itau_client_id: ""
@@ -37,6 +43,7 @@ schema:
   oauth_clients: str
   open_finance_enabled: bool
   open_finance_auto_sync_enabled: bool
+  pluggy_admin_origin: str
   pluggy_itau_access_mode: list(strict|meupluggy_personal|sandbox)
   pluggy_itau_enabled: bool
   pluggy_itau_client_id: str

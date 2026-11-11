@@ -16,7 +16,10 @@ ACTOR=('UI','UI:local',None)
 
 class RecoveryTests(unittest.TestCase):
     def setUp(self):
-        self.fixture=base.CoverageTests();self.fixture.setUp();self.addCleanup(self.fixture.doCleanups)
+        self.fixture=base.CoverageTests()
+        with patch.object(base.migrations,'MIGRATIONS',base.migrations.MIGRATIONS[:11]):
+            self.fixture.setUp()
+        self.addCleanup(self.fixture.doCleanups)
         self.db=self.fixture.db
         self.cfg=PluggyConnection('santander','Santander','synthetic-current-client','synthetic-private-secret',ITEM,True,False,'meupluggy_personal')
         self.itau=replace(self.cfg,id='itau',institution='Ita\u00fa',client_id='synthetic-itau-client',item_id='def00000-0000-4000-8000-000000000002')
@@ -31,6 +34,14 @@ class RecoveryTests(unittest.TestCase):
         for i in range(n):
             run=hashlib.sha256((config.id+str(i)).encode()).hexdigest()[:32]
             c.execute('INSERT INTO of_sync_runs(id,connection_id,actor,started_at,finished_at,state,error_code) VALUES(?,?,?,?,?,?,?)',(run,config.id,'UI:local',STAMP,STAMP,state,error))
+    def test_pending_legacy_audit_blocks_registry_migration(self):
+        with patch.object(SantanderBindingRecovery,'records',return_value=[{'phase':'PREPARED'}]):
+            with self.assertRaisesRegex(base.migrations.MigrationError,'reconcile the pending Santander audit'):
+                base.migrations.migrate(self.db)
+        with closing(base.connect(self.db)) as c:
+            self.assertEqual(c.execute('PRAGMA user_version').fetchone()[0],11)
+        with patch.object(SantanderBindingRecovery,'records',return_value=[{'phase':'ABORTED'}]):
+            self.assertEqual(base.migrations.migrate(self.db),[12])
     def snapshot(self):
         with closing(base.connect(self.db)) as c:
             return {n:[tuple(r) for r in c.execute('SELECT * FROM "'+n+'" ORDER BY rowid')] for n, in c.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").fetchall()}

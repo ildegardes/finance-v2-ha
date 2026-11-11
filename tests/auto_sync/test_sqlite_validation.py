@@ -43,7 +43,7 @@ class DatabaseCase(unittest.TestCase):
         self.directory = Path(tempfile.mkdtemp(prefix='new-synthetic-',dir=FIXTURES))
         self.path = self.directory / 'fixture.sqlite3'
         self.assertFalse(self.path.exists())
-        self.assertEqual(migrate(self.path), list(range(1,12)))
+        self.assertEqual(migrate(self.path), list(range(1,13)))
         self.config = settings(self.path)
         self.entities = seed_official(self.config)
         self.before = fingerprint(self.path)
@@ -55,7 +55,7 @@ class DatabaseCase(unittest.TestCase):
         with closing(connect(self.path)) as c:
             self.assertEqual(c.execute('PRAGMA integrity_check').fetchall()[0][0], 'ok')
             self.assertEqual(c.execute('PRAGMA foreign_key_check').fetchall(), [])
-            self.assertEqual(c.execute('PRAGMA user_version').fetchone()[0], 11)
+            self.assertEqual(c.execute('PRAGMA user_version').fetchone()[0], 12)
             self.assertTrue(migration_status(c)['up_to_date'])
             active = c.execute("SELECT count(*) FROM of_connections WHERE lease_token IS NOT NULL").fetchone()[0]
             counts = {name:c.execute('SELECT count(*) FROM '+name).fetchone()[0] for name in
@@ -75,7 +75,7 @@ class SQLiteTests(DatabaseCase):
         require_current_schema(self.path)
         self.assertEqual(migrate(self.path), [])
         with closing(connect(self.path)) as c:
-            self.assertEqual([r[0] for r in c.execute('SELECT version FROM _finance_v2_schema_migrations ORDER BY version')], list(range(1,12)))
+            self.assertEqual([r[0] for r in c.execute('SELECT version FROM _finance_v2_schema_migrations ORDER BY version')], list(range(1,13)))
             self.assertGreater(sum(v['rows'] for v in self.before.values() if 'rows' in v), 10)
 
     def test_repeated_automatic_ingestion_no_duplicates_or_promotion(self):

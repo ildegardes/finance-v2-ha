@@ -209,8 +209,9 @@ def query_domain(c,settings,values):
 
 
 def consent_diagnostics(c,settings):
+    from .open_finance_registry import connection_views
     result=[]
-    for config in settings.pluggy_connections:
+    for config in connection_views(c,settings).values():
         row=c.execute("SELECT state,error_code,last_complete_run_id FROM of_collection_checkpoints WHERE connection_id=? AND resource='consents' AND parent_id=''",(config.id,)).fetchone()
         if row is None:state='NOT_QUERIED'
         elif row['state']=='FAILED':state='ASSOCIATION_INCONSISTENT' if row['error_code'] in ('ACCOUNT_SCOPE_MISMATCH','ITEM_ID_DIFFERENT') else 'QUERY_FAILED'
@@ -222,6 +223,7 @@ def consent_diagnostics(c,settings):
 
 
 def query_relations(c,settings,values):
+    from .open_finance_registry import connection_views
     allowed={'connection_id','parent_id','page','page_size'}
     if set(values)-allowed or any(len(v)!=1 for v in values.values()):raise SyncError('INVALID_QUERY',422)
     def integer(name,default):
@@ -235,7 +237,7 @@ def query_relations(c,settings,values):
         if name in values:
             value=values[name][0]
             if not isinstance(value,str) or not value or len(value)>200 or any(ord(ch)<32 for ch in value):raise SyncError('INVALID_QUERY',422)
-            if name=='connection_id' and value not in {x.id for x in settings.pluggy_connections}:raise SyncError('CONNECTION_NOT_FOUND',404)
+            if name=='connection_id' and value not in connection_views(c,settings):raise SyncError('CONNECTION_NOT_FOUND',404)
             clauses.append(('source_parent_id' if name=='parent_id' else name)+'=?');args.append(value)
     where=' WHERE '+' AND '.join(clauses) if clauses else ''
     c.execute('BEGIN')

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import logging
+from pathlib import Path
+import ssl
 from wsgiref.simple_server import make_server, WSGIRequestHandler
 
 from .api import create_app
@@ -9,7 +12,7 @@ from .config import Settings
 from .migrations import migrate, require_current_schema
 from .domain.clock import SystemClock
 from .scheduler import SchedulerService
-from .http_runtime import ConcurrentWSGIServer, serve
+from .http_runtime import ConcurrentWSGIServer, PrivateTLSWSGIServer, serve
 
 
 class SafeRequestHandler(WSGIRequestHandler):
@@ -17,6 +20,25 @@ class SafeRequestHandler(WSGIRequestHandler):
 
     def log_request(self, code="-", size="-"):
         self.log_message('"%s %s" %s %s', self.command, self.path.split("?", 1)[0], code, size)
+
+
+class PrivateRequestHandler(SafeRequestHandler):
+    def get_environ(self):
+        environ = super().get_environ()
+        environ["HTTPS"] = "on"
+        environ["finance_v2.private_tls"] = True
+        return environ
+
+
+def make_private_server(host, application, certificate, key, *, port=8767):
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    context.load_cert_chain(certificate, key, password=lambda: "")
+    server = make_server(
+        host, port, application, server_class=PrivateTLSWSGIServer, handler_class=PrivateRequestHandler,
+    )
+    server.tls_context = context
+    return server
 
 
 def main() -> None:
@@ -40,9 +62,27 @@ def main() -> None:
         if args.command == "migrate":
             return
     require_current_schema(settings.database_path)
-    with make_server(settings.host, settings.port, create_app(settings), server_class=ConcurrentWSGIServer, handler_class=SafeRequestHandler) as server:
+    from .pluggy_keyring import provision
+    from .pluggy_credential_protection import CredentialProtectionError
+    try:
+        provision(settings)
+    except CredentialProtectionError as exc:
+        logging.getLogger(__name__).warning("%s", exc)
+    with ExitStack() as resources:
+        app = create_app(settings)
+        server = resources.enter_context(make_server(
+            settings.host, settings.port, app, server_class=ConcurrentWSGIServer, handler_class=SafeRequestHandler,
+        ))
+        private_server = None
+        if settings.pluggy_admin_origin and settings.pluggy_admin_origin.startswith("https://"):
+            try:
+                private_server = resources.enter_context(make_private_server(
+                    settings.host, app, Path("/ssl/finance-v17-admin.pem"), Path("/ssl/finance-v17-admin-key.pem"),
+                ))
+            except (OSError, ValueError):
+                logging.getLogger(__name__).warning("PLUGGY_PRIVATE_TLS_UNAVAILABLE")
         print(f"Finance V2 listening on http://{settings.host}:{settings.port}/api/v2/health")
-        serve(server, settings)
+        serve(server, settings, private_server)
 
 
 if __name__ == "__main__":

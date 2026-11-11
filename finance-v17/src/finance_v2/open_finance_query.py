@@ -244,7 +244,8 @@ def catalogs(c, configs):
         choices = {cid:dict(id=cid,institution=row['institution'],enabled=bool(row['enabled']),historical=cid not in configured)
                    for cid,row in connections.items()}
         for cid,cfg in configured.items():
-            choices.setdefault(cid,dict(id=cid,institution=cfg.institution,enabled=cfg.enabled,historical=False))
+            choices[cid] = dict(id=cid,institution=cfg.institution,enabled=cfg.enabled,
+                                historical=getattr(cfg,'historical',False))
         return dict(connections=sorted(choices.values(),key=lambda r:(r['institution'],r['id'])),
                     accounts=sorted(accounts.values(),key=lambda r:(r['connection_id'],r['external_id'])),
                     categories=sorted(categories.values(),key=lambda r:(r['connection_id'],r['category_key'])),

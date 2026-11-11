@@ -1,5 +1,7 @@
 """Bounded concurrent WSGI service; slow provider requests cannot monopolize HTTP."""
 import signal
+import selectors
+import ssl
 import threading
 from socketserver import ThreadingMixIn
 from wsgiref.simple_server import WSGIServer
@@ -45,18 +47,45 @@ class ConcurrentWSGIServer(ThreadingMixIn, WSGIServer):
             self._slots.release()
 
 
-def serve(server, settings):
+class PrivateTLSWSGIServer(ConcurrentWSGIServer):
+    """Perform the TLS handshake inside a bounded worker slot."""
+    def finish_request(self, request, client_address):
+        request.settimeout(5)
+        try:
+            with self.tls_context.wrap_socket(request, server_side=True) as encrypted:
+                encrypted.settimeout(15)
+                try:
+                    super().finish_request(encrypted, client_address)
+                finally:
+                    encrypted.settimeout(.25)
+                    try:
+                        # Send close_notify after the response, including when an
+                        # authorization rejection deliberately leaves the body unread.
+                        encrypted.unwrap().close()
+                    except OSError:
+                        pass
+        except (ssl.SSLError, TimeoutError, ConnectionError):
+            return
+
+
+def serve(server, settings, private_server=None):
     """Main-thread TERM/INT handler; no shutdown() deadlock inside a signal handler."""
     stop = threading.Event()
     previous = {}
     workers = CoverageWorkers(settings)
     for signum in (signal.SIGTERM, signal.SIGINT):
         previous[signum] = signal.signal(signum, lambda *_: stop.set())
-    server.timeout = .25
     try:
         workers.start()
-        while not stop.is_set():
-            server.handle_request()
+        with selectors.DefaultSelector() as listeners:
+            for listener in (server, private_server):
+                if listener is not None:
+                    listeners.register(listener, selectors.EVENT_READ)
+                    listener.timeout = .25
+            while not stop.is_set():
+                for ready, _ in listeners.select(timeout=.25):
+                    if not stop.is_set():
+                        ready.fileobj.handle_request()
     finally:
         stopped = workers.stop()
         for signum, handler in previous.items():

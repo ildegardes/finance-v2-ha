@@ -28,6 +28,8 @@ def contracts():
 
 def cached_path(path):
     # GET is not by itself a safety guarantee. Balance and SCR are deliberately absent.
+    if path in ('/connectors', '/connectors?sandbox=true'):
+        return True
     return bool(re.fullmatch(
         r'/(?:items/[A-Za-z0-9_-]{1,200}(?:/resources)?|accounts(?:/[A-Za-z0-9_-]{1,200}/statements)?|'
         r'v2/transactions|consents|investments(?:/[A-Za-z0-9_-]{1,200}/transactions)?|loans|bills)'

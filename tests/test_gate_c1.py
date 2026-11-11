@@ -159,7 +159,7 @@ class TemporalTests(unittest.TestCase):
         with closing(connect(self.db)) as c:
             self.assertEqual(c.execute('PRAGMA integrity_check').fetchone()[0],'ok')
             self.assertEqual(c.execute('PRAGMA foreign_key_check').fetchall(),[])
-            self.assertEqual(c.execute('PRAGMA user_version').fetchone()[0],11)
+            self.assertEqual(c.execute('PRAGMA user_version').fetchone()[0],12)
 
 
 if __name__=='__main__':unittest.main()

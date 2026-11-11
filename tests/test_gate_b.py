@@ -4,6 +4,7 @@ from dataclasses import replace
 from decimal import Decimal
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
 import sqlite3
 import subprocess
@@ -146,7 +147,9 @@ class GateBTests(unittest.TestCase):
             result=send(*args)
             if args[1].startswith('/v2/transactions'):cancelled[0]=True
             return result
-        service=OpenFinanceService(self.settings,client_factory=lambda cfg:PluggyClient(cfg,send=sender,sleep=lambda _:None))
+        config=replace(self.config,auto_sync_enabled=True)
+        service=OpenFinanceService(replace(self.settings,pluggy_connections=(config,)),
+            client_factory=lambda cfg:PluggyClient(cfg,send=sender,sleep=lambda _:None))
         def check():
             if cancelled[0]:raise PluggyError('AUTO_SYNC_CANCELLED')
         run=_sync_full(service,self.config.id,actor='AUTO:coverage',check=check)
@@ -275,7 +278,7 @@ class GateBTests(unittest.TestCase):
             self.assertEqual(c.execute('PRAGMA user_version').fetchone()[0],10)
             self.assertIsNone(c.execute("SELECT name FROM sqlite_master WHERE name='of_resource_links'").fetchone())
             self.assertEqual([tuple(row) for row in c.execute('SELECT * FROM accounts')],snapshot)
-        self.assertEqual(migrations.migrate(path),[11]);self.assertEqual(migrations.migrate(path),[])
+        self.assertEqual(migrations.migrate(path),[11,12]);self.assertEqual(migrations.migrate(path),[])
         with closing(connect(path)) as c:
             self.assertEqual(c.execute('PRAGMA integrity_check').fetchone()[0],'ok')
             self.assertEqual(c.execute('PRAGMA foreign_key_check').fetchall(),[])
@@ -285,7 +288,8 @@ class GateBTests(unittest.TestCase):
         with patch.object(migrations,'MIGRATIONS',migrations.MIGRATIONS[:10]):migrations.require_current_schema(path)
         with self.assertRaises(migrations.MigrationError):migrations.require_current_schema(path)
         self.assertEqual(self.rows('PRAGMA integrity_check'),[('ok',)])
-        baseline=Path(__file__).resolve().parents[2]/'baseline/finance-v17/src'
+        baseline=Path(os.environ.get('FINANCE_SCHEMA10_BASELINE_SRC',
+            Path(__file__).resolve().parents[2]/'baseline/finance-v17/src'))
         program='''
 import io,json,sys,socket,os
 from pathlib import Path

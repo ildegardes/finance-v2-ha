@@ -1,10 +1,12 @@
 """Opt-in cached coverage workers. No Item refresh, consent renewal or official writes."""
+from contextlib import closing
 import logging
 import threading
 import time
 
 from .open_finance import OpenFinanceService, SyncError
 from .open_finance_coverage import sync_full_automatic
+from .open_finance_registry import connection_views
 from .pluggy_client import PluggyClient, PluggyError, transport
 
 LOGGER = logging.getLogger(__name__)
@@ -26,8 +28,11 @@ class CoverageWorkers:
     def start(self):
         if self.threads or self.stop_event.is_set():
             raise RuntimeError('COVERAGE_WORKERS_ALREADY_STARTED_OR_STOPPED')
-        for config in self.settings.pluggy_connections:
-            if config.enabled and config.auto_sync_enabled:
+        service = OpenFinanceService(self.settings)
+        with closing(service._db()) as db:
+            planned = [view for view in connection_views(db, self.settings).values() if view.auto_sync_enabled]
+        for config in planned:
+            if config.enabled:
                 worker = threading.Thread(target=self._loop, args=(config,),
                     name='coverage-' + config.id, daemon=True)
                 self.threads.append(worker)

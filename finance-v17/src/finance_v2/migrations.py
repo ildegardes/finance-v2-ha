@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 import sqlite3
+from types import SimpleNamespace
 
 from .db import connect
 
@@ -38,6 +39,7 @@ MIGRATIONS = (
     Migration(9, "open_finance_foundation", MIGRATIONS_DIR / "009_open_finance_foundation.sql", "f40bf2a455caa70925c008ebc13cb9c36dbf4fb2cee7ac309b3015c7f7975e72"),
     Migration(10, "open_finance_coverage", MIGRATIONS_DIR / "010_open_finance_coverage.sql", "4608c15b0977c166cda3ec7112e20d67bdf091706ab2c8ad860930d2b02fec9e"),
     Migration(11, "open_finance_domain_links", MIGRATIONS_DIR / "011_open_finance_domain_links.sql", "8fcee297fb2d8e9ccee6b98c154d7f147ab83d48d991d9e1113819128a5dda65"),
+    Migration(12, "open_finance_registry", MIGRATIONS_DIR / "012_open_finance_registry.sql", "33b959d3c16eeb7bbd3559b0d8fa53dbc30a5d942742d7fa629f64bdaab1fc86"),
 )
 
 
@@ -89,6 +91,16 @@ def migrate(database_path: Path, busy_timeout_ms: int = 5000) -> list[int]:
                 if previous["name"] != migration.name or previous["sha256"] != actual_hash:
                     raise MigrationError(f"migration {migration.version} history is inconsistent")
                 continue
+            if migration.name == "open_finance_registry":
+                from .open_finance import SyncError
+                from .open_finance_recovery import SantanderBindingRecovery
+                recovery = SantanderBindingRecovery(SimpleNamespace(database_path=database_path))
+                try:
+                    pending = recovery.pending_receipts(recovery.records())
+                except (OSError, SyncError):
+                    raise MigrationError("legacy Santander audit could not be verified") from None
+                if pending:
+                    raise MigrationError("reconcile the pending Santander audit on schema 11 before upgrading")
             sql = migration.path.read_text(encoding="utf-8")
             escaped_name = migration.name.replace("'", "''")
             script = (

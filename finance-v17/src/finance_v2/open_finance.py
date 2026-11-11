@@ -1,7 +1,8 @@
 """Manual staging synchronization. Only migration-009 tables may be written."""
 from hashlib import sha256
 from .open_finance_diagnostics import annotate, emit
-from contextlib import nullcontext
+from contextlib import closing, nullcontext
+from dataclasses import replace
 from datetime import datetime
 from math import ceil
 import json
@@ -13,6 +14,8 @@ from .db import connect
 from .open_finance_write import staging_transaction
 from .domain.clock import SystemClock, utc_text
 from .pluggy_client import PluggyClient, PluggyError, _period
+from .open_finance_registry import load_keyring, managed_connection
+from .pluggy_credential_protection import CredentialProtectionError
 
 
 class SyncError(Exception):
@@ -58,6 +61,29 @@ class OpenFinanceService:
         try:return connect(self.settings.database_path,self.settings.busy_timeout_ms)
         except (FileNotFoundError,sqlite3.Error):raise SyncError('STORAGE_UNAVAILABLE',503) from None
 
+    def resolve_config(self, connection_id):
+        try:
+            with closing(self._db()) as db:
+                entry = db.execute(
+                    "SELECT source,lifecycle,revision,label FROM of_connection_registry WHERE connection_id=?",
+                    (connection_id,),
+                ).fetchone()
+                if entry is None:
+                    return self.config.get(connection_id)
+                if entry["lifecycle"] != "ACTIVE":
+                    raise SyncError("CONNECTION_NOT_ACTIVE")
+                if entry["source"] == "LEGACY":
+                    config = self.config.get(connection_id)
+                    return replace(config, institution=entry["label"], registry_revision=entry["revision"]) if config else None
+                return managed_connection(
+                    db, connection_id, entry["revision"],
+                    load_keyring(self.settings.pluggy_keyring_path),
+                )
+        except CredentialProtectionError as exc:
+            raise SyncError(str(exc), 503) from None
+        except sqlite3.Error:
+            raise SyncError("STORAGE_UNAVAILABLE", 503) from None
+
     @staticmethod
     def _binding(config):
         return sha256(json.dumps([config.client_id,config.item_id],separators=(',',':')).encode()).hexdigest()
@@ -66,8 +92,23 @@ class OpenFinanceService:
         epoch,stamp=self._time();token=uuid.uuid4().hex;run_id=uuid.uuid4().hex
         binding=self._binding(config)
         with self._write(c, check=check):
+            registry = c.execute(
+                'SELECT source,lifecycle,revision FROM of_connection_registry WHERE connection_id=?',
+                (config.id,),
+            ).fetchone()
+            if registry is not None and registry['lifecycle'] != 'ACTIVE':
+                raise SyncError('CONNECTION_NOT_ACTIVE')
+            expected_revision = config.registry_revision
+            if registry is not None and registry["source"] == "LEGACY" and expected_revision is None:
+                expected_revision = 0
+            if (registry["revision"] if registry is not None else None) != expected_revision:
+                raise SyncError("CONNECTION_CONFIGURATION_CHANGED")
             row=c.execute('SELECT * FROM of_connections WHERE id=?',(config.id,)).fetchone()
             if row and row['binding_hash']!=binding:raise SyncError('CONNECTION_BINDING_CHANGED')
+            if row is None and c.execute(
+                "SELECT 1 FROM of_connections WHERE binding_hash=?", (binding,),
+            ).fetchone():
+                raise SyncError("CONNECTION_BINDING_ALREADY_REGISTERED")
             if row and row['lease_token'] is not None:
                 if row['lease_until']>epoch:raise SyncError('SYNC_BUSY')
                 c.execute("UPDATE of_sync_runs SET state='INTERRUPTED',finished_at=?,error_code='LEASE_EXPIRED' "
@@ -89,6 +130,11 @@ class OpenFinanceService:
                 c.execute("INSERT INTO of_connections(id,institution,enabled,binding_hash,sync_state,lease_token,lease_until,updated_at) "
                           "VALUES(?,?,1,?,'RUNNING',?,?,?)",
                           (config.id,config.institution,binding,token,epoch+self.lease_seconds,stamp))
+            if registry is None:
+                c.execute(
+                    """INSERT INTO of_connection_registry(connection_id,source,lifecycle,label,updated_at)
+                       VALUES (?,'LEGACY','ACTIVE',?,?)""", (config.id, config.institution, stamp),
+                )
             c.execute("INSERT INTO of_sync_runs(id,connection_id,actor,started_at,state,date_from,date_to) "
                       "VALUES(?,?,?,?,'RUNNING',?,?)",(run_id,config.id,actor,stamp,start,end))
         return run_id,token
@@ -186,7 +232,7 @@ class OpenFinanceService:
     def sync_one(self,connection_id,*,actor,start=None,end=None):
         start,end=validated_period(start,end)
         if actor!='UI:local':raise SyncError('OWNER_REQUIRED',403)
-        config=self.config.get(connection_id)
+        config=self.resolve_config(connection_id)
         if config is None:raise SyncError('CONNECTION_NOT_FOUND',404)
         if not config.enabled:raise SyncError('CONNECTION_DISABLED')
         if config.access_mode != 'strict':
@@ -227,23 +273,44 @@ class OpenFinanceService:
         start,end=validated_period(start,end)
         if actor!='UI:local':raise SyncError('OWNER_REQUIRED',403)
         results=[]
-        for config in self.config.values():
-            if not config.enabled:continue
-            try:results.append(self.sync_one(config.id,actor=actor,start=start,end=end))
+        with closing(self._db()) as db:
+            active_ids = [entry["id"] for entry in self.connections(db) if entry["enabled"]]
+        for connection_id in active_ids:
+            try:results.append(self.sync_one(connection_id,actor=actor,start=start,end=end))
             except SyncError as exc:
-                results.append({'connection_id':config.id,'state':'FAILED','error_code':exc.code})
+                results.append({'connection_id':connection_id,'state':'FAILED','error_code':exc.code})
         return results
 
     def connections(self,c):
+        registered = {row["connection_id"]: row for row in c.execute(
+            "SELECT connection_id,source,lifecycle,label,revision,replaces_id "
+            "FROM of_connection_registry WHERE lifecycle<>'REMOVED' ORDER BY connection_id"
+        )}
         result=[]
-        for config in self.config.values():
-            row=c.execute('SELECT sync_state,lease_until FROM of_connections WHERE id=?',(config.id,)).fetchone()
-            last=c.execute('SELECT * FROM of_sync_runs WHERE connection_id=? ORDER BY started_at DESC,rowid DESC LIMIT 1',(config.id,)).fetchone()
+        for connection_id in dict.fromkeys((*self.config, *registered)):
+            config = self.config.get(connection_id)
+            entry = registered.get(connection_id)
+            enabled = bool(config and config.enabled)
+            if entry is not None:
+                enabled = entry["lifecycle"] == "ACTIVE" and (entry["source"] == "MANAGED" or enabled)
+            row=c.execute('SELECT sync_state,lease_until FROM of_connections WHERE id=?',(connection_id,)).fetchone()
+            last=c.execute('SELECT * FROM of_sync_runs WHERE connection_id=? ORDER BY started_at DESC,rowid DESC LIMIT 1',(connection_id,)).fetchone()
+            account_count = c.execute(
+                "SELECT COUNT(*) FROM of_accounts WHERE connection_id=?", (connection_id,)
+            ).fetchone()[0]
+            observed_resources = [value[0] for value in c.execute(
+                "SELECT DISTINCT resource FROM of_resource_coverage WHERE connection_id=? "
+                "AND state='AVAILABLE' AND resource NOT IN ('item','resources','consents') ORDER BY resource",
+                (connection_id,),
+            )]
             epoch,_=self._time()
-            result.append({'id':config.id,'institution':config.institution,'enabled':config.enabled,
+            result.append({'id':connection_id,'institution':entry["label"] if entry else config.institution,'enabled':enabled,
                            'sync_state':row['sync_state'] if row else 'IDLE',
                            'lease_expired':bool(row and row['lease_until'] is not None and row['lease_until']<=epoch),
-                           'last_run':dict(last) if last else None})
+                           'last_run':dict(last) if last else None,
+                           'staged_account_count':account_count,
+                           'observed_resources':observed_resources,
+                           **({key: entry[key] for key in ("source", "lifecycle", "revision", "replaces_id")} if entry else {})})
         return result
 
 

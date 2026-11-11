@@ -10,7 +10,7 @@ from typing import Callable, Iterable
 from urllib.parse import parse_qs
 
 from . import __version__
-from .config import Settings
+from .config import Settings, private_admin_address
 from . import open_finance_http
 from .open_finance import SyncError
 from .unicode13_f06 import verify_profile as verify_unicode13_profile
@@ -97,12 +97,15 @@ class Application:
  def __init__(self,settings,clock=None):
   verify_unicode13_profile()
   self.settings=settings;self.clock=clock or SystemClock(settings.timezone);self.oauth=OAuthService(settings,self.clock)
+  self.registry_rate_limit=open_finance_http.RegistryRateLimiter()
   from .open_finance_recovery import SantanderBindingRecovery
   self.santander_binding_recovery=SantanderBindingRecovery(settings)
  def __call__(self,environ,start_response)->Iterable[bytes]:
   rid=environ.get("HTTP_X_REQUEST_ID","local");origin=environ.get("HTTP_ORIGIN")
   try:
    path=environ.get("PATH_INFO","");method=environ.get("REQUEST_METHOD","GET")
+   if path.startswith(open_finance_http.PREFIX+'registry/'):
+    origin=None
    if method=="GET" and path in {RESOURCE_METADATA_PATH,"/.well-known/oauth-protected-resource"}:
     return self.json_document_response(start_response,200,protected_resource_metadata())
    if method=="GET" and path==AUTHORIZATION_METADATA_PATH:
@@ -121,14 +124,22 @@ class Application:
    route,params=self.route(method,path);identity=self.identity(environ,route)
    if route.operation.startswith('open_finance_'):
     if identity.role!='UI':raise HttpError(403,'FORBIDDEN','owner authorization required')
+    if route.operation.startswith('open_finance_registry_'):
+     if (not self.private_registry_session(environ)
+         or environ.get('HTTP_ORIGIN')!=self.settings.pluggy_admin_origin):
+      raise HttpError(403,'PRIVATE_ADMIN_REQUIRED','private owner session required')
     if route.write and environ.get('finance_v2.cookie_auth') and environ.get('HTTP_X_CSRF_TOKEN')!=environ.get('finance_v2.csrf'):raise HttpError(403,'CSRF_INVALID','CSRF token is missing or invalid')
+    if route.operation.startswith('open_finance_registry_'):
+     self.registry_rate_limit.admit(route.operation)
     if route.operation.startswith('open_finance_recovery_') and route.write and origin:
      expected_origin=environ.get('wsgi.url_scheme','http')+'://'+environ.get('HTTP_HOST','')
      if origin!=expected_origin and origin not in self.settings.cors_origins:raise HttpError(403,'CSRF_ORIGIN_INVALID','origin is not allowed')
-    body,query=open_finance_http.request(environ)
+    body,query=open_finance_http.request(environ,limit=8192 if route.operation.startswith('open_finance_registry_') else 1_000_000)
     try:payload,status=open_finance_http.dispatch(self,route.operation,identity,body,query)
     except SyncError:raise
     except Exception:raise HttpError(503,'STORAGE_UNAVAILABLE','staging unavailable') from None
+    if route.operation=='open_finance_connections':
+     payload['registry_admin_available']=self.private_registry_session(environ)
     return self.respond(start_response,status,payload,rid,origin)
    assistant_operation=route.operation.startswith("assistant_")
    body=self.body(environ);key=environ.get("HTTP_IDEMPOTENCY_KEY")
@@ -149,6 +160,13 @@ class Application:
   except json.JSONDecodeError:return self.respond(start_response,400,{"error":{"code":"INVALID_JSON","message":"request body is not valid JSON"}},rid,origin)
   except FileNotFoundError as e:return self.respond(start_response,503,{"status":"degraded","database":"error","error":{"code":"DATABASE_UNAVAILABLE","message":str(e)}},rid,origin)
   except Exception:LOGGER.exception("request failed request_id=%s",rid);return self.respond(start_response,500,{"error":{"code":"INTERNAL_ERROR","message":"internal server error"}},rid,origin)
+ def private_registry_session(self,environ):
+  expected=self.settings.pluggy_admin_origin
+  actual=environ.get('wsgi.url_scheme','http')+'://'+environ.get('HTTP_HOST','')
+  proxied=any(key.startswith(('HTTP_X_FORWARDED_', 'HTTP_CF_')) or key=='HTTP_FORWARDED' for key in environ)
+  return bool(expected and actual==expected and environ.get('finance_v2.cookie_auth') and not proxied
+              and (not expected.startswith('https://') or environ.get('finance_v2.private_tls') is True)
+              and private_admin_address(environ.get('REMOTE_ADDR','')))
  def route(self,method,path):
   for r in ROUTES:
    m=r.match(path)
@@ -773,6 +791,6 @@ class Application:
   """Serialize a protocol document without the Finance API envelope."""
   raw=b"" if status==204 else json.dumps(payload,ensure_ascii=False,separators=(",",":"),default=str).encode();headers=[("Content-Type","application/json; charset=utf-8"),("Content-Length",str(len(raw))),("Cache-Control","no-store"),("X-Content-Type-Options","nosniff")]
   if origin in self.settings.cors_origins:headers += [("Access-Control-Allow-Origin",origin),("Vary","Origin"),("Access-Control-Allow-Headers","Authorization, Content-Type, Idempotency-Key, X-Request-ID"),("Access-Control-Allow-Methods","GET, POST, PATCH, OPTIONS")]
-  phrase={200:"OK",201:"Created",202:"Accepted",204:"No Content",207:"Multi-Status",400:"Bad Request",401:"Unauthorized",403:"Forbidden",404:"Not Found",405:"Method Not Allowed",409:"Conflict",413:"Payload Too Large",415:"Unsupported Media Type",422:"Unprocessable Entity",500:"Internal Server Error",502:"Bad Gateway",503:"Service Unavailable"}.get(status,"Error");start(f"{status} {phrase}",headers);return [raw]
+  phrase={200:"OK",201:"Created",202:"Accepted",204:"No Content",207:"Multi-Status",400:"Bad Request",401:"Unauthorized",403:"Forbidden",404:"Not Found",405:"Method Not Allowed",409:"Conflict",413:"Payload Too Large",415:"Unsupported Media Type",422:"Unprocessable Entity",429:"Too Many Requests",500:"Internal Server Error",502:"Bad Gateway",503:"Service Unavailable"}.get(status,"Error");start(f"{status} {phrase}",headers);return [raw]
 
 def create_app(settings=None,clock=None):return Application(settings or Settings.from_env(),clock)

@@ -22,6 +22,8 @@ from finance_v2.config import Settings, ExternalClientCredential
 from finance_v2.db import connect
 from finance_v2.open_finance import OpenFinanceService, SyncError
 from finance_v2.open_finance_coverage import query, sync_full
+from finance_v2.open_finance_registry_admin import RegistryAdmin
+from finance_v2.pluggy_credential_protection import CredentialProtector
 from finance_v2.pluggy_client import PluggyClient, PluggyError, transport
 from finance_v2.pluggy_config import PluggyConnection
 from finance_v2.pluggy_coverage import CONTRACT, cached_path, contracts, project
@@ -119,6 +121,41 @@ class CoverageTests(unittest.TestCase):
         payload = b''.join(Application(self.settings)(env, lambda s, h: status.append(int(s.split()[0]))))
         return status[0], json.loads(payload)
 
+    def test_managed_sync_is_discoverable_and_private_in_cached_views(self):
+        self.settings = replace(self.settings, pluggy_connections=(), pluggy_keyring_path=self.db.with_suffix('.keys'))
+        service = OpenFinanceService(self.settings, client_factory=self.service.client_factory)
+        protector = CredentialProtector("fixture", {"fixture": bytes(range(32))})
+        admin = RegistryAdmin(service, keyring_loader=lambda _: protector)
+        self.provider.overrides["/items/item-test"] = (200, {
+            "id": "item-test", "status": "UPDATED", "connector": {"id": 600, "name": "Synthetic", "isSandbox": False},
+        })
+        with patch("finance_v2.open_finance.load_keyring", return_value=protector), patch(
+            "finance_v2.open_finance_output_privacy.load_keyring", return_value=protector,
+        ):
+            cid = admin.create_draft(actor="UI:local", label="Banco gerenciado", environment="STRICT",
+                                     client_id="synthetic-managed-client", client_secret="synthetic-managed-secret",
+                                     item_id="item-test")["id"]
+            admin.validate_and_activate(cid, actor="UI:local", revision=0, confirmed=True)
+            self.assertEqual(sync_full(service, cid, actor="UI:local")["state"], "SUCCEEDED")
+            for endpoint, resource in (("resources", "accounts"), ("domain", "accounts")):
+                status, payload = self.request(f"/api/v2/open-finance/{endpoint}?connection_id={cid}&resource={resource}")
+                self.assertEqual(status, 200)
+                self.assertEqual(payload["total"], 2)
+                self.assertNotIn("item-test", json.dumps(payload))
+            status, catalog = self.request("/api/v2/open-finance/catalogs")
+            self.assertEqual(status, 200)
+            self.assertEqual(catalog["connections"], [
+                {"id": cid, "institution": "Banco gerenciado", "enabled": True, "historical": False},
+            ])
+            admin.archive(cid, actor="UI:local", revision=1, confirmed=True)
+            status, catalog = self.request("/api/v2/open-finance/catalogs")
+            self.assertEqual(status, 200)
+            self.assertTrue(catalog["connections"][0]["historical"])
+            self.assertFalse(catalog["connections"][0]["enabled"])
+            status, history = self.request(f"/api/v2/open-finance/sync-runs?connection_id={cid}")
+            self.assertEqual(status, 200)
+            self.assertEqual(len(history["items"]), 1)
+
     def test_all_products_projection_history_and_financial_preservation(self):
         with closing(connect(self.db)) as c:
             c.execute("INSERT INTO accounts(name,active) VALUES('Conta financeira sintÃ©tica',1)")
@@ -133,7 +170,7 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(run['state'], 'SUCCEEDED', run)
         self.assertEqual(self.financial(), before)
         with closing(connect(self.db)) as c:
-            self.assertEqual(c.execute('PRAGMA user_version').fetchone()[0], 11)
+            self.assertEqual(c.execute('PRAGMA user_version').fetchone()[0], 12)
             self.assertEqual({r[0] for r in c.execute('SELECT DISTINCT resource FROM of_resource_records')}, set(CONTRACT['resources']))
             self.assertEqual(c.execute('SELECT count(*) FROM of_transactions').fetchone()[0], 2)
             self.assertEqual(c.execute('SELECT count(*) FROM of_transaction_revisions').fetchone()[0], 2)
@@ -301,14 +338,14 @@ class CoverageTests(unittest.TestCase):
             self.assertFalse(result['has_more'])
             self.assertEqual(c.execute('PRAGMA foreign_key_check').fetchall(), [])
 
-    def test_schema8_to11_preservation_reapply_and_historical_010_rollback(self):
+    def test_schema8_to12_preservation_reapply_and_historical_010_rollback(self):
         fresh = Path(self.temp.name) / 'fresh-schema8.sqlite3'
         with patch.object(migrations, 'MIGRATIONS', migrations.MIGRATIONS[:8]):
             self.assertEqual(migrations.migrate(fresh), list(range(1, 9)))
         with closing(connect(fresh)) as c:
             c.execute("INSERT INTO accounts(name,active) VALUES('Preservada sintÃ©tica',1)")
             snapshot = list(c.execute('SELECT * FROM accounts'))
-        self.assertEqual(migrations.migrate(fresh), [9, 10, 11])
+        self.assertEqual(migrations.migrate(fresh), [9, 10, 11, 12])
         self.assertEqual(migrations.migrate(fresh), [])
         with closing(connect(fresh)) as c:
             self.assertEqual([tuple(r) for r in c.execute('SELECT * FROM accounts')], [tuple(r) for r in snapshot])

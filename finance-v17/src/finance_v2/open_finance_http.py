@@ -1,18 +1,59 @@
 """Owner-only manual staging HTTP contracts; no official financial writes."""
+from collections import deque
 from contextlib import closing
 import json
 import re
+from threading import Lock
+from time import monotonic
 from urllib.parse import parse_qs
 
 from .open_finance import OpenFinanceService, SyncError, paged
 from .open_finance_query import catalogs, query_transactions
 from .open_finance_coverage import sync_full, sync_domain, query as query_resources, coverage_status
 from .open_finance_domain import query_domain, query_relations, openapi_paths as domain_paths
+from .open_finance_registry import connection_views
 from .pluggy_coverage import RESOURCES, CONTRACT, output_schema
 
 
 PREFIX = '/api/v2/open-finance/'
+
+
+class RegistryRateLimiter:
+    """The owner has a shared limit across sessions and server worker threads."""
+    def __init__(self, *, now=monotonic, provider_limit=8, local_limit=32):
+        self._now = now
+        self._lock = Lock()
+        self._provider = deque(maxlen=provider_limit)
+        self._local = deque(maxlen=local_limit)
+
+    def admit(self, operation):
+        uses_provider = operation in {
+            "open_finance_registry_activate", "open_finance_registry_rotate_credentials",
+            "open_finance_registry_validate", "open_finance_registry_connector_catalog",
+        }
+        attempts = self._provider if uses_provider else self._local
+        with self._lock:
+            now = self._now()
+            while attempts and attempts[0] <= now - 60:
+                attempts.popleft()
+            if len(attempts) == attempts.maxlen:
+                raise SyncError("REGISTRY_RATE_LIMITED", 429)
+            attempts.append(now)
+
+
 OPERATIONS = (
+    ('POST','registry/details','registry_details'),
+    ('POST','registry/connectors','registry_connector_catalog'),
+    ('POST','registry/drafts','registry_create'),
+    ('POST','registry/activate','registry_activate'),
+    ('POST','registry/validate','registry_validate'),
+    ('POST','registry/archive/inspect','registry_archive_inspect'),
+    ('POST','registry/archive','registry_archive'),
+    ('POST','registry/disable','registry_disable'),
+    ('POST','registry/rename','registry_rename'),
+    ('POST','registry/rotate-credentials','registry_rotate_credentials'),
+    ('POST','registry/delete/inspect','registry_delete_inspect'),
+    ('POST','registry/delete','registry_delete'),
     ('GET','santander-binding-recovery','recovery_inspect'),
     ('POST','santander-binding-recovery/prepare','recovery_prepare'),
     ('POST','santander-binding-recovery/confirm','recovery_confirm'),
@@ -27,7 +68,7 @@ OPERATIONS = (
 )
 
 
-def request(e):
+def request(e, *, limit=1_000_000):
     def unique(pairs):
         result={}
         for key,value in pairs:
@@ -37,7 +78,7 @@ def request(e):
     try:
         n=int(e.get('CONTENT_LENGTH') or 0)
         if n<0:raise ValueError()
-        if n>1_000_000:raise SyncError('PAYLOAD_TOO_LARGE',413)
+        if n>limit:raise SyncError('PAYLOAD_TOO_LARGE',413)
         raw=e['wsgi.input'].read(n)
         if raw and e.get('CONTENT_TYPE','').split(';',1)[0].strip().lower()!='application/json':
             raise SyncError('JSON_CONTENT_TYPE_REQUIRED',415)
@@ -56,6 +97,61 @@ def request(e):
 
 
 def dispatch(app,operation,identity,body,query):
+    if operation.startswith('open_finance_registry_'):
+        if identity.role != 'UI' or identity.client_id != 'UI:local' or not identity.csrf:
+            raise SyncError('FORBIDDEN',403)
+        from .open_finance_registry_admin import RegistryAdmin
+        admin = RegistryAdmin(OpenFinanceService(app.settings, app.clock))
+        if query:
+            raise SyncError('INVALID_REQUEST',422)
+        if operation in {'open_finance_registry_details','open_finance_registry_connector_catalog'}:
+            if set(body) != {'connection_id','revision'} or not _connection_id(body['connection_id']):
+                raise SyncError('INVALID_REQUEST',422)
+            action = admin.connection_details if operation.endswith('_details') else admin.connector_catalog
+            return action(actor=identity.client_id, **body),200
+        if operation == 'open_finance_registry_create':
+            required = {'label','environment','client_id','client_secret','item_id'}
+            if not required <= body.keys() or body.keys() - required - {'replaces_id'}:
+                raise SyncError('INVALID_REQUEST',422)
+            if 'replaces_id' in body and not _connection_id(body['replaces_id']):
+                raise SyncError('INVALID_CONNECTION_ID',422)
+            return admin.create_draft(actor=identity.client_id, **body),201
+        if operation == 'open_finance_registry_rename':
+            if set(body) != {'connection_id','revision','label'} or not _connection_id(body['connection_id']):
+                raise SyncError('INVALID_REQUEST',422)
+            return admin.rename(body['connection_id'], actor=identity.client_id,
+                                revision=body['revision'], label=body['label']),200
+        if operation == 'open_finance_registry_rotate_credentials':
+            if set(body) != {'connection_id','revision','confirmed','client_id','client_secret'} or not _connection_id(body['connection_id']):
+                raise SyncError('INVALID_REQUEST',422)
+            return admin.rotate_credentials(actor=identity.client_id, **body),200
+        if operation in {'open_finance_registry_archive_inspect','open_finance_registry_delete_inspect','open_finance_registry_delete'}:
+            fields = {'connection_id','revision'}
+            if operation.endswith('_inspect'):
+                action = (admin.inspect_archive if operation == 'open_finance_registry_archive_inspect'
+                          else admin.inspect_deletion)
+            else:
+                fields |= {'backup_confirmed','confirmation'}
+                action = admin.delete
+            if set(body) != fields or not _connection_id(body['connection_id']):
+                raise SyncError('INVALID_REQUEST',422)
+            return action(actor=identity.client_id, **body),200
+        fields = {'connection_id','revision','confirmed'}
+        optional = {'connector_id'} if operation == 'open_finance_registry_activate' else set()
+        if not fields <= body.keys() or body.keys() - fields - optional or not _connection_id(body['connection_id']):
+            raise SyncError('INVALID_REQUEST',422)
+        if 'connector_id' in body and (type(body['connector_id']) is not int or not 0 < body['connector_id'] < 2**31):
+            raise SyncError('INVALID_REQUEST',422)
+        args = dict(actor=identity.client_id, revision=body['revision'], confirmed=body['confirmed'])
+        if operation == 'open_finance_registry_activate':
+            return admin.validate_and_activate(body['connection_id'], connector_id=body.get('connector_id'), **args),200
+        if operation == 'open_finance_registry_validate':
+            return admin.validate_connection(body['connection_id'], **args),200
+        if operation == 'open_finance_registry_archive':
+            return admin.archive(body['connection_id'], **args),200
+        if operation == 'open_finance_registry_disable':
+            return admin.disable(body['connection_id'], **args),200
+        raise SyncError('NOT_FOUND',404)
     if operation.startswith('open_finance_recovery_'):
         # The existing UI owner credential is the administrator; never expose
         # this capability to scheduled jobs, external clients or MCP.
@@ -75,12 +171,15 @@ def dispatch(app,operation,identity,body,query):
             return recovery.execute(actor,body['confirmation'],body['explicit_confirmation'],body['backup_confirmed']),200
         raise SyncError('NOT_FOUND',404)
     payload,status=_dispatch_raw(app,operation,identity,body,query)
-    from .open_finance_presentation import personal,present_payload
-    if any(personal(cfg) for cfg in app.settings.pluggy_connections):
-        with closing(app.db()) as c:
-            payload=present_payload(c,app.settings,payload,operation)
+    from .open_finance_presentation import present_payload
     from .open_finance_output_privacy import public_payload
-    return public_payload(payload,app.settings),status
+    with closing(app.db()) as c:
+        payload=present_payload(c,app.settings,payload,operation)
+        return public_payload(payload,app.settings,db=c),status
+
+
+def _connection_id(value):
+    return isinstance(value,str) and re.fullmatch(r'[a-z][a-z0-9-]{1,63}',value) is not None
 
 
 def _dispatch_raw(app,operation,identity,body,query):
@@ -124,9 +223,9 @@ def _dispatch_raw(app,operation,identity,body,query):
     with closing(app.db()) as c:
         if op=='catalogs':
             if query:raise SyncError('INVALID_QUERY',422)
-            return catalogs(c,app.settings.pluggy_connections),200
+            return catalogs(c,connection_views(c,app.settings).values()),200
         if op=='transactions' and 'contract' in query:
-            return query_transactions(c,query,app.settings.pluggy_connections,
+            return query_transactions(c,query,connection_views(c,app.settings).values(),
                 origin_evidence=app.settings.open_finance_origin_evidence),200
         if op=='connections':
             if query:raise SyncError('INVALID_QUERY',422)
@@ -137,8 +236,13 @@ def _dispatch_raw(app,operation,identity,body,query):
             if row is None:raise SyncError('RUN_NOT_FOUND',404)
             return {'run':dict(row)},200
         if op in {'runs','transactions'}:
-            if 'connection_id' in query and query['connection_id'][0] not in service.config:
-                raise SyncError('CONNECTION_NOT_FOUND',404)
+            if 'connection_id' in query:
+                connection_id = query['connection_id'][0]
+                if connection_id not in service.config and not c.execute(
+                    "SELECT 1 FROM of_connection_registry WHERE connection_id=? AND lifecycle<>'REMOVED'",
+                    (connection_id,),
+                ).fetchone():
+                    raise SyncError('CONNECTION_NOT_FOUND',404)
             return paged(c,'of_sync_runs' if op=='runs' else 'of_transactions',query),200
     raise SyncError('NOT_FOUND',404)
 
@@ -194,6 +298,40 @@ def openapi_paths():
         'translation_status':enum('UNVERIFIED','VERIFIED','OWNER_OVERRIDE'),'updated_at':text})
     result={}
     for method,path,op in OPERATIONS:
+        if op.startswith('registry_'):
+            if op=='registry_create':
+                fields={name:{'type':'string','minLength':1,'maxLength':maximum}
+                        for name,maximum in (('label',200),('client_id',512),('client_secret',512),('item_id',200))}
+                for name in ('client_id','client_secret','item_id'):
+                    fields[name]['writeOnly']=True
+                fields['environment']=enum('PERSONAL','SANDBOX','STRICT')
+                required=list(fields)
+                fields['replaces_id']=text
+            else:
+                fields={'connection_id':text,'revision':{'type':'integer','minimum':0}}
+                if op=='registry_rename':
+                    fields['label']={'type':'string','minLength':1,'maxLength':200}
+                elif op=='registry_delete':
+                    fields['backup_confirmed']={'type':'boolean','const':True}
+                    fields['confirmation']=enum('EXCLUIR DEFINITIVAMENTE')
+                elif op not in {'registry_archive_inspect','registry_delete_inspect','registry_details','registry_connector_catalog'}:
+                    fields['confirmed']={'type':'boolean','const':True}
+                if op=='registry_rotate_credentials':
+                    fields.update({name:{'type':'string','minLength':1,'maxLength':512,'writeOnly':True}
+                                   for name in ('client_id','client_secret')})
+                required=list(fields)
+                if op=='registry_activate':
+                    fields['connector_id']={'type':'integer','minimum':1,'maximum':2**31-1}
+            spec={'operationId':'open_finance_'+op,'x-owner-only':True,'x-owner-admin-only':True,
+                  'x-external-capability':'not-available',
+                  'description':'Private owner browser session only. Exact configured origin and CSRF required.',
+                  'parameters':[{'name':'X-CSRF-Token','in':'header','required':True,'schema':text}],
+                  'requestBody':{'required':True,'content':{'application/json':{'schema':{
+                      'type':'object','additionalProperties':False,'properties':fields,'required':required}}}},
+                  'responses':{str(status):{'description':'Sanitized registry result' if status in (200,201)
+                                            else 'Sanitized error'}
+                               for status in (200,201,401,403,404,409,413,415,422,429,502,503)}}
+            result[PREFIX+path]={method.lower():spec};continue
         if op.startswith('recovery_'):
             properties={'action':enum('APPLY','REVERT','RECONCILE'),'backup_confirmed':{'type':'boolean','const':True},'operation':{'type':'string','pattern':'^[0-9a-f]{32}$'}} if op=='recovery_prepare' else {'confirmation':{'type':'string','pattern':'^[0-9a-f]{64}$'},'explicit_confirmation':enum('CORRIGIR_BINDING_SANTANDER','REVERTER_BINDING_SANTANDER','RECONCILIAR_AUDITORIA_SANTANDER'),'backup_confirmed':{'type':'boolean','const':True}}
             spec={'operationId':'open_finance_'+op,'security':[{'bearerAuth':[]}],'x-owner-only':True,'x-owner-admin-only':True,'x-external-capability':'not-available','description':'Explicit Santander-only maintenance. Uses live application Settings. No provider calls. Cookie POST requires CSRF. Backup is owner-attested; no generic SQL.'}
@@ -241,6 +379,8 @@ def openapi_paths():
         else:
             schema={'type':'object','properties':{'connections':{'type':'array','items':{'type':'object','properties':{'id':text,'institution':text,
                 'enabled':{'type':'boolean'},'sync_state':{'type':'string','enum':['IDLE','RUNNING','SUCCEEDED','FAILED','INTERRUPTED']},
+                'staged_account_count':{'type':'integer','minimum':0},
+                'observed_resources':{'type':'array','items':text},
                 'lease_expired':{'type':'boolean'},'last_run':{'anyOf':[run,{'type':'null'}]}}}}}}
         spec['parameters']=parameters
         spec['responses']={str(s):{'description':'Completed sync / diagnostic outcome' if s in {200,207,502} else 'Sanitized error',

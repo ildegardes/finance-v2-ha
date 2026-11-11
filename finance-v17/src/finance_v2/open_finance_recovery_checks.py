@@ -18,11 +18,18 @@ def authorizer(action,a,b,db,origin):
         return sqlite3.SQLITE_OK
     return sqlite3.SQLITE_DENY
 
-def schema_check(c,expected):
-    require(c.execute('PRAGMA user_version').fetchone()[0]==11,'SCHEMA_NOT_11')
+REGISTRY_TABLES = {
+    'of_connection_registry', 'of_connection_admin_events', 'of_pluggy_applications',
+    'of_connection_credentials', 'of_managed_pluggy_items',
+}
+
+
+def schema_check(c,expected,*,registry=False):
+    require(c.execute('PRAGMA user_version').fetchone()[0]==(12 if registry else 11),
+            'SCHEMA_NOT_12' if registry else 'SCHEMA_NOT_11')
     all_tables={r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     of_tables={n for n in all_tables if n.startswith('of_')}
-    require(of_tables==set(TABLES),'UNEXPECTED_OPEN_FINANCE_SCHEMA')
+    require(of_tables==set(TABLES) | (REGISTRY_TABLES if registry else set()),'UNEXPECTED_OPEN_FINANCE_SCHEMA')
     for n in TABLES:
         actual={'columns':[list(r) for r in c.execute('PRAGMA table_xinfo("'+n+'")')],'fks':[list(r) for r in c.execute('PRAGMA foreign_key_list("'+n+'")')]}
         actual['ddl']=re.sub(r'\s+',' ',c.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?",(n,)).fetchone()[0].strip())
@@ -39,10 +46,15 @@ def schema_check(c,expected):
         comparable['columns']=normalize_columns(comparable['columns'])
         actual['columns']=normalize_columns(actual['columns'])
         require(actual==comparable,'UNEXPECTED_OPEN_FINANCE_SCHEMA')
-    require(c.execute("SELECT count(*) FROM sqlite_master WHERE type='trigger' AND tbl_name IN ("+','.join('?' for _ in TABLES)+')',TABLES).fetchone()[0]==0,'UNEXPECTED_OPEN_FINANCE_TRIGGER')
+    guarded = tuple(of_tables)
+    require(c.execute("SELECT count(*) FROM sqlite_master WHERE type='trigger' AND tbl_name IN ("+','.join('?' for _ in guarded)+')',guarded).fetchone()[0]==0,'UNEXPECTED_OPEN_FINANCE_TRIGGER')
     inbound=0
     for name in all_tables-set(TABLES):
         for fk in c.execute('PRAGMA foreign_key_list("'+name.replace('"','""')+'")'):
+            if registry and fk[2] in set(TABLES) | REGISTRY_TABLES:
+                require(fk[6] in ('NO ACTION','RESTRICT'),'UNEXPECTED_DELETE_ACTION')
+            if registry and name == 'of_connection_registry' and tuple(fk[2:5]) == ('of_connections','connection_id','id'):
+                continue
             inbound+=fk[2] in TABLES
     require(inbound==0,'UNEXPECTED_EXTERNAL_DEPENDENCY')
 

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from ipaddress import ip_address, ip_network
 import json
 import os
 from pathlib import Path
 import re
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from .authorization import FINANCE_SCOPES
 from .oauth import OAuthClient
@@ -16,6 +18,34 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 class ConfigurationError(ValueError):
     """Raised when required runtime configuration is invalid."""
+
+
+_PRIVATE_ADMIN_NETWORKS = tuple(map(ip_network, (
+    "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7",
+)))
+
+
+def private_admin_address(value):
+    try:
+        address = ip_address(value)
+    except ValueError:
+        return False
+    return address.is_loopback or any(address in network for network in _PRIVATE_ADMIN_NETWORKS)
+
+
+def _valid_admin_origin(value):
+    try:
+        url = urlsplit(value)
+        address = ip_address(url.hostname)
+        host = f"[{address}]" if address.version == 6 else str(address)
+        if url.port is not None:
+            if url.port < 1:
+                return False
+            host += f":{url.port}"
+        return (value == f"{url.scheme}://{host}" and private_admin_address(str(address))
+                and (url.scheme == "https" or (url.scheme == "http" and address.is_loopback)))
+    except (ValueError, TypeError, AttributeError):
+        return False
 
 
 @dataclass(frozen=True)
@@ -103,8 +133,12 @@ class Settings:
     # Only enable for a database whose canonical-writer provenance was verified.
     # Not inferred from schema, timestamps or the existence of revision one.
     open_finance_origin_evidence: bool = False
+    pluggy_keyring_path: Path | None = field(default=None, repr=False)
+    pluggy_admin_origin: str | None = None
 
     def __post_init__(self):
+        if self.pluggy_admin_origin is not None and not _valid_admin_origin(self.pluggy_admin_origin):
+            raise ConfigurationError("Pluggy administration requires an explicit private origin")
         if type(self.open_finance_origin_evidence) is not bool:
             raise ConfigurationError("Open Finance origin evidence must be boolean")
         identities=[c.identity_client_id for c in self.oauth_clients]
@@ -143,6 +177,20 @@ class Settings:
         except PluggyConfigurationError:
             raise ConfigurationError("invalid Pluggy connection configuration") from None
         origin_evidence = os.environ.get("FINANCE_V2_OF_ORIGIN_EVIDENCE", "0")
+        raw_keyring = os.environ.get("FINANCE_V2_PLUGGY_KEYRING_PATH")
+        admin_origin = os.environ.get("FINANCE_V2_PLUGGY_ADMIN_ORIGIN") or None
+        if path == Path("/data/finance_v2.sqlite3") and Path("/data/options.json").is_file():
+            from .ha_pluggy_options import HaPluggyConfigurationError, load_options
+            try:
+                admin_origin = load_options("/data/options.json").get("pluggy_admin_origin") or None
+            except (HaPluggyConfigurationError, AttributeError):
+                raise ConfigurationError("invalid Supervisor Pluggy options") from None
+            if admin_origin is not None and (not isinstance(admin_origin, str) or not admin_origin.startswith("https://")):
+                raise ConfigurationError("Supervisor Pluggy administration requires HTTPS")
+            raw_keyring = "/data/pluggy-keyring.json"
+        keyring = Path(raw_keyring) if raw_keyring else None
+        if keyring is not None and not keyring.is_absolute():
+            raise ConfigurationError("Pluggy keyring path must be absolute")
         if origin_evidence not in {"0", "1"}:
             raise ConfigurationError("FINANCE_V2_OF_ORIGIN_EVIDENCE must be 0 or 1")
         return cls(
@@ -160,4 +208,6 @@ class Settings:
             oauth_clients=_oauth_clients_from_env(os.environ.get("FINANCE_V2_OAUTH_CLIENTS_JSON")),
             pluggy_connections=pluggy_connections,
             open_finance_origin_evidence=origin_evidence == "1",
+            pluggy_keyring_path=keyring,
+            pluggy_admin_origin=admin_origin,
         )
