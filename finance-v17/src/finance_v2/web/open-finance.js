@@ -73,6 +73,7 @@ export function createOpenFinance({api,view,heading,esc,navigation=null,state={}
     }});
     const connectionPanel=host.querySelector('#of-panel-connections');
     organizeConnectionSections(connectionPanel);
+    mountConnectionCoverage({host,panel:connectionPanel,api,esc,navigation});
     connectionPanel.querySelectorAll('[data-connection-diagnostic]').forEach(button=>button.onclick=()=>{
       const section=connectionPanel.querySelector('.of-coverage'),form=section?.querySelector('form');
       if(!form)return;section.closest('details')?.setAttribute('open','');
@@ -156,6 +157,25 @@ export function connectionCards(catalog,esc,labels){
   return `<div class="of-connection-grid">${catalog.connections.map(c=>{
     const accounts=catalog.accounts.filter(a=>a.connection_id===c.id),banks=accounts.filter(a=>a.type==='BANK').length,cards=accounts.filter(a=>a.type==='CREDIT').length;
     const run=catalog.runs.find(r=>r.connection_id===c.id),state=c.historical?'Histórica':c.enabled?'Habilitada':'Desabilitada';
-    return `<article class="of-connection-card"><h3>${esc(connectionLabel(c,catalog.connections))}</h3><span class="status">${esc(state)}</span><p>${banks} ${banks===1?'conta':'contas'} · ${cards} ${cards===1?'cartão':'cartões'} no catálogo</p><p>${run?`Última sincronização registrada: ${esc(dateBR(run.started_at))} · ${esc(labels[run.state]||run.state)}`:'Nenhuma sincronização registrada.'}</p>${c.enabled&&!c.historical?`<button type="button" class="quiet" data-connection-diagnostic="${esc(c.id)}">Consultar diagnóstico</button>`:'<small>Histórico preservado; seleção operacional indisponível.</small>'}</article>`;
+    return `<article class="of-connection-card" data-connection-id="${esc(c.id)}"><h3>${esc(connectionLabel(c,catalog.connections))}</h3><span class="status">${esc(state)}</span><p>${banks} ${banks===1?'conta':'contas'} · ${cards} ${cards===1?'cartão':'cartões'} no catálogo</p><p>${run?`Última sincronização registrada: ${esc(dateBR(run.started_at))} · ${esc(labels[run.state]||run.state)}`:'Nenhuma sincronização registrada.'}</p><div data-connection-coverage><small>Cobertura ainda não consultada.</small></div>${c.enabled&&!c.historical?`<button type="button" class="quiet" data-connection-diagnostic="${esc(c.id)}">Consultar diagnóstico</button>`:'<small>Histórico preservado; seleção operacional indisponível.</small>'}</article>`;
   }).join('')}</div>`;
+}
+
+
+// Coverage reflects recorded collection states, not account balances or consent validity.
+export function mountConnectionCoverage({host,panel,api,esc,navigation}){
+  const queries=createQueryGeneration(navigation);
+  const labels={AVAILABLE:'Dados coletados',EMPTY:'Consulta sem registros',NOT_AUTHORIZED:'Não autorizado',NOT_AVAILABLE:'Indisponível',NOT_COLLECTED:'Não coletado',FAILED:'Falha na coleta',RUNNING:'Coleta em andamento'};
+  const resources={accounts:'Contas e cartões',transactions:'Movimentações',investments:'Investimentos',investment_transactions:'Movimentos de investimento',bills:'Faturas',loans:'Crédito',statements:'Extratos',consents:'Consentimentos',resources:'Recursos',item:'Conexão'};
+  const cards=[...panel.querySelectorAll('[data-connection-id]')];
+  async function load(){
+    const query=queries.begin();for(const card of cards)card.querySelector('[data-connection-coverage]').innerHTML='<small role="status">Consultando cobertura…</small>';
+    try{
+      const result=await api('/open-finance/coverage',{queryScope:query});if(!query.current()||!host.isConnected)return;
+      for(const card of cards){const rows=(result.coverage||[]).filter(row=>row.connection_id===card.dataset.connectionId),target=card.querySelector('[data-connection-coverage]');
+        target.innerHTML=rows.length?`<details><summary>Cobertura registrada (${rows.length})</summary><ul class="of-coverage-list">${rows.map(row=>`<li>${esc(resources[row.resource]||row.resource)} · ${esc(labels[row.state]||'Estado não estabelecido')} · Coleta: ${esc(dateBR(row.observed_at))}</li>`).join('')}</ul><small>Coleta recente não comprova frescor financeiro nem consentimento atual.</small></details>`:'<small>Cobertura não registrada.</small>';
+      }
+    }catch(_){if(query.current()&&host.isConnected)for(const card of cards){const target=card.querySelector('[data-connection-coverage]');target.innerHTML='<small role="alert">Cobertura indisponível.</small><button type="button" class="quiet" data-coverage-retry>Tentar novamente</button>';target.querySelector('[data-coverage-retry]').onclick=load}}
+  }
+  host.addEventListener('of-tab-selected',event=>{if(event.detail==='connections')load();else queries.cancel()});
 }

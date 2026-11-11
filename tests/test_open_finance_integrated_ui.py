@@ -62,6 +62,8 @@ class BrowserIntegration(unittest.TestCase):
                 self.assertEqual(run['state'],'SUCCEEDED',run)
             with closing(connect(case.db)) as db:
                 db.execute("UPDATE of_connection_registry SET lifecycle='ARCHIVED' WHERE connection_id='bank-history'")
+                db.execute("UPDATE of_resource_coverage SET state='NOT_AVAILABLE' WHERE connection_id='bank-other' AND resource='loans'")
+                db.execute("UPDATE of_resource_coverage SET state='FAILED' WHERE connection_id='bank-other' AND resource='statements'")
                 db.commit()
             status, data=case.request('/api/v2/open-finance/analytics?currency=BRL')
             self.assertEqual(status,200,data)
