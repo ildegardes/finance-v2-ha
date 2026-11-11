@@ -117,11 +117,13 @@ def analytics(c, settings, query):
             positions[kind].append({'connection_id': r['connection_id'], 'external_id': r['external_id'],
                 'institution': views[r['connection_id']].institution, 'name': data.get('name'), 'type': data.get('type'),
                 'value': str(value) if value is not None else None, 'observed_at': r['observed_at'],
-                'reference_date': data.get('date'), 'reference_date_state': 'KNOWN' if data.get('date') else 'NOT_ESTABLISHED', 'freshness': freshness})
+                'reference_date': data.get('date'), 'reference_date_state': 'KNOWN' if civil(data.get('date')) else 'NOT_ESTABLISHED', 'provider_updated_at': data.get('updatedAt') or data.get('lastUpdatedAt'), 'freshness': freshness})
         for kind, items in list(positions.items()):
             values = [Decimal(x['value']) for x in items if x['value'] is not None]
             positions[kind] = {'value': str(sum(values, Decimal(0))) if values else None,
                                'known': len(values), 'unavailable': len(items) - len(values), 'unknown_currency': unknown_currency[kind], 'items': items}
+        bill_links = {(row['connection_id'], row['source_parent_id'], row['source_external_id']): dict(row)
+                      for row in c.execute("SELECT connection_id,source_parent_id,source_external_id,state,target_parent_id,target_external_id FROM of_resource_links WHERE source_resource='transactions' AND kind='TRANSACTION_BILL'")}
         items = []
         for r in records:
             if r['resource'] != 'transactions':
@@ -146,11 +148,13 @@ def analytics(c, settings, query):
             merchant = merchant.get('name', '') if isinstance(merchant, dict) else ''
             if q.get('_search') and not any(q['_search'] in (search_key(str(x)) or '') for x in (description, merchant)): continue
             amount = _amount(data.get('amount'))
+            link = bill_links.get((r['connection_id'], r['parent_id'], r['external_id'])) if product == 'CREDIT' else None
+            relation = {'state': link['state'], 'target_parent_id': link['target_parent_id'], 'target_external_id': link['target_external_id']} if link else {'state': 'NOT_ESTABLISHED'}
             items.append({'connection_id': r['connection_id'], 'account_id': r['parent_id'], 'external_id': r['external_id'],
                 'institution': views[r['connection_id']].institution, 'account_name': account['data'].get('name') if account else None,
                 'date': day, 'description': description, 'merchant': merchant, 'amount': str(amount) if amount is not None else None,
                 'currency': q['currency'], 'category': category, 'direction': classification, 'status': data.get('status'), 'product': product,
-                'economic_classification': 'NOT_ESTABLISHED', 'reconciliation': 'UNRECONCILED'})
+                'economic_classification': 'NOT_ESTABLISHED', 'reconciliation': 'UNRECONCILED', 'bill_relation': relation})
         items.sort(key=lambda x: (x['date'], x['connection_id'], x['account_id'], x['external_id']), reverse=True)
         flow = {p: {'incoming': Decimal(0), 'outgoing': Decimal(0), 'unavailable': 0} for p in ('BANK', 'CREDIT')}
         series = {}; categories = {}
@@ -187,6 +191,7 @@ def analytics(c, settings, query):
         for product in flow:
             flow[product]['economic_totals'] = {'state': 'NOT_ESTABLISHED', 'incoming': None, 'outgoing': None}
             flow[product]['basis'] = 'DECLARED_GROSS_MOVEMENTS'
+            flow[product]['classification_completeness'] = 'NOT_ESTABLISHED' if any(item['product'] == product for item in items) else 'NO_DATA'
 
         start = (q['page'] - 1) * q['page_size']
         return {'contract': 'OF-ANALYTICS/1', 'filters': {k: v for k, v in q.items() if not k.startswith('_')},
