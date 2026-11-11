@@ -63,7 +63,7 @@ Foram inspecionadas amostras sintéticas de Cartões em carregamento a 390 px, I
 
 ### Leitor de tela e estados de decisão
 
-`SCREEN_READER_TEST=NOT_EXECUTED`: a ferramenta gráfica tentou iniciar `C:\Windows\System32\Narrator.exe`, mas retornou que o aplicativo iniciado não expôs janela controlável. O processo iniciado permaneceu ativo e o pedido de encerramento foi recusado pelo Windows com acesso negado. Não foi realizada navegação audível nem validação real com leitor de tela; a árvore acessível não substitui esse teste.
+`SCREEN_READER_TEST=NOT_EXECUTED`: a ferramenta gráfica tentou iniciar `C:\Windows\System32\Narrator.exe`, mas retornou que o aplicativo iniciado não expôs janela controlável. O processo iniciado permaneceu ativo inicialmente e o pedido de encerramento foi recusado pelo Windows com acesso negado; em verificação posterior, o processo já não estava ativo. Não foi realizada navegação audível nem validação real com leitor de tela; a árvore acessível não substitui esse teste.
 
 `MARCO_3_DEV_STATUS=NO_GO`: a cobertura de privacidade e os fluxos de produtos ainda não foram demonstrados integralmente, além de persistirem cenários de filtros, histórico e estados sem validação exaustiva. `MARCO_3_FINAL_QUALIFICATION=NO_GO` e `MARCO_3_STATUS=NO_GO`: não houve homologação manual integral nem teste real com leitor de tela. Não há declaração de conformidade integral WCAG 2.2 AA.
 
