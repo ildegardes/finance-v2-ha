@@ -1,0 +1,50 @@
+name: Finance V17
+version: "0.1.27-open-finance.1"
+slug: finance_v17
+description: Finance V17 local API and scheduler
+url: https://github.com/ildegardes/finance-v2-ha
+arch:
+  - aarch64
+  - amd64
+startup: services
+boot: auto
+init: false
+ports:
+  8766/tcp: 8766
+ports_description:
+  8766/tcp: Finance V17 HTTP API
+options:
+  timezone: America/Sao_Paulo
+  ui_token: ""
+  external_clients: "{}"
+  oauth_clients: "{}"
+  open_finance_enabled: false
+  open_finance_auto_sync_enabled: false
+  pluggy_itau_access_mode: strict
+  pluggy_itau_enabled: false
+  pluggy_itau_client_id: ""
+  pluggy_itau_client_secret: ""
+  pluggy_itau_item_id: ""
+  pluggy_santander_access_mode: strict
+  pluggy_santander_enabled: false
+  pluggy_santander_client_id: ""
+  pluggy_santander_client_secret: ""
+  pluggy_santander_item_id: ""
+schema:
+  timezone: str
+  ui_token: password
+  external_clients: str
+  oauth_clients: str
+  open_finance_enabled: bool
+  open_finance_auto_sync_enabled: bool
+  pluggy_itau_access_mode: list(strict|meupluggy_personal|sandbox)
+  pluggy_itau_enabled: bool
+  pluggy_itau_client_id: str
+  pluggy_itau_client_secret: password
+  pluggy_itau_item_id: str
+  pluggy_santander_access_mode: list(strict|meupluggy_personal|sandbox)
+  pluggy_santander_enabled: bool
+  pluggy_santander_client_id: str
+  pluggy_santander_client_secret: password
+  pluggy_santander_item_id: str
+stage: experimental

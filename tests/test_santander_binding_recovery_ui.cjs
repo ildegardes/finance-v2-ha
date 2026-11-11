@@ -1,0 +1,31 @@
+const {test,before,after,beforeEach,afterEach}=require('node:test');
+const assert=require('node:assert/strict'),http=require('node:http'),fs=require('node:fs'),path=require('node:path');
+const {chromium}=require(path.join(process.env.USERPROFILE,'.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright'));
+const web=path.resolve(__dirname,'../finance-v17/src/finance_v2/web');let server,browser,page,context,origin;
+before(async()=>{server=http.createServer((req,res)=>{if(req.url==='/'){res.setHeader('Content-Type','text/html');return res.end('<div id="host"><div id="of-panel-connections"></div></div>')}if(req.url!='/santander-binding-recovery.js'){res.writeHead(404);return res.end()}res.setHeader('Content-Type','text/javascript');res.end(fs.readFileSync(path.join(web,'santander-binding-recovery.js')))});await new Promise(r=>server.listen(0,'127.0.0.1',r));origin='http://127.0.0.1:'+server.address().port;browser=await chromium.launch({headless:true,executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'})});
+after(async()=>{await browser.close();await new Promise(r=>server.close(r))});
+beforeEach(async()=>{context=await browser.newContext();await context.route('**/*',r=>new URL(r.request().url()).origin===origin?r.continue():r.abort());page=await context.newPage();await page.goto(origin);await page.evaluate(async()=>{window.calls=[];window.current=true;window.outcome='APPLIED';window.failure=false;window.report={status:'ELIGIBLE',CURRENT_BINDING_MATCH:'MISMATCH',SWAPPED_BINDING_MATCH:'MATCH',blockers:[]};const {mountSantanderRecovery}=await import('/santander-binding-recovery.js');mountSantanderRecovery({host:document.querySelector('#host'),navigation:{current:()=>window.current},api:async(p,o)=>{window.calls.push({p,o});if(window.failure)throw {code:'SANTANDER_RECOVERY_PRECHECK_BLOCKED'};if(!o)return window.report;if(p.endsWith('/prepare'))return {confirmation:'synthetic-one-use'};return {status:window.outcome}}})})});
+afterEach(async()=>{await context.close()});
+const b=s=>'[data-recovery-'+s+']';
+async function ready(){await page.locator(b('inspect')).click();await page.locator(b('backup')).check()}
+test('mount and navigation do not start diagnosis or correction',async()=>{assert.deepEqual(await page.evaluate(()=>calls),[]);assert(await page.locator(b('apply')).isDisabled())});
+test('inspection uses GET and backup is required',async()=>{await page.locator(b('inspect')).click();assert(await page.locator(b('apply')).isDisabled());assert.equal(await page.evaluate(()=>calls[0].o),undefined);await page.locator(b('backup')).check();assert(!await page.locator(b('apply')).isDisabled())});
+test('unknown or partial dependencies remain blocked',async()=>{await page.evaluate(()=>report={...report,status:'BLOCKED',blockers:['IMPORTED_RECORDS']});await ready();assert(await page.locator(b('apply')).isDisabled());assert.match(await page.locator(b('status')).innerText(),/registros importados/)});
+test('cancelled explicit confirmation never submits database operation',async()=>{await ready();page.once('dialog',d=>d.dismiss());await page.locator(b('apply')).click();assert.equal(await page.evaluate(()=>calls.length),2);assert((await page.evaluate(()=>calls)).every(x=>!x.p.endsWith('/confirm')))});
+test('explicit apply sends one preparation and one confirmation with no retry',async()=>{await ready();page.once('dialog',d=>d.accept());await page.locator(b('apply')).click();await page.locator(b('status')).filter({hasText:'corrigido'}).waitFor();const calls=await page.evaluate(()=>window.calls);assert.equal(calls.length,3);assert.equal(calls[2].o.body.explicit_confirmation,'CORRIGIR_BINDING_SANTANDER');assert.equal(calls[2].o.body.backup_confirmed,true);assert.equal(calls[2].o.idempotent,undefined);assert(await page.locator(b('apply')).isDisabled())});
+test('selective revert requires audited operation and separate confirmation',async()=>{await page.evaluate(()=>{report.revert_operation='synthetic-operation';outcome='REVERTED'});await ready();page.once('dialog',d=>d.accept());await page.locator(b('revert')).click();await page.locator(b('status')).filter({hasText:'revertida'}).waitFor();assert.equal(await page.evaluate(()=>calls[1].o.body.operation),'synthetic-operation');assert.equal(await page.evaluate(()=>calls[2].o.body.explicit_confirmation),'REVERTER_BINDING_SANTANDER')});
+test('audit finalization uncertainty is visible and cannot trigger automatic retry',async()=>{await page.evaluate(()=>outcome='COMMITTED_AUDIT_PENDING');await ready();page.once('dialog',d=>d.accept());await page.locator(b('apply')).click();await page.locator(b('status')).filter({hasText:'Não repetir'}).waitFor();assert.equal(await page.evaluate(()=>calls.length),3)});
+test('failure shows only category and clears eligibility',async()=>{await ready();await page.evaluate(()=>failure=true);await page.locator(b('apply')).click();await page.locator(b('status')).filter({hasText:'PRECHECK_BLOCKED'}).waitFor();assert.equal(await page.evaluate(()=>calls.length),2);assert(await page.locator(b('apply')).isDisabled())});
+test('stale navigation cannot submit correction after preparation',async()=>{await ready();await page.evaluate(()=>{const button=document.querySelector('[data-recovery-apply]');current=false;button.click()});assert.equal(await page.evaluate(()=>calls.length),2);assert(!(await page.evaluate(()=>calls)).some(x=>x.p.endsWith('/confirm')))});
+test('pending audit can only reconcile through an explicit confirmation',async()=>{
+ await page.evaluate(()=>{report.audit_pending=true;report.revert_operation='synthetic-operation';outcome='AUDIT_RECONCILED'});
+ await ready();
+ assert(await page.locator(b('apply')).isDisabled());
+ assert(await page.locator(b('revert')).isDisabled());
+ page.once('dialog',d=>d.accept());
+ await page.locator(b('reconcile')).click();
+ await page.locator(b('status')).filter({hasText:'Auditoria reconciliada'}).waitFor();
+ const calls=await page.evaluate(()=>window.calls);
+ assert.equal(calls[1].o.body.action,'RECONCILE');
+ assert.equal(calls[2].o.body.explicit_confirmation,'RECONCILIAR_AUDITORIA_SANTANDER');
+});

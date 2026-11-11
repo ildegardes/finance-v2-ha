@@ -1,3 +1,9 @@
+# 0.1.28-open-finance.1 — candidata em revisão
+
+- Operação administrativa explícita para corrigir somente o binding Santander quando a inversão inicial for comprovada e não houver registros importados.
+- Preserva histórico, Itaú e financeiro manual; inclui auditoria privada, confirmação de backup e reversão seletiva. Sem migrations ou chamadas Pluggy.
+- Sem execução na inicialização ou navegação. Publicação limitada a PR draft; implantação e recuperação em produção dependem de autorização posterior.
+
 # 0.1.27-open-finance.1
 
 - Cobertura completa dos recursos Pluggy disponíveis no staging, com paginação e vínculos verificáveis, sem promoção automática a registros oficiais.
