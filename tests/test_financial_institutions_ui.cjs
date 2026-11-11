@@ -44,7 +44,8 @@ async function fixture(t, writable) {
     let dispose;
     window.leave = () => { window.active = false; dispose(); };
     const rows = [{id: 'santander', institution: 'Santander', lifecycle: 'ACTIVE',
-      enabled: true, revision: 0, sync_state: 'FAILED'}];
+      enabled: true, revision: 0, sync_state: 'FAILED', staged_account_count: 4,
+      observed_resources: ['accounts', 'bills', 'unexpected'] }];
     const api = async (route, options) => {
       calls.push({route, method: options?.method || 'GET'});
       if (route === '/open-finance/connections') return {registry_admin_available: available, connections: rows};
@@ -110,6 +111,13 @@ async function fixture(t, writable) {
   }, writable);
   return page;
 }
+
+test('shows staged account count and allowlisted observed resources', async t => {
+  const page = await fixture(t, false);
+  await page.getByText(/Contas registradas: 4/).waitFor();
+  await page.getByText(/Recursos observados: Contas, Faturas/).waitFor();
+  assert.equal(await page.getByText(/unexpected/).count(), 0);
+});
 
 test('public owner view is read-only for administration', async t => {
   const page = await fixture(t, false);

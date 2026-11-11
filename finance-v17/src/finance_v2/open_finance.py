@@ -295,11 +295,21 @@ class OpenFinanceService:
                 enabled = entry["lifecycle"] == "ACTIVE" and (entry["source"] == "MANAGED" or enabled)
             row=c.execute('SELECT sync_state,lease_until FROM of_connections WHERE id=?',(connection_id,)).fetchone()
             last=c.execute('SELECT * FROM of_sync_runs WHERE connection_id=? ORDER BY started_at DESC,rowid DESC LIMIT 1',(connection_id,)).fetchone()
+            account_count = c.execute(
+                "SELECT COUNT(*) FROM of_accounts WHERE connection_id=?", (connection_id,)
+            ).fetchone()[0]
+            observed_resources = [value[0] for value in c.execute(
+                "SELECT DISTINCT resource FROM of_resource_coverage WHERE connection_id=? "
+                "AND state='AVAILABLE' AND resource NOT IN ('item','resources','consents') ORDER BY resource",
+                (connection_id,),
+            )]
             epoch,_=self._time()
             result.append({'id':connection_id,'institution':entry["label"] if entry else config.institution,'enabled':enabled,
                            'sync_state':row['sync_state'] if row else 'IDLE',
                            'lease_expired':bool(row and row['lease_until'] is not None and row['lease_until']<=epoch),
                            'last_run':dict(last) if last else None,
+                           'staged_account_count':account_count,
+                           'observed_resources':observed_resources,
                            **({key: entry[key] for key in ("source", "lifecycle", "revision", "replaces_id")} if entry else {})})
         return result
 

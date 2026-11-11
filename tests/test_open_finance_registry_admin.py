@@ -239,6 +239,8 @@ class RegistryEnrollmentTests(unittest.TestCase):
             self.assertFalse(connections["santander"]["enabled"])
             self.assertEqual(connections["santander"]["last_run"]["error_code"], "AUTH_FAILED")
             self.assertTrue(connections[draft["id"]]["enabled"])
+            self.assertEqual(connections[draft["id"]]["staged_account_count"], 0)
+            self.assertEqual(connections[draft["id"]]["observed_resources"], [])
         with self.assertRaisesRegex(SyncError, "^CONNECTION_NOT_ACTIVE$"):
             self.service.resolve_config("santander")
 

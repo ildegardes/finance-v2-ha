@@ -364,6 +364,8 @@ def openapi_paths():
         else:
             schema={'type':'object','properties':{'connections':{'type':'array','items':{'type':'object','properties':{'id':text,'institution':text,
                 'enabled':{'type':'boolean'},'sync_state':{'type':'string','enum':['IDLE','RUNNING','SUCCEEDED','FAILED','INTERRUPTED']},
+                'staged_account_count':{'type':'integer','minimum':0},
+                'observed_resources':{'type':'array','items':text},
                 'lease_expired':{'type':'boolean'},'last_run':{'anyOf':[run,{'type':'null'}]}}}}}}
         spec['parameters']=parameters
         spec['responses']={str(s):{'description':'Completed sync / diagnostic outcome' if s in {200,207,502} else 'Sanitized error',

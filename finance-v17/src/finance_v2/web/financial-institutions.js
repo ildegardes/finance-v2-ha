@@ -21,6 +21,11 @@ const messages = {
   REGISTRY_RATE_LIMITED: 'Limite de tentativas atingido. Aguarde um minuto antes de repetir.',
   DELETION_RETENTION_REQUIRED: 'O histórico ou as dependências exigem que a conexão permaneça arquivada.',
 };
+const resourceLabels = {
+  accounts: 'Contas', transactions: 'Transações', investments: 'Investimentos',
+  investment_transactions: 'Movimentações de investimentos', loans: 'Empréstimos',
+  bills: 'Faturas', statements: 'Extratos',
+};
 const capabilityNames = {
   ACCOUNT: 'Conta', CREDIT_CARD_ACCOUNT: 'Cartão de crédito', LOAN: 'Empréstimo',
   FINANCING: 'Financiamento', UNARRANGED_ACCOUNT_OVERDRAFT: 'Adiantamento a depositante',
@@ -219,6 +224,12 @@ export async function showFinancialInstitutions({api, view, heading, navigation}
         latest?.finished_at ? 'Última coleta: ' + dateBR(latest.finished_at) : '',
         latest?.operational_presentation ? runSummary(latest, '') : '',
         latest?.error_code ? openFinanceError(latest.error_code) : '',
+        Number.isSafeInteger(row.staged_account_count)
+          ? 'Contas registradas: ' + row.staged_account_count : '',
+        row.observed_resources?.some(resource => Object.hasOwn(resourceLabels, resource))
+          ? 'Recursos observados: ' + row.observed_resources
+            .filter(resource => Object.hasOwn(resourceLabels, resource))
+            .map(resource => resourceLabels[resource]).join(', ') : '',
       ].filter(Boolean).join(' · ');
       actions.className = 'actions';
       actions.append(button('Ver histórico', () => run(() => loadHistory(row, 1))));
