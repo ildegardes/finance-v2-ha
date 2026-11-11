@@ -48,3 +48,23 @@ Foi corrigida a exposição de valores financeiros sem símbolo de moeda em atri
 ### Não executado e limites
 
 `SCREEN_READER_TEST=NOT_EXECUTED`: NVDA não foi encontrado nos caminhos padrão; o executável do Narrador do Windows existe, mas não foi operado nesta campanha. A inspeção automatizada da árvore acessível não substitui o teste real com leitor de tela. Não foi executada auditoria manual integral WCAG 2.2 AA, nem comparação sistemática de sobreposição/truncamento de todos os textos, gráficos e estados. Os testes automatizados cobrem uma amostra de nomes acessíveis, contraste e estados de privacidade, não uma comprovação completa para todos os componentes. Não declarar conformidade integral de acessibilidade nem GO do Marco 3 com base nesta campanha.
+
+## Fechamento de desenvolvimento e qualificação final
+
+### Testes automatizados adicionais
+
+- `open_finance_integrated_ui.cjs` expande os detalhes e percorre por Tab e Shift+Tab os controles de Cartões, Investimentos e Crédito no estado sintético normal. Também verifica rótulos dos campos, foco visível no seletor de abas, setas nas abas, Enter/Espaço em um controle de expansão, contraste da aba selecionada e contraste computado dos textos visíveis da amostra. Não cobre integralmente todos os estados, ícones, leitores de tela ou critérios WCAG.
+- `open_finance_product_states_ui.cjs` verifica os limites horizontais, sobreposição entre controles visíveis e truncamento por overflow oculto em 390, 768 e 1440 px para oito estados sintéticos das três abas. Gera 72 imagens isoladas em `artifacts/synthetic-audit-v2`. Isso não é comprovação de ausência de sobreposição de todos os textos e gráficos.
+- `open_finance_privacy_attributes_ui.cjs` testa conteúdo, `title`, `aria-label` e `aria-valuetext` em elementos financeiros marcados; esses testes não cobrem todos os atributos, todos os componentes ou todos os instantes da aplicação.
+
+### Inspeção manual e correção
+
+Foram inspecionadas amostras sintéticas de Cartões em carregamento a 390 px, Investimentos com valor ausente a 768 px e Crédito desatualizado com detalhes abertos a 1440 px. O nome selecionado do recurso estava truncado na amostra de Investimentos; foi acrescentada sua identificação textual completa abaixo do seletor. A inspeção das 72 imagens não foi realizada integralmente.
+
+### Leitor de tela e estados de decisão
+
+`SCREEN_READER_TEST=NOT_EXECUTED`: a ferramenta gráfica tentou iniciar `C:\Windows\System32\Narrator.exe`, mas retornou que o aplicativo iniciado não expôs janela controlável. O processo iniciado permaneceu ativo e o pedido de encerramento foi recusado pelo Windows com acesso negado. Não foi realizada navegação audível nem validação real com leitor de tela; a árvore acessível não substitui esse teste.
+
+`MARCO_3_DEV_STATUS=NO_GO`: a cobertura de privacidade e os fluxos de produtos ainda não foram demonstrados integralmente, além de persistirem cenários de filtros, histórico e estados sem validação exaustiva. `MARCO_3_FINAL_QUALIFICATION=NO_GO` e `MARCO_3_STATUS=NO_GO`: não houve homologação manual integral nem teste real com leitor de tela. Não há declaração de conformidade integral WCAG 2.2 AA.
+
+Na execução final, a integração falhou inicialmente porque o seletor do teste de instituição passou a encontrar também o novo texto do recurso. O seletor foi restringido ao campo de instituição; a execução seguinte passou. A correção do teste mantém a verificação do texto completo.

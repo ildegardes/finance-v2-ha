@@ -80,6 +80,10 @@ export function mountDomains({host,api,esc,catalog,navigation=null,domainSelecti
     form.elements.connection_id.parentElement.append(selectedInstitution);
     function showSelectedInstitution(){selectedInstitution.textContent=form.elements.connection_id.value?form.elements.connection_id.selectedOptions[0]?.textContent||'':''}
     showSelectedInstitution();
+    const selectedResource=document.createElement('small');selectedResource.className='of-selected-institution';
+    form.elements.resource.parentElement.append(selectedResource);
+    function showSelectedResource(){selectedResource.textContent=form.elements.resource.selectedOptions[0]?.textContent||''}
+    form.elements.resource.addEventListener('change',showSelectedResource);showSelectedResource();
     let page=1,generation=0,parent=null,parentConnection=null;const queries=createQueryGeneration(navigation);
     async function load(){
       const query=queries.begin(),mine=++generation;result.setAttribute('aria-busy','true');result.innerHTML='<p role="status" data-query-loading>Consultando dados importados…</p>';
@@ -98,7 +102,7 @@ export function mountDomains({host,api,esc,catalog,navigation=null,domainSelecti
         result.querySelector('[data-domain-back]')?.addEventListener('click',()=>{parent=null;page=1;load()});
         result.querySelectorAll('[data-card-flow]').forEach(button=>button.onclick=()=>onCardFlow(response.items[Number(button.dataset.cardFlow)].identity));
         result.querySelectorAll('[data-bill-flow]').forEach(button=>button.onclick=()=>onBillFlow(response.items[Number(button.dataset.billFlow)].identity));
-        result.querySelectorAll('[data-domain-child]').forEach(button=>button.onclick=()=>{const row=response.items[Number(button.dataset.row)];parent=row.identity.external_id;parentConnection=row.identity.connection_id;form.elements.connection_id.value=active.some(c=>c.id===parentConnection)?parentConnection:'';showSelectedInstitution();form.elements.resource.value=button.dataset.domainChild;form.elements.type.value='';form.elements.currency.value='';page=1;load()});
+        result.querySelectorAll('[data-domain-child]').forEach(button=>button.onclick=()=>{const row=response.items[Number(button.dataset.row)];parent=row.identity.external_id;parentConnection=row.identity.connection_id;form.elements.connection_id.value=active.some(c=>c.id===parentConnection)?parentConnection:'';showSelectedInstitution();form.elements.resource.value=button.dataset.domainChild;showSelectedResource();form.elements.type.value='';form.elements.currency.value='';page=1;load()});
       }catch(_){if(query.current()&&host.isConnected&&mine===generation)result.innerHTML='<p role="alert">Não foi possível consultar a cobertura. Nenhum valor foi estimado. Verifique schema e armazenamento.</p>'}finally{if(query.current()&&mine===generation){result.removeAttribute('aria-busy');result.querySelector('[data-query-loading]')?.remove()}}
     }
     function cancelPending(){generation++;queries.cancel();result.removeAttribute('aria-busy')}
