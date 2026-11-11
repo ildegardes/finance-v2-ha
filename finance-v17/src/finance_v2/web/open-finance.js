@@ -38,7 +38,7 @@ export function createOpenFinance({api,view,heading,esc,navigation=null,state={}
       <section role="tabpanel" id="of-panel-credit" aria-labelledby="of-tab-credit" class="of-panel"></section>
       <section role="tabpanel" id="of-panel-overview" aria-labelledby="of-tab-overview" class="panel of-panel"><h2>Visão geral</h2><p>Conexões e contas de staging disponíveis para consulta. Não representam o patrimônio nem o saldo consolidado.</p><p>${catalog.connections.length} conexões · ${catalog.accounts.length} contas cadastradas no catálogo.</p><p class="of-notice">Resumo de saldos indisponível: não há contrato implementado para saldos consolidados. Consulte as movimentações na aba Fluxo.</p></section>
       <section role="tabpanel" id="of-panel-assets" aria-labelledby="of-tab-assets" class="panel of-panel"><h2>Ativos</h2><p class="empty">Consulta de ativos indisponível. O contrato de posições, investimentos e avaliação patrimonial ainda não está implementado.</p><p>Nenhum saldo ou valor estimado é apresentado.</p></section>
-      <section role="tabpanel" id="of-panel-connections" aria-labelledby="of-tab-connections" class="of-panel"><section class="panel"><h2>Conexões bancárias</h2><p>Informações já registradas no catálogo. Esta tela não consulta a Pluggy nem inicia sincronizações.</p>${catalog.connections.length?`<ul class="of-run-list">${catalog.connections.map(c=>`<li><strong>${esc(connectionLabel(c,catalog.connections))}</strong><small>${c.enabled?'Habilitada na configuração':'Desabilitada na configuração'} · ${catalog.accounts.filter(a=>a.connection_id===c.id).length} contas registradas</small></li>`).join('')}</ul>`:'<p class="empty">Nenhuma conexão registrada.</p>'}</section><section class="panel of-history"><h2>Histórico das sincronizações manuais</h2><p>Nenhuma sincronização é iniciada ao abrir esta tela.</p><div data-history></div></section></section>
+      <section role="tabpanel" id="of-panel-connections" aria-labelledby="of-tab-connections" class="of-panel"><section class="panel"><h2>Conexões bancárias</h2><p>Informações já registradas no catálogo. Esta tela não consulta a Pluggy nem inicia sincronizações.</p>${connectionCards(catalog,esc,runLabels)}</section><section class="panel of-history"><h2>Histórico das sincronizações manuais</h2><p>Nenhuma sincronização é iniciada ao abrir esta tela.</p><div data-history></div></section></section>
       <section role="tabpanel" id="of-panel-flow" aria-labelledby="of-tab-flow" class="of-panel">
       <form class="form-card of-filters" aria-label="Filtros bancários"><div class="form-grid">
       <label>Data inicial<input type="date" name="start"></label><label>Data final<input type="date" name="end"></label>
@@ -71,7 +71,15 @@ export function createOpenFinance({api,view,heading,esc,navigation=null,state={}
       flow.update({connection_id:identity.connection_id,account_id:identity.parent_id,bill_id:identity.external_id,product:'CREDIT',status:'ALL',direction:'all',category:'',search:'',history:conn?.enabled&&!conn?.historical?'0':'1'});
       selectTab('flow',true);
     }});
-    organizeConnectionSections(host.querySelector('#of-panel-connections'));
+    const connectionPanel=host.querySelector('#of-panel-connections');
+    organizeConnectionSections(connectionPanel);
+    connectionPanel.querySelectorAll('[data-connection-diagnostic]').forEach(button=>button.onclick=()=>{
+      const section=connectionPanel.querySelector('.of-coverage'),form=section?.querySelector('form');
+      if(!form)return;section.closest('details')?.setAttribute('open','');
+      form.elements.connection_id.value=button.dataset.connectionDiagnostic;
+      form.elements.connection_id.dispatchEvent(new Event('change',{bubbles:true}));
+      form.requestSubmit();section.scrollIntoView({block:'start',behavior:'smooth'});
+    });
     mountAnalyticsOverview({host,api,esc,catalog,navigation,state:analyticsState,onNavigate:context=>{flow.update(context);selectTab('flow',true)}});
     flow=mountAnalyticsFlow({host,api,esc,catalog,navigation,state:analyticsState,onRefresh:()=>{if(view.contains(host)){host.remove();openFinance()}}});
     const history=host.querySelector('[data-history]');
@@ -140,4 +148,14 @@ export function organizeConnectionSections(panel){
     const summary=document.createElement('summary');summary.textContent=heading?.textContent||'Detalhes da conexão';
     section.before(wrapper);wrapper.append(summary,section);
   }
+}
+
+
+export function connectionCards(catalog,esc,labels){
+  if(!catalog.connections.length)return '<p class="empty">Nenhuma conexão registrada.</p>';
+  return `<div class="of-connection-grid">${catalog.connections.map(c=>{
+    const accounts=catalog.accounts.filter(a=>a.connection_id===c.id),banks=accounts.filter(a=>a.type==='BANK').length,cards=accounts.filter(a=>a.type==='CREDIT').length;
+    const run=catalog.runs.find(r=>r.connection_id===c.id),state=c.historical?'Histórica':c.enabled?'Habilitada':'Desabilitada';
+    return `<article class="of-connection-card"><h3>${esc(connectionLabel(c,catalog.connections))}</h3><span class="status">${esc(state)}</span><p>${banks} ${banks===1?'conta':'contas'} · ${cards} ${cards===1?'cartão':'cartões'} no catálogo</p><p>${run?`Última sincronização registrada: ${esc(dateBR(run.started_at))} · ${esc(labels[run.state]||run.state)}`:'Nenhuma sincronização registrada.'}</p>${c.enabled&&!c.historical?`<button type="button" class="quiet" data-connection-diagnostic="${esc(c.id)}">Consultar diagnóstico</button>`:'<small>Histórico preservado; seleção operacional indisponível.</small>'}</article>`;
+  }).join('')}</div>`;
 }
