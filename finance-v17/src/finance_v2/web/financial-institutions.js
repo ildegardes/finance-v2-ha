@@ -16,6 +16,8 @@ const messages = {
   CONNECTION_BINDING_CHANGED: 'O Client ID informado não corresponde ao vínculo registrado.',
   ITEM_ID_DIFFERENT: 'O Item retornado pela Pluggy diverge do Item cadastrado.',
   ITEM_ENVIRONMENT_NOT_VERIFIED: 'O ambiente informado não corresponde ao Item retornado.',
+  ITEM_CONNECTOR_DIFFERENT: 'O conector do Item diverge da seleção.',
+  PROVIDER_CATALOG_UNAVAILABLE: 'A Pluggy não disponibilizou o catálogo de conectores.',
   PROVIDER_VALIDATION_FAILED: 'A Pluggy não confirmou a conexão.',
   SYNC_BUSY: 'Há uma coleta ou um lease pendente nesta conexão.',
   REGISTRY_RATE_LIMITED: 'Limite de tentativas atingido. Aguarde um minuto antes de repetir.',
@@ -88,11 +90,14 @@ export async function showFinancialInstitutions({api, view, heading, navigation}
       <div class="actions"><button type="submit">Salvar nome</button>
         <button type="button" class="secondary" data-cancel-rename>Cancelar</button></div>
     </form>
+    <section data-connection-details hidden aria-label="Detalhes da conexão"></section>
     <section data-history hidden aria-label="Histórico da conexão"></section>`;
   view.append(section);
   const find = selector => section.querySelector(selector);
   const form = find('form'), status = find('[data-state]'), list = find('[data-connections]');
   const history = find('[data-history]'), add = find('[data-add]');
+  const connectionDetails = find('[data-connection-details]');
+  const connectors = new Map();
   const renameForm = find('[data-rename-form]');
   const rotateForm = find('[data-rotate-form]');
   const deleteForm = find('[data-delete-form]');
@@ -233,7 +238,11 @@ export async function showFinancialInstitutions({api, view, heading, navigation}
       ].filter(Boolean).join(' · ');
       actions.className = 'actions';
       actions.append(button('Ver histórico', () => run(() => loadHistory(row, 1))));
+      if (writable && row.revision !== undefined) {
+        actions.append(button('Ver detalhes', () => showDetails(row)));
+      }
       if (writable && ['DRAFT', 'DISABLED'].includes(lifecycle) && row.revision !== undefined) {
+        actions.append(button('Consultar conectores', () => showConnectors(row)));
         actions.append(button(lifecycle === 'DRAFT' ? 'Validar e ativar' : 'Validar e reativar',
           () => change(row, 'activate', 'Validar o Item na Pluggy e habilitar a conexão?', 'Conexão ativada.')));
       }
@@ -271,6 +280,57 @@ export async function showFinancialInstitutions({api, view, heading, navigation}
       : writable ? '' : 'Administração disponível pelo acesso privado configurado.');
   }
 
+  function showDetails(row) {
+    run(async () => {
+      const data = await api('/open-finance/registry/details', {method: 'POST', body: {
+        connection_id: row.id, revision: row.revision,
+      }});
+      if (!current()) return;
+      const title = document.createElement('h2');
+      title.textContent = data.institution;
+      const description = document.createElement('p');
+      description.textContent = [labels[data.lifecycle], labels[data.sync_state],
+        data.lease_present ? 'Execução reservada' : '', 'Revisão ' + data.revision].filter(Boolean).join(' · ');
+      connectionDetails.replaceChildren(title, description);
+      connectionDetails.hidden = false;
+    });
+  }
+
+  function showConnectors(row) {
+    run(async () => {
+      const data = await api('/open-finance/registry/connectors', {method: 'POST', body: {
+        connection_id: row.id, revision: row.revision,
+      }});
+      if (!current()) return;
+      const label = document.createElement('label');
+      label.textContent = 'Conector para validar na ativação';
+      const select = document.createElement('select');
+      const empty = document.createElement('option');
+      empty.value = '';
+      empty.textContent = 'Selecione um conector';
+      select.append(empty);
+      for (const connector of data.connectors) {
+        const option = document.createElement('option');
+        option.value = String(connector.id);
+        option.textContent = connector.name;
+        select.append(option);
+      }
+      const key = row.id + ':' + row.revision;
+      select.value = String(connectors.get(key) ?? '');
+      select.onchange = () => {
+        if (select.value) connectors.set(key, Number(select.value));
+        else connectors.delete(key);
+      };
+      label.append(select);
+      const coverage = document.createElement('p');
+      coverage.textContent = data.catalog_complete ? 'Conectores disponíveis nesta consulta.'
+        : 'Catálogo parcial. Consulte o painel da Pluggy para a lista completa.';
+      connectionDetails.replaceChildren(label, coverage);
+      connectionDetails.hidden = false;
+      select.focus();
+    });
+  }
+
   function inspectArchive(row) {
     run(async () => {
       const body = {connection_id: row.id, revision: row.revision};
@@ -287,9 +347,10 @@ export async function showFinancialInstitutions({api, view, heading, navigation}
   function change(row, action, confirmation, message) {
     if (!window.confirm(confirmation)) return;
     run(async () => {
-      await api('/open-finance/registry/' + action, {method: 'POST', body: {
-        connection_id: row.id, revision: row.revision, confirmed: true,
-      }});
+      const body = {connection_id: row.id, revision: row.revision, confirmed: true};
+      const connector = connectors.get(row.id + ':' + row.revision);
+      if (action === 'activate' && connector !== undefined) body.connector_id = connector;
+      await api('/open-finance/registry/' + action, {method: 'POST', body});
       if (current()) await load(message);
     });
   }

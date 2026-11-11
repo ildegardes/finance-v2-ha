@@ -98,6 +98,30 @@ class RegistryEnrollmentTests(unittest.TestCase):
             self.assertEqual(db.execute("SELECT lifecycle FROM of_connection_registry").fetchone()[0], "DRAFT")
             self.assertEqual(db.execute("SELECT enabled FROM of_connections").fetchone()[0], 0)
 
+    def test_catalog_details_and_selected_connector_are_scoped_to_draft(self):
+        draft = self.draft()
+        connection_id = draft["id"]
+        def send(method, path, headers, body, timeout):
+            if path == "/connectors":
+                self.assertEqual((method, headers["X-API-KEY"]), ("GET", "fixture-token"))
+                return 200, {"totalPages": 2, "results": [
+                    {"id": 200, "name": "MeuPluggy", "isSandbox": False, "credentials": ["private"]},
+                    {"id": 201, "name": "Other bank", "isSandbox": False},
+                    {"id": 200, "name": "fixture-token", "isSandbox": False},
+                ]}
+            return self.send(method, path, headers, body, timeout)
+        self.service.client_factory = lambda config: PluggyClient(config, send=send)
+        args = dict(actor="UI:local", revision=0)
+        catalog = self.admin.connector_catalog(connection_id, **args)
+        self.assertEqual(catalog, {"connectors": [{"id": 200, "name": "MeuPluggy"}], "catalog_complete": False})
+        with self.assertRaisesRegex(SyncError, "ITEM_CONNECTOR_DIFFERENT"):
+            self.admin.validate_and_activate(connection_id, **args, confirmed=True, connector_id=201)
+        detail = self.admin.connection_details(connection_id, **args)
+        self.assertEqual(detail["lifecycle"], "DRAFT")
+        self.assertNotIn("fixture-item", json.dumps(detail))
+        self.assertNotIn("fixture-secret", json.dumps(detail))
+        self.assertEqual(self.admin.validate_and_activate(connection_id, **args, confirmed=True, connector_id=200)["lifecycle"], "ACTIVE")
+
     def test_preview_reports_only_known_capabilities_and_does_not_activate_or_import(self):
         draft = self.draft()
 
@@ -375,6 +399,10 @@ class RegistryEnrollmentTests(unittest.TestCase):
             status, response, _ = invoke()
             self.assertEqual(status, 201)
             self.assertEqual(response["lifecycle"], "DRAFT")
+            detail = {"connection_id": response["id"], "revision": 0}
+            self.assertEqual(invoke(endpoint="details", extra={"HTTP_X_FORWARDED_PROTO": "https"}, body=detail)[0], 403)
+            self.assertEqual(invoke(endpoint="connectors", extra={"HTTP_X_CSRF_TOKEN": "bad"}, body=detail)[0], 403)
+            self.assertEqual(invoke(endpoint="details", body=detail)[1]["lifecycle"], "DRAFT")
             self.assertEqual(self.operations, [])
             body = {"connection_id": response["id"], "revision": 0, "confirmed": True}
             status, active, _ = invoke(endpoint="activate", body=body)

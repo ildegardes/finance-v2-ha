@@ -184,6 +184,14 @@ verificação consulta apenas a primeira página de recursos e indica quando há
 mais páginas. A ativação exige confirmação separada. A coleta financeira pode
 ser iniciada manualmente após a ativação.
 
+A ação **Consultar conectores** usa as credenciais do rascunho para ler uma
+página do [catálogo Pluggy](https://v2.docs.pluggy.ai/en/reference/connector/connectors-list).
+Se você selecionar um conector, a ativação confere o ID retornado no Item.
+A lista é filtrada pelo perfil. Para MeuPluggy pessoal, o conector 200
+identifica o proxy e a identidade financeira continua vinculada ao Item.
+**Ver detalhes** mostra estado administrativo, revisão e reserva de execução
+no acesso privado. A API de detalhes também disponibiliza eventos administrativos recentes.
+
 Ao escolher **Arquivar**, confira a inspeção de dependências antes de confirmar.
 A confirmação verifica novamente integridade, dependências, execução e lease.
 Registros financeiros vinculados permanecem preservados e impedem a substituição.

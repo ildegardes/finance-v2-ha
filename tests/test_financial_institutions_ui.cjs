@@ -52,6 +52,8 @@ async function fixture(t, writable) {
       if (route.startsWith('/open-finance/sync-runs?')) return {items: [{
         state: 'FAILED', started_at: '2026-11-01T12:00:00Z', error_code: 'AUTH_FAILED',
       }], has_more: route.includes('page=1&')};
+      if (route.endsWith('/details')) return {institution: 'Santander', lifecycle: 'ACTIVE', sync_state: 'FAILED', revision: 0};
+      if (route.endsWith('/connectors')) return {connectors: [{id: 200, name: 'MeuPluggy'}], catalog_complete: false};
       if (route.endsWith('/archive/inspect')) return {dependencies: 'NO_FINANCIAL_ROWS_WITH_HISTORY'};
       if (route.endsWith('/archive')) {
         const row = rows.find(row => row.id === options.body.connection_id);
@@ -70,6 +72,7 @@ async function fixture(t, writable) {
       if (route.endsWith('/activate')) {
         const row = rows.find(row => row.id === options.body.connection_id);
         if (!row || row.revision !== options.body.revision || !options.body.confirmed) throw Error('Unexpected activation');
+        window.activationConnector = options.body.connector_id;
         Object.assign(row, {lifecycle: 'ACTIVE', enabled: true, revision: row.revision + 1});
         return {};
       }
@@ -112,6 +115,21 @@ async function fixture(t, writable) {
   }, writable);
   return page;
 }
+
+test('shows private details and sends the selected connector on activation', async t => {
+  const page = await fixture(t, true);
+  await page.getByRole('button', {name: 'Ver detalhes'}).click();
+  await page.getByText(/Revisão 0/).waitFor();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', {name: 'Desativar', exact: true}).click();
+  await page.getByRole('button', {name: 'Consultar conectores'}).click();
+  await page.getByLabel('Conector para validar na ativação').selectOption('200');
+  await page.getByText(/Catálogo parcial/).waitFor();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', {name: 'Validar e reativar'}).click();
+  await page.getByRole('status').filter({hasText: 'Conexão ativada'}).waitFor();
+  assert.equal(await page.evaluate(() => activationConnector), 200);
+});
 
 test('shows staged account count and allowlisted observed resources', async t => {
   const page = await fixture(t, false);

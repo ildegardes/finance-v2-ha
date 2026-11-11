@@ -138,6 +138,65 @@ class RegistryAdmin:
             raise SyncError("REGISTRY_WRITE_FAILED", 503) from None
         return {"id": connection_id, "lifecycle": "REMOVED", "revision": revision + 1}
 
+    def connection_details(self, connection_id, *, actor, revision):
+        self._owner(actor)
+        if type(revision) is not int or not 0 <= revision < 2**63 - 1:
+            raise SyncError("INVALID_REGISTRY_REVISION", 422)
+        try:
+            with closing(self.service._db()) as db:
+                db.execute("BEGIN")
+                row = _registered_row(db, connection_id, revision, {"DRAFT", "ACTIVE", "DISABLED", "ARCHIVED"})
+                # Project administrative metadata only; run and resource details have separate APIs.
+                events = db.execute(
+                    """SELECT operation,previous_state,resulting_state,revision,recorded_at
+                       FROM of_connection_admin_events WHERE connection_id=?
+                       ORDER BY recorded_at DESC,rowid DESC LIMIT 20""", (connection_id,),
+                )
+                return {"id": connection_id, "institution": row["label"], "source": row["source"],
+                        "lifecycle": row["lifecycle"], "revision": revision, "replaces_id": row["replaces_id"],
+                        "sync_state": row["sync_state"], "lease_present": row["lease_token"] is not None,
+                        "events": [dict(event) for event in events]}
+        except sqlite3.Error:
+            raise SyncError("REGISTRY_READ_FAILED", 503) from None
+
+    def connector_catalog(self, connection_id, *, actor, revision):
+        self._owner(actor)
+        if type(revision) is not int or not 0 <= revision < 2**63 - 1:
+            raise SyncError("INVALID_REGISTRY_REVISION", 422)
+        original, config = self._configuration_for_validation(connection_id, revision, {"DRAFT", "DISABLED", "ACTIVE"})
+        sandbox = config.access_mode == "sandbox"
+        client = self.service.client_factory(replace(config, enabled=True))
+        try:
+            data, _ = client.coverage_get("/connectors?sandbox=true" if sandbox else "/connectors")
+        except PluggyError:
+            raise SyncError("PROVIDER_CATALOG_UNAVAILABLE", 502) from None
+        results = data.get("results")
+        if not isinstance(results, list):
+            raise SyncError("PROVIDER_CATALOG_UNAVAILABLE", 502)
+        sensitive = (config.client_id, config.client_secret, config.item_id, getattr(client, "_key", None))
+        projected = {}
+        for entry in results[:500]:
+            if not isinstance(entry, dict) or entry.get("isSandbox") is not sandbox:
+                continue
+            connector_id, name = entry.get("id"), entry.get("name")
+            if (type(connector_id) is not int or not 0 < connector_id < 2**31
+                    or not isinstance(name, str) or not 0 < len(name) <= 120
+                    or not name.isprintable()
+                    or any(value and value in name for value in sensitive)):
+                continue
+            if config.access_mode == "meupluggy_personal" and connector_id != 200:
+                continue
+            projected[connector_id] = {"id": connector_id, "name": name}
+        try:
+            with closing(self.service._db()) as db:
+                current = _registered_row(db, connection_id, revision, {original["lifecycle"]})
+                if current["binding_hash"] != original["binding_hash"]:
+                    raise SyncError("CONNECTION_CONFIGURATION_CHANGED")
+        except sqlite3.Error:
+            raise SyncError("REGISTRY_READ_FAILED", 503) from None
+        complete = type(data.get("totalPages")) is int and data["totalPages"] in (0, 1) and len(results) <= 500
+        return {"connectors": list(projected.values()), "catalog_complete": complete}
+
     def inspect_archive(self, connection_id, *, actor, revision):
         self._owner(actor)
         if type(revision) is not int or not 0 <= revision < 2**63 - 1:
@@ -323,12 +382,16 @@ class RegistryAdmin:
                 "capabilities_state": state,
                 "capabilities": [{"type": kind, "status": status} for kind, status in sorted(capabilities)]}
 
-    def validate_and_activate(self, connection_id, *, actor, revision, confirmed):
+    def validate_and_activate(self, connection_id, *, actor, revision, confirmed, connector_id=None):
         self._owner(actor)
         if confirmed is not True or type(revision) is not int or not 0 <= revision < 2**63 - 1:
             raise SyncError("ACTIVATION_CONFIRMATION_REQUIRED", 422)
+        if connector_id is not None and (type(connector_id) is not int or not 0 < connector_id < 2**31):
+            raise SyncError("INVALID_CONNECTOR_ID", 422)
         original, config = self._configuration_for_validation(connection_id, revision, {"DRAFT", "DISABLED"})
-        self._validate_item(config)
+        _, item = self._validate_item(config)
+        if connector_id is not None and item["connector"].get("id") != connector_id:
+            raise SyncError("ITEM_CONNECTOR_DIFFERENT")
 
         _, stamp = self.service._time()
         try:

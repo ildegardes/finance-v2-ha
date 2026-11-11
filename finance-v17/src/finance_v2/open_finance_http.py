@@ -29,7 +29,7 @@ class RegistryRateLimiter:
     def admit(self, operation):
         uses_provider = operation in {
             "open_finance_registry_activate", "open_finance_registry_rotate_credentials",
-            "open_finance_registry_validate",
+            "open_finance_registry_validate", "open_finance_registry_connector_catalog",
         }
         attempts = self._provider if uses_provider else self._local
         with self._lock:
@@ -42,6 +42,8 @@ class RegistryRateLimiter:
 
 
 OPERATIONS = (
+    ('POST','registry/details','registry_details'),
+    ('POST','registry/connectors','registry_connector_catalog'),
     ('POST','registry/drafts','registry_create'),
     ('POST','registry/activate','registry_activate'),
     ('POST','registry/validate','registry_validate'),
@@ -102,6 +104,11 @@ def dispatch(app,operation,identity,body,query):
         admin = RegistryAdmin(OpenFinanceService(app.settings, app.clock))
         if query:
             raise SyncError('INVALID_REQUEST',422)
+        if operation in {'open_finance_registry_details','open_finance_registry_connector_catalog'}:
+            if set(body) != {'connection_id','revision'} or not _connection_id(body['connection_id']):
+                raise SyncError('INVALID_REQUEST',422)
+            action = admin.connection_details if operation.endswith('_details') else admin.connector_catalog
+            return action(actor=identity.client_id, **body),200
         if operation == 'open_finance_registry_create':
             required = {'label','environment','client_id','client_secret','item_id'}
             if not required <= body.keys() or body.keys() - required - {'replaces_id'}:
@@ -129,11 +136,15 @@ def dispatch(app,operation,identity,body,query):
             if set(body) != fields or not _connection_id(body['connection_id']):
                 raise SyncError('INVALID_REQUEST',422)
             return action(actor=identity.client_id, **body),200
-        if set(body) != {'connection_id','revision','confirmed'} or not _connection_id(body['connection_id']):
+        fields = {'connection_id','revision','confirmed'}
+        optional = {'connector_id'} if operation == 'open_finance_registry_activate' else set()
+        if not fields <= body.keys() or body.keys() - fields - optional or not _connection_id(body['connection_id']):
+            raise SyncError('INVALID_REQUEST',422)
+        if 'connector_id' in body and (type(body['connector_id']) is not int or not 0 < body['connector_id'] < 2**31):
             raise SyncError('INVALID_REQUEST',422)
         args = dict(actor=identity.client_id, revision=body['revision'], confirmed=body['confirmed'])
         if operation == 'open_finance_registry_activate':
-            return admin.validate_and_activate(body['connection_id'], **args),200
+            return admin.validate_and_activate(body['connection_id'], connector_id=body.get('connector_id'), **args),200
         if operation == 'open_finance_registry_validate':
             return admin.validate_connection(body['connection_id'], **args),200
         if operation == 'open_finance_registry_archive':
@@ -303,12 +314,14 @@ def openapi_paths():
                 elif op=='registry_delete':
                     fields['backup_confirmed']={'type':'boolean','const':True}
                     fields['confirmation']=enum('EXCLUIR DEFINITIVAMENTE')
-                elif op not in {'registry_archive_inspect','registry_delete_inspect'}:
+                elif op not in {'registry_archive_inspect','registry_delete_inspect','registry_details','registry_connector_catalog'}:
                     fields['confirmed']={'type':'boolean','const':True}
                 if op=='registry_rotate_credentials':
                     fields.update({name:{'type':'string','minLength':1,'maxLength':512,'writeOnly':True}
                                    for name in ('client_id','client_secret')})
                 required=list(fields)
+                if op=='registry_activate':
+                    fields['connector_id']={'type':'integer','minimum':1,'maximum':2**31-1}
             spec={'operationId':'open_finance_'+op,'x-owner-only':True,'x-owner-admin-only':True,
                   'x-external-capability':'not-available',
                   'description':'Private owner browser session only. Exact configured origin and CSRF required.',
