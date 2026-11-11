@@ -8,6 +8,7 @@ from decimal import Decimal, InvalidOperation, localcontext
 from .open_finance import SyncError
 from .open_finance_query import civil, read_view, search_key
 from .open_finance_registry import connection_views
+from .open_finance_domain import _origin, _context_at_origin, _freshness
 
 PARAMS = {'start', 'end', 'connection_id', 'account_id', 'category', 'product',
           'status', 'direction', 'currency', 'search', 'page', 'page_size', 'history'}
@@ -80,7 +81,7 @@ def analytics(c, settings, query):
             raise SyncError('CONNECTION_NOT_FOUND', 404)
         selected = {k: v for k, v in views.items() if (q['history'] == '1' or (v.enabled and not v.historical))
                     and (not q.get('connection_id') or q['connection_id'] == k)}
-        rows = c.execute("SELECT connection_id,resource,parent_id,external_id,payload_json,observed_at FROM of_resource_records WHERE state='PRESENT' AND resource IN ('accounts','transactions','investments') LIMIT 30001").fetchall()
+        rows = c.execute("SELECT connection_id,resource,parent_id,external_id,payload_json,observed_at,last_run_id FROM of_resource_records WHERE state='PRESENT' AND resource IN ('accounts','transactions','investments') LIMIT 30001").fetchall()
         if len(rows) > 30000 or time.monotonic() > deadline:
             raise SyncError('QUERY_BUDGET_EXCEEDED', 503)
         records = []
@@ -96,6 +97,7 @@ def analytics(c, settings, query):
                 translations[(cat['connection_id'], cat['external_id'])] = cat['display_name_pt']
 
         positions = {'accounts': [], 'investments': []}
+        unknown_currency = {'accounts': 0, 'investments': 0}
         for r in records:
             kind = r['resource']
             if kind not in positions or not views[r['connection_id']].enabled or views[r['connection_id']].historical:
@@ -103,17 +105,23 @@ def analytics(c, settings, query):
             data = r['data']
             if kind == 'accounts' and data.get('type') != 'BANK':
                 continue
+            if not data.get('currencyCode'):
+                unknown_currency[kind] += 1
+                continue
             if data.get('currencyCode') != q['currency']:
                 continue
             value = _amount(data.get('balance'))
+            origin_run, _ = _origin(c, {**r, '_resource': kind, 'data': json.loads(r['payload_json'])}, False)
+            origin_item = _context_at_origin(c, r['connection_id'], 'item', None, origin_run) if origin_run else {}
+            freshness = _freshness(origin_item, kind, 'BANK_ACCOUNT' if kind == 'accounts' else 'INVESTMENT_POSITION')
             positions[kind].append({'connection_id': r['connection_id'], 'external_id': r['external_id'],
                 'institution': views[r['connection_id']].institution, 'name': data.get('name'), 'type': data.get('type'),
                 'value': str(value) if value is not None else None, 'observed_at': r['observed_at'],
-                'reference_date': data.get('date') or data.get('updatedAt')})
+                'reference_date': data.get('date'), 'reference_date_state': 'KNOWN' if data.get('date') else 'NOT_ESTABLISHED', 'freshness': freshness})
         for kind, items in list(positions.items()):
             values = [Decimal(x['value']) for x in items if x['value'] is not None]
             positions[kind] = {'value': str(sum(values, Decimal(0))) if values else None,
-                               'known': len(values), 'unavailable': len(items) - len(values), 'items': items}
+                               'known': len(values), 'unavailable': len(items) - len(values), 'unknown_currency': unknown_currency[kind], 'items': items}
         items = []
         for r in records:
             if r['resource'] != 'transactions':
@@ -159,11 +167,22 @@ def analytics(c, settings, query):
         for total in flow.values():
             for name in ('incoming', 'outgoing'): total[name] = str(total[name])
         category_rows = [{'product': p, 'key': k, 'name': n, 'value': str(v)} for (p, k), (n, v) in categories.items()]
+        ranking = {}
+        for product in ('BANK', 'CREDIT'):
+            rows_for_product = sorted((row for row in category_rows if row['product'] == product and row['key'] != 'missing'),
+                                      key=lambda row: (-Decimal(row['value']), row['key']))
+            chosen, rest = rows_for_product[:5], rows_for_product[5:]
+            groups = list(chosen)
+            if rest:
+                groups.append({'product': product, 'key': 'other', 'name': 'Outras',
+                               'value': str(sum((Decimal(row['value']) for row in rest), Decimal(0)))})
+            groups.extend(row for row in category_rows if row['product'] == product and row['key'] == 'missing')
+            ranking[product] = groups
         coverage = [dict(r) for r in c.execute('SELECT connection_id,resource,parent_id,state,observed_at,omitted_field_count FROM of_resource_coverage') if r['connection_id'] in selected]
         for kind in positions:
             checkpoints = [x for x in coverage if x['resource'] == kind]
             missing_connections = set(selected) - {x['connection_id'] for x in checkpoints}
-            state = 'PARTIAL' if missing_connections or any(x['state'] not in ('AVAILABLE', 'EMPTY') or x['omitted_field_count'] for x in checkpoints) or positions[kind]['unavailable'] else ('COMPLETE' if selected else 'NOT_ESTABLISHED')
+            state = 'PARTIAL' if missing_connections or any(x['state'] not in ('AVAILABLE', 'EMPTY') or x['omitted_field_count'] for x in checkpoints) or positions[kind]['unavailable'] or positions[kind]['unknown_currency'] else ('COMPLETE' if selected else 'NOT_ESTABLISHED')
             positions[kind]['coverage_state'] = state
         for product in flow:
             flow[product]['economic_totals'] = {'state': 'NOT_ESTABLISHED', 'incoming': None, 'outgoing': None}
@@ -173,6 +192,6 @@ def analytics(c, settings, query):
         return {'contract': 'OF-ANALYTICS/1', 'filters': {k: v for k, v in q.items() if not k.startswith('_')},
             'positions': positions, 'flow': flow,
             'series': [{'date': d, 'product': p, 'direction': dr, 'value': str(v)} for (d, p, dr), v in sorted(series.items())],
-            'categories': sorted(category_rows, key=lambda r: Decimal(r['value']), reverse=True),
+            'categories': sorted(category_rows, key=lambda r: Decimal(r['value']), reverse=True), 'category_ranking': ranking,
             'items': items[start:start + q['page_size']], 'total': len(items), 'page': q['page'],
             'has_more': start + q['page_size'] < len(items), 'coverage': coverage}

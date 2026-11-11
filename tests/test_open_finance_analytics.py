@@ -83,6 +83,37 @@ class AnalyticsTests(fixtures.CoverageTests):
         status, _ = self.request('/api/v2/open-finance/analytics?connection_id=bank-test&account_id=unknown')
         self.assertEqual(status, 404)
 
+    def test_category_ranking_reconciles_before_pagination(self):
+        self.sync()
+        with closing(connect(self.db)) as c:
+            row = c.execute("SELECT * FROM of_resource_records WHERE resource='transactions' AND parent_id='account-BANK'").fetchone()
+            data = json.loads(row['payload_json'])
+            for i in range(7):
+                data.update(id='rank-'+str(i), categoryId=str(i+10), category='Grupo '+str(i), amount=str(i+1))
+                c.execute("INSERT INTO of_resource_records(connection_id,resource,parent_id,external_id,payload_json,payload_hash,state,first_run_id,last_run_id,observed_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (row['connection_id'], row['resource'], row['parent_id'], 'rank-'+str(i), json.dumps(data), row['payload_hash'], 'PRESENT', row['first_run_id'], row['last_run_id'], row['observed_at']))
+            data.update(id='rank-missing', categoryId=None, category=None, amount='2')
+            c.execute("INSERT INTO of_resource_records(connection_id,resource,parent_id,external_id,payload_json,payload_hash,state,first_run_id,last_run_id,observed_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (row['connection_id'], row['resource'], row['parent_id'], 'rank-missing', json.dumps(data), row['payload_hash'], 'PRESENT', row['first_run_id'], row['last_run_id'], row['observed_at']))
+            c.commit()
+            result = analytics(c, self.settings, {})
+            ranking = result['category_ranking']['BANK']
+            self.assertEqual(len([r for r in ranking if r['key'] not in ('missing','other')]), 5)
+            self.assertEqual(sum(Decimal(r['value']) for r in ranking), Decimal(result['flow']['BANK']['outgoing']))
+            self.assertIn('other', [r['key'] for r in ranking])
+            self.assertIn('missing', [r['key'] for r in ranking])
+
+    def test_unknown_currency_prevents_complete_coverage(self):
+        self.sync()
+        with closing(connect(self.db)) as c:
+            row = c.execute("SELECT payload_json FROM of_resource_records WHERE resource='accounts' AND external_id='account-BANK'").fetchone()
+            data = json.loads(row['payload_json']); data.pop('currencyCode', None)
+            c.execute("UPDATE of_resource_records SET payload_json=? WHERE resource='accounts' AND external_id='account-BANK'", (json.dumps(data),))
+            c.commit()
+            result = analytics(c, self.settings, {})
+            self.assertEqual(result['positions']['accounts']['unknown_currency'], 1)
+            self.assertEqual(result['positions']['accounts']['coverage_state'], 'PARTIAL')
+
     def test_invalid_filters_rejected(self):
         self.sync()
         for query in ('start=2026-10-31&end=2026-10-01', 'page_size=3', 'currency=XYZ1'):
