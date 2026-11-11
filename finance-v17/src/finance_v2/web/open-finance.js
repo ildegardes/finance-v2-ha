@@ -32,7 +32,7 @@ export function createOpenFinance({api,view,heading,esc,navigation=null,state={}
       return `${a.name||'Conta sem nome'} · ${institution}${peers.length>1?' · Conta '+(peers.indexOf(a)+1):''}`;
     };
     host.innerHTML=`<p class="of-notice">Consulta de staging bancário. Os filtros usam a data informada pelo provedor, não a competência das despesas. A direção bancária não comprova liquidação nem representa receita/despesa oficial. Não há conciliação ou promoção automática para lançamentos oficiais.</p>
-      <div class="of-tabs" role="tablist" aria-label="Áreas do Open Finance">${[['overview','Visão geral'],['flow','Fluxo'],['cards','Cartões'],['assets','Ativos'],['credit','Crédito'],['connections','Conexões']].map(([id,text])=>`<button type="button" role="tab" id="of-tab-${id}" aria-controls="of-panel-${id}" data-of-tab="${id}">${text}</button>`).join('')}</div>
+      <div class="of-tabs" role="tablist" aria-label="Áreas do Open Finance">${[['overview','Visão geral'],['flow','Movimentações'],['cards','Cartões'],['assets','Investimentos'],['credit','Crédito'],['connections','Conexões']].map(([id,text])=>`<button type="button" role="tab" id="of-tab-${id}" aria-controls="of-panel-${id}" data-of-tab="${id}">${text}</button>`).join('')}</div>
       <section role="tabpanel" id="of-panel-cards" aria-labelledby="of-tab-cards" class="of-panel"></section>
       <section role="tabpanel" id="of-panel-credit" aria-labelledby="of-tab-credit" class="of-panel"></section>
       <section role="tabpanel" id="of-panel-overview" aria-labelledby="of-tab-overview" class="panel of-panel"><h2>Visão geral</h2><p>Conexões e contas de staging disponíveis para consulta. Não representam o patrimônio nem o saldo consolidado.</p><p>${catalog.connections.length} conexões · ${catalog.accounts.length} contas cadastradas no catálogo.</p><p class="of-notice">Resumo de saldos indisponível: não há contrato implementado para saldos consolidados. Consulte as movimentações na aba Fluxo.</p></section>
@@ -60,6 +60,7 @@ export function createOpenFinance({api,view,heading,esc,navigation=null,state={}
       tab.onkeydown=event=>{const next=event.key==='ArrowRight'?(index+1)%tabs.length:event.key==='ArrowLeft'?(index+tabs.length-1)%tabs.length:event.key==='Home'?0:event.key==='End'?tabs.length-1:null;if(next!==null){event.preventDefault();selectTab(tabs[next].dataset.ofTab,true)}};
     });
     mountCoverage({host,api,esc,catalog,navigation,domainSelections:state.domainSelections??={}});
+    mountAnalyticsOverview({host,api,esc,catalog,navigation,state:state.analytics??={}});
     const form=host.querySelector('#of-panel-flow form'),results=host.querySelector('.of-results');
     const names=['start','end','connection_id','external_account_id','direction','category_key','search','origin_run_id'];
     const choice=(name)=>form.elements.namedItem(name);
@@ -115,4 +116,43 @@ export function createOpenFinance({api,view,heading,esc,navigation=null,state={}
     selectTab(selectedTab);
     await load(); // Preserve the existing local Flow prefetch; one request per mount.
   };
+}
+
+
+// This panel displays only the imported, gross figures returned by analytics.
+export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state}) {
+  const panel=host.querySelector('#of-panel-overview');
+  const month=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit'}).formatToParts(new Date());
+  const year=month.find(x=>x.type==='year').value, number=month.find(x=>x.type==='month').value;
+  const last=new Date(Date.UTC(Number(year),Number(number),0)).getUTCDate();
+  state.start ||= `${year}-${number}-01`;state.end ||= `${year}-${number}-${String(last).padStart(2,'0')}`;
+  const active=activeConnections(catalog);if(state.connection_id&&!active.some(c=>c.id===state.connection_id))state.connection_id='';
+  state.currency ||= 'BRL';
+  panel.innerHTML=`<div class="of-overview"><div class="of-overview-header"><div><h2>Visão geral</h2><p>Dados bancários importados</p></div></div>
+  <form class="of-overview-filters" aria-label="Filtros da visão geral"><label>Instituição<select name="connection_id"><option value="">Todas as ativas</option>${active.map(c=>`<option value="${esc(c.id)}">${esc(connectionLabel(c,active))}</option>`).join('')}</select></label><label>Moeda<input name="currency" pattern="[A-Z]{3}" maxlength="3" required></label><label>De<input type="date" name="start" required></label><label>Até<input type="date" name="end" required></label><button type="submit">Aplicar</button></form><div data-overview-result aria-live="polite"></div></div>`;
+  const form=panel.querySelector('form'),result=panel.querySelector('[data-overview-result]');
+  for(const key of ['start','end','connection_id','currency'])form.elements[key].value=state[key]||'';
+  const queries=createQueryGeneration(navigation);
+  const money=value=>value===null||value===undefined?'Indisponível':bankMoney(value,state.currency);
+  const metric=(title,value,detail)=>`<article class="of-metric"><span>${esc(title)}</span><strong ${value===null||value===undefined?'':'data-private-financial'}>${esc(money(value))}</strong><small>${esc(detail)}</small></article>`;
+  async function load(){
+    const query=queries.begin();result.innerHTML='<p role="status">Carregando resumo bancário…</p>';result.setAttribute('aria-busy','true');
+    const params=new URLSearchParams({start:state.start,end:state.end,currency:state.currency,product:'BANK',status:'POSTED'});if(state.connection_id)params.set('connection_id',state.connection_id);
+    try{
+      const data=await api('/open-finance/analytics?'+params,{queryScope:query});if(!query.current()||!host.isConnected)return;
+      const accounts=data.positions.accounts,investments=data.positions.investments,flow=data.flow.BANK;
+      const coverage=x=>x.coverage_state==='COMPLETE'?'Cobertura informada como completa':'Cobertura parcial ou não estabelecida';
+      const categories=data.category_ranking?.BANK||[];
+      const series=(data.series||[]).filter(point=>point.product==='BANK');
+      const scale=Math.max(0,...series.map(point=>Number(point.value)).filter(Number.isFinite));
+      const chart=series.length?`<ul class="of-series">${series.map(point=>{const size=Number(point.value);const width=scale>0&&Number.isFinite(size)?Math.max(0,Math.min(100,size/scale*100)):0;return `<li><span>${esc(dateBR(point.date))} · ${point.direction==='incoming'?'Entrada':'Saída'}</span><span class="of-series-track" aria-hidden="true"><i class="${point.direction==='incoming'?'in':'out'}" style="width:${width}%"></i></span><strong data-private-financial>${esc(money(point.value))}</strong></li>`}).join('')}</ul>`:'<p>Sem movimentações no período.</p>';
+      result.innerHTML=`<div class="of-metrics">${metric('Saldo informado das contas',accounts.value,coverage(accounts))}${metric('Investimentos informados',investments.value,coverage(investments))}${metric('Entradas bancárias brutas',flow.incoming,'Movimentações POSTED no período')}${metric('Saídas bancárias brutas',flow.outgoing,'Movimentações POSTED no período')}</div>
+      <p class="of-overview-note">Valores conhecidos podem estar incompletos. Entradas e saídas são movimentos brutos, não receitas ou despesas econômicas. O frescor financeiro pode não estar estabelecido.</p>
+      <section class="of-summary-card"><h3>Entradas e saídas bancárias brutas</h3><p>Valores informados por dia, para o período selecionado.</p>${chart}</section><div class="of-overview-grid"><section class="of-summary-card"><h3>Saídas por categoria</h3>${categories.length?`<ul class="of-category-list">${categories.map(c=>`<li><span>${esc(c.name)}</span><strong data-private-financial>${esc(money(c.value))}</strong></li>`).join('')}</ul>`:'<p>Sem saídas classificadas no período.</p>'}</section><section class="of-summary-card"><h3>Posições por instituição</h3>${accounts.items.length?`<ul class="of-category-list">${accounts.items.map(a=>`<li><span>${esc(a.institution)} · ${esc(a.name||'Conta')}</span><strong ${a.value===null?'':'data-private-financial'}>${esc(money(a.value))}</strong><small>${a.reference_date?'Data financeira: '+esc(dateBR(a.reference_date)):'Data financeira não informada'} · ${a.provider_updated_at?'Atualização informada: '+esc(dateBR(a.provider_updated_at)):'Atualização não informada'}</small></li>`).join('')}</ul>`:'<p>Nenhuma posição disponível para esta moeda.</p>'}</section></div>`;
+    }catch(_){if(query.current()&&host.isConnected)result.innerHTML='<p role="alert" class="attention">Não foi possível carregar o resumo bancário.</p><button type="button" data-retry-summary>Tentar novamente</button>';result.querySelector('[data-retry-summary]')?.addEventListener('click',load)}
+    finally{if(query.current())result.removeAttribute('aria-busy')}
+  }
+  form.onsubmit=e=>{e.preventDefault();if(form.elements.start.value>form.elements.end.value){form.elements.end.setCustomValidity('A data final deve ser igual ou posterior à inicial.');form.elements.end.reportValidity();return}for(const key of ['start','end','connection_id','currency'])state[key]=form.elements[key].value;load()};
+  form.elements.end.oninput=()=>form.elements.end.setCustomValidity('');form.elements.start.oninput=()=>form.elements.end.setCustomValidity('');
+  load();
 }
