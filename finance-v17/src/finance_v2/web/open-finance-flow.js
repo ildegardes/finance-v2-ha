@@ -26,7 +26,12 @@ export function mountAnalyticsFlow({host,api,esc,catalog,navigation,state,onRefr
   const names=['start','end','connection_id','account_id','currency','product','status','direction','category','search'];
   function accounts(){const cid=form.elements.connection_id.value,select=form.elements.account_id;select.innerHTML=opt('','Todas')+catalog.accounts.filter(a=>a.connection_id===cid).map(a=>opt(a.external_id,a.name||'Conta sem nome')).join('');select.disabled=!cid;}
   function connections(){const select=form.elements.connection_id,current=select.value,items=form.elements.history.checked?catalog.connections:active;select.innerHTML=opt('',form.elements.history.checked?'Todas, inclusive históricas':'Todas as ativas')+items.map(c=>opt(c.id,connectionLabel(c,items))).join('');select.value=items.some(c=>c.id===current)?current:'';}
-  function syncForm(){form.querySelector('[data-bill-filter]').hidden=!state.bill_id;form.querySelector('.of-advanced').open=!!(state.account_id||state.history==='1'||state.status!=='POSTED'||state.direction!=='all');form.elements.history.checked=state.history==='1';connections();for(const n of names)if(n!=='account_id'&&n!=='category')form.elements[n].value=state[n]||'';
+  function syncForm(){
+    const choices=state.history==='1'?catalog.connections:active;
+    if(state.connection_id&&!choices.some(c=>c.id===state.connection_id)){
+      Object.assign(state,{connection_id:'',account_id:'',bill_id:'',category:'',page:1});
+    }
+    form.querySelector('[data-bill-filter]').hidden=!state.bill_id;form.querySelector('.of-advanced').open=!!(state.account_id||state.history==='1'||state.status!=='POSTED'||state.direction!=='all');form.elements.history.checked=state.history==='1';connections();for(const n of names)if(n!=='account_id'&&n!=='category')form.elements[n].value=state[n]||'';
     const category=form.elements.category;
     category.querySelector('[data-context-option]')?.remove();
     if(state.category&&![...category.options].some(option=>option.value===state.category)){
