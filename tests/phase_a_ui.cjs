@@ -1,3 +1,4 @@
+const {selectPrivacy,togglePrivacy}=require('./privacy-menu.cjs');
 // Synthetic frontend integration only. No SQLite, migrations, banks or HA.
 const {test,before,after,beforeEach,afterEach}=require('node:test');
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
@@ -92,26 +93,26 @@ async function masked(){await page.waitForFunction(()=>document.documentElement.
 
 test('default hidden, accessible eye button and immediate toggle without requests',async()=>{
   await flow();await masked();const count=requests.length;
-  const button=page.getByRole('button',{name:'Exibir valores monetários'});assert.equal(await button.getAttribute('aria-pressed'),'false');
-  await button.click();assert.match(await page.locator('.of-results').innerText(),/R\$ 1\.234,56/);assert.equal(await page.locator('#money-privacy-toggle').getAttribute('aria-pressed'),'true');
-  await page.locator('#money-privacy-toggle').click();await masked();assert.equal(requests.length,count);
+  assert.equal(await page.locator('html').getAttribute('data-money-privacy'),'hidden');
+  await selectPrivacy(page,'visible');assert.match(await page.locator('.of-results').innerText(),/R\$ 1\.234,56/);assert.equal(await page.locator('html').getAttribute('data-money-privacy'),'visible');
+  await togglePrivacy(page);await masked();assert.equal(requests.length,count);
 });
 test('visible preference survives reload; hidden preference also survives reload',async()=>{
-  await flow();await page.locator('#money-privacy-toggle').click();await page.reload();await page.getByRole('tab',{name:'Fluxo',exact:true}).click();await page.locator('.of-table').waitFor();assert.match(await page.locator('.of-results').innerText(),/1\.234,56/);
-  await page.locator('#money-privacy-toggle').click();await page.reload();await page.getByRole('tab',{name:'Fluxo',exact:true}).click();await page.locator('.of-table').waitFor();await masked();
+  await flow();await togglePrivacy(page);await page.reload();await page.getByRole('tab',{name:'Fluxo',exact:true}).click();await page.locator('.of-table').waitFor();assert.match(await page.locator('.of-results').innerText(),/1\.234,56/);
+  await togglePrivacy(page);await page.reload();await page.getByRole('tab',{name:'Fluxo',exact:true}).click();await page.locator('.of-table').waitFor();await masked();
 });
 test('storage unavailable fails closed but toggle remains functional',async()=>{
   await page.addInitScript(()=>{Storage.prototype.getItem=()=>{throw new Error('storage blocked')};Storage.prototype.setItem=()=>{throw new Error('storage blocked')}});
-  await flow();await masked();await page.locator('#money-privacy-toggle').click();assert.match(await page.locator('.of-results').innerText(),/1\.234,56/);
+  await flow();await masked();await togglePrivacy(page);assert.match(await page.locator('.of-results').innerText(),/1\.234,56/);
 });
 test('invalid saved preference fails closed',async()=>{
   await page.addInitScript(key=>localStorage.setItem(key,'garbage'),KEY);await flow();await masked();
 });
 test('same-origin storage event immediately hides another open tab',async()=>{
-  await flow();await page.locator('#money-privacy-toggle').click();const other=await context.newPage();await other.goto(origin+'/app/#open-finance');await other.locator('h1').waitFor();await other.locator('#money-privacy-toggle').click();await masked();await other.close();
+  await flow();await togglePrivacy(page);const other=await context.newPage();await other.goto(origin+'/app/#open-finance');await other.locator('h1').waitFor();await togglePrivacy(other);await masked();await other.close();
 });
 for(const [hash,selector] of [['dashboard','.summary-card'],['expenses','.finance-table'],['expense-1','.detail-value'],['revenues','.finance-table'],['revenue-1','.detail-value'],['invoices','.invoice-card'],['invoice-1','.detail-value'],['recurring','.finance-table'],['installments','.finance-table']]){
-  test('privacy across real frontend screen: '+hash,async()=>{await go(hash);await page.locator(selector).first().waitFor();await masked();await page.locator('#money-privacy-toggle').click();assert.match(await page.locator('#view').innerText(),/1\.234,56/);await page.locator('#money-privacy-toggle').click();await masked()});
+  test('privacy across real frontend screen: '+hash,async()=>{await go(hash);await page.locator(selector).first().waitFor();await masked();await togglePrivacy(page);assert.match(await page.locator('#view').innerText(),/1\.234,56/);await togglePrivacy(page);await masked()});
 }
 test('cards route, calendar and navigation remain operational',async()=>{await go('cards');await page.locator('.invoice-card').waitFor();await page.getByText('Ver cartão e calendário').click();await page.getByRole('heading',{name:'Calendário versionado'}).waitFor();assert.match(await page.locator('#view').innerText(),/01\/01\/2026/)});
 test('inputs and FormData retain exact amounts while masked and after toggling',async()=>{
@@ -119,7 +120,7 @@ test('inputs and FormData retain exact amounts while masked and after toggling',
   await page.waitForFunction(()=>document.querySelector('[name=amount]').type==='password');
   assert.equal(await field.inputValue(),'1234,56');assert.equal(await page.evaluate(()=>new FormData(document.querySelector('#new-expense')).get('amount')),'1234,56');
   assert.equal(await field.locator('..').locator('.privacy-field-mask').innerText(),MASK);
-  await page.locator('#money-privacy-toggle').click();assert.equal(await field.getAttribute('type'),'text');assert.equal(await field.inputValue(),'1234,56');
+  await togglePrivacy(page);assert.equal(await field.getAttribute('type'),'text');assert.equal(await field.inputValue(),'1234,56');
 });
 test('late asynchronous rendering and SVG titles are masked before animation frame',async()=>{
   await flow();const result=await page.evaluate(async()=>{
@@ -132,7 +133,7 @@ test('replaced text and accessible labels never restore stale amounts',async()=>
   await flow();await page.evaluate(()=>{const p=document.createElement('p');p.id='late';p.textContent='R$ 10,00';p.title='R$ 10,00';document.querySelector('#view').append(p)});
   await page.waitForFunction(()=>document.querySelector('#late').textContent.includes('••'));
   await page.evaluate(()=>{document.querySelector('#late').textContent='R$ 20,00';document.querySelector('#late').title='R$ 20,00'});
-  await page.locator('#money-privacy-toggle').click();assert.equal(await page.locator('#late').innerText(),'R$ 20,00');assert.equal(await page.locator('#late').getAttribute('title'),'R$ 20,00');
+  await togglePrivacy(page);assert.equal(await page.locator('#late').innerText(),'R$ 20,00');assert.equal(await page.locator('#late').getAttribute('title'),'R$ 20,00');
 });
 test('default overview and assets do not invent balances',async()=>{
   await go('open-finance');await page.getByRole('tabpanel',{name:'Visão geral',exact:true}).waitFor();await page.locator('#of-panel-overview .empty').waitFor();assert.match(await page.locator('#of-panel-overview').innerText(),/não são somados como patrimônio/);
@@ -148,7 +149,7 @@ test('pagination remains 25 + 25 + 13, no duplicates, filters survive tabs and p
   await flow();const seen=[];
   let expectedPage=1;for(const count of [25,25,13]){await page.waitForFunction(n=>document.querySelector('.of-count')?.textContent.includes('Página '+n),expectedPage++);await page.waitForFunction(n=>document.querySelectorAll('.of-table tbody tr').length===n,count);seen.push(...await page.locator('.of-table tbody tr td:nth-child(4)').allTextContents());if(count===25)await page.locator('[data-next]').click()}
   assert.equal(new Set(seen).size,63);assert.equal(await page.locator('[data-next]').isDisabled(),true);
-  await page.getByRole('tab',{name:'Conexões',exact:true}).click();await page.locator('#money-privacy-toggle').click();await page.getByRole('tab',{name:'Fluxo',exact:true}).click();assert.match(await page.locator('.of-count').innerText(),/Página 3/);
+  await page.getByRole('tab',{name:'Conexões',exact:true}).click();await togglePrivacy(page);await page.getByRole('tab',{name:'Fluxo',exact:true}).click();assert.match(await page.locator('.of-count').innerText(),/Página 3/);
   const form=page.locator('.of-filters');for(const [name,value] of [['start','2026-10-12'],['end','2026-10-18'],['search','cafe']])await form.locator(`[name=${name}]`).fill(value);
   for(const [name,value] of [['connection_id','itau-test'],['external_account_id','private-account-test'],['direction','outgoing'],['category_key','id:food'],['origin_run_id','run-test-0']])await form.locator(`[name=${name}]`).selectOption(value);
   await form.locator('[type=submit]').click();await page.waitForFunction(()=>document.querySelectorAll('.of-table tbody tr').length===1);
@@ -156,7 +157,7 @@ test('pagination remains 25 + 25 + 13, no duplicates, filters survive tabs and p
   await page.getByRole('tab',{name:'Ativos',exact:true}).click();await page.getByRole('tab',{name:'Fluxo',exact:true}).click();assert.equal(await form.locator('[name=search]').inputValue(),'cafe');await page.locator('[data-clear]').click();await page.waitForFunction(()=>document.querySelectorAll('.of-table tbody tr').length===25);assert.equal(await form.locator('[name=search]').inputValue(),'');
 });
 test('friendly account names, original bank categories, dates and BRL sign',async()=>{
-  await flow();await page.locator('#money-privacy-toggle').click();const text=await page.locator('.of-results').innerText();assert.match(text,/12\/10\/2026/);assert.match(text,/-R\$ 1\.234,56/);assert.match(text,/Food and drink/);assert.match(text,/Conta corrente · Itaú/);assert.doesNotMatch(text,/private-account-test|itau-test/);assert.match(text,/Saída/);assert.match(text,/origens não comprovadas/);
+  await flow();await togglePrivacy(page);const text=await page.locator('.of-results').innerText();assert.match(text,/12\/10\/2026/);assert.match(text,/-R\$ 1\.234,56/);assert.match(text,/Food and drink/);assert.match(text,/Conta corrente · Itaú/);assert.doesNotMatch(text,/private-account-test|itau-test/);assert.match(text,/Saída/);assert.match(text,/origens não comprovadas/);
 });
 test('empty state, query errors and loading state preserve fail-closed result handling',async()=>{
   await flow();await page.locator('[name=search]').fill('no-match');await page.locator('.of-filters [type=submit]').click();await page.getByText('Nenhuma transação encontrada para os filtros selecionados.',{exact:true}).waitFor();
@@ -166,7 +167,7 @@ test('empty state, query errors and loading state preserve fail-closed result ha
 test('mobile and desktop responsive layout, touch targets and focus',async()=>{
   await flow();for(const width of [360,390,768,1440]){await page.setViewportSize({width,height:900});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'overflow '+width);const box=await page.locator('#money-privacy-toggle').boundingBox();assert(box.width>=44&&box.height>=44);for(const tab of await page.getByRole('tab').all())assert((await tab.boundingBox()).height>=44);}
   await page.locator('#money-privacy-toggle').focus();assert.equal(await page.locator('#money-privacy-toggle').evaluate(e=>document.activeElement===e),true);
-  if(evidence){fs.mkdirSync(evidence,{recursive:true});await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:path.join(evidence,'desktop-hidden.png')});await page.setViewportSize({width:390,height:844});await page.waitForFunction(()=>document.querySelector('nav').getBoundingClientRect().right<=0);await page.screenshot({path:path.join(evidence,'mobile-hidden.png')});await page.locator('#money-privacy-toggle').click();await page.screenshot({path:path.join(evidence,'mobile-visible-synthetic.png')});}
+  if(evidence){fs.mkdirSync(evidence,{recursive:true});await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:path.join(evidence,'desktop-hidden.png')});await page.setViewportSize({width:390,height:844});await page.waitForFunction(()=>document.querySelector('nav').getBoundingClientRect().right<=0);await page.screenshot({path:path.join(evidence,'mobile-hidden.png')});await togglePrivacy(page);await page.screenshot({path:path.join(evidence,'mobile-visible-synthetic.png')});}
 });
 test('formatting preserves precision and calendar dates, rejects unsupported input',async()=>{
   const {bankMoney,dateBR,maskText}=await import(pathToFileURL(path.join(web,'privacy.js')));
@@ -189,13 +190,13 @@ test('dynamic dialog, select options and accessible money are covered globally',
   await page.waitForFunction(()=>document.querySelector('dialog').textContent.includes('••'));assert.doesNotMatch(await page.locator('dialog').innerText(),/12,50/);assert.equal(await page.locator('dialog input').inputValue(),'12,50');assert.equal(await page.locator('dialog select').inputValue(),'unchanged');
   // Native modal dialogs correctly make the header inert. Toggle from another
   // same-origin tab to exercise the real storage event while the dialog is open.
-  const other=await context.newPage();await other.goto(origin+'/app/#dashboard');await other.locator('#money-privacy-toggle svg').waitFor();await other.locator('#money-privacy-toggle').click();await page.waitForFunction(()=>document.documentElement.dataset.moneyPrivacy==='visible');assert.match(await page.locator('dialog').innerText(),/12,50/);await other.close();await page.evaluate(()=>document.querySelector('dialog').close());
+  const other=await context.newPage();await other.goto(origin+'/app/#dashboard');await other.locator('#money-privacy-toggle svg').waitFor();await togglePrivacy(other);await page.waitForFunction(()=>document.documentElement.dataset.moneyPrivacy==='visible');assert.match(await page.locator('dialog').innerText(),/12,50/);await other.close();await page.evaluate(()=>document.querySelector('dialog').close());
 });
 test('in-flight API response honors the latest privacy state without a visible frame',async()=>{
   let intercepted;const pending=new Promise(resolve=>intercepted=resolve);
   await page.route('**/api/v2/open-finance/transactions?*',route=>intercepted(route));
   await go('open-finance');const held=await pending;
-  await page.locator('#money-privacy-toggle').click();await page.locator('#money-privacy-toggle').click();
+  await togglePrivacy(page);await togglePrivacy(page);
   await held.fulfill({json:fixture(new URL(held.request().url()))});
   await page.getByRole('tab',{name:'Fluxo',exact:true}).click();await page.locator('.of-table').waitFor();
   await page.evaluate(()=>new Promise(requestAnimationFrame));await masked();
@@ -227,9 +228,9 @@ test('cached account values and nested limits respect global privacy without fak
   await go('open-finance');await page.locator('.of-resource-card').waitFor();
   await page.waitForFunction(()=>document.querySelector('[data-private-financial]')?.textContent==='R$ ••••••');
   assert.doesNotMatch(await page.locator('#of-panel-overview').innerText(),/1\.234,56|2\.000,00/);
-  await page.locator('#money-privacy-toggle').click();assert.match(await page.locator('#of-panel-overview').innerText(),/1\.234,56/);
+  await togglePrivacy(page);assert.match(await page.locator('#of-panel-overview').innerText(),/1\.234,56/);
   assert.match(await page.locator('#of-panel-overview').innerText(),/não são somados como patrimônio/);
-  await page.locator('#money-privacy-toggle').click();assert.doesNotMatch(await page.locator('#of-panel-overview').innerText(),/1\.234,56/);
+  await togglePrivacy(page);assert.doesNotMatch(await page.locator('#of-panel-overview').innerText(),/1\.234,56/);
 });
 
 test('six areas, credit filter and observation history are query-only',async()=>{
@@ -252,7 +253,7 @@ test('manual cached collection requires explicit confirmation and can be cancell
 
 test('missing currency never silently becomes BRL or a zero balance',async()=>{
   await page.route('**/api/v2/open-finance/domain?**',route=>route.fulfill({json:typedFixture({resource:'investments',total:1,has_more:false,coverage:[{state:'NOT_AUTHORIZED',record_count:0,page_count:1,observed_at:'2026-10-23'}],items:[{connection_id:'itau-test',state:'PRESENT',observed_at:'2026-10-23',data:{name:'Ativo sintético',balance:0}}]})}));
-  await go('open-finance');await page.locator('.of-resource-card').waitFor();await page.locator('#money-privacy-toggle').click();
+  await go('open-finance');await page.locator('.of-resource-card').waitFor();await togglePrivacy(page);
   assert.match(await page.locator('#of-panel-overview').innerText(),/Valor indisponível/);
   assert.match(await page.locator('#of-panel-overview').innerText(),/Acesso não autorizado/);
   assert.doesNotMatch(await page.locator('#of-panel-overview').innerText(),/R\$ 0,00/);
@@ -260,7 +261,7 @@ test('missing currency never silently becomes BRL or a zero balance',async()=>{
 
 test('foreign card balances require their own currency instead of inheriting BRL',async()=>{
   await page.route('**/api/v2/open-finance/domain?**',route=>route.fulfill({json:typedFixture({resource:'accounts',total:1,has_more:false,coverage:[],items:[{connection_id:'itau-test',state:'PRESENT',observed_at:'2026-10-23',data:{name:'Cartão sintético',currencyCode:'BRL',creditData:{creditLimit:1234.56,balanceForeignCurrency:[{balance:1000},{balance:50,currencyCode:'USD'}]}}}]})}));
-  await go('open-finance');await page.locator('.of-resource-card').waitFor();await page.locator('#money-privacy-toggle').click();
+  await go('open-finance');await page.locator('.of-resource-card').waitFor();await togglePrivacy(page);
   const text=await page.locator('#of-panel-overview').innerText();
   assert.match(text,/Valor indisponível/);assert.match(text,/USD 50,00/);assert.match(text,/R\$ 1\.234,56/);assert.doesNotMatch(text,/R\$ 1\.000,00/);
 });

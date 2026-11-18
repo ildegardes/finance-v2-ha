@@ -29,6 +29,8 @@ jobs:
         run: python -m unittest discover -s tests -p test_open_finance_analytics.py
       - name: Classification, audit, financial flows and migration
         run: python -m unittest discover -s tests -p test_open_finance_classification.py
+      - name: Effective categories, portfolio and schema 14
+        run: python -m unittest discover -s tests -p test_open_finance_034.py
       - name: Authentication
         run: python -m unittest discover -s tests -p test_d08_auth.py
       - name: Output privacy
@@ -43,6 +45,12 @@ jobs:
           echo "FINANCE_SCHEMA10_BASELINE_SRC=$RUNNER_TEMP/schema10/finance-v17/src" >> "$GITHUB_ENV"
       - name: Gate B
         run: python -m unittest discover -s tests -p test_gate_b.py
+      - name: Compatibility and credential protection
+        run: |
+          python -m unittest discover -s tests -p test_addon_config_integration.py
+          python -m unittest discover -s tests -p test_full_coverage.py
+          python -m unittest discover -s tests -p test_gate_c1.py
+          python -m unittest discover -s tests -p test_pluggy_credential_protection.py
       - name: C6R synthetic concurrency
         run: python -m unittest discover -s tests -p test_gate_c6r.py
       - name: C6R sanitized diagnostics negative test
@@ -71,6 +79,7 @@ jobs:
           node --test tests/test_financial_institutions_ui.cjs
           node tests/open_finance_product_concurrency_ui.cjs
           node tests/open_finance_product_races_ui.cjs
+          node tests/open_finance_product_states_ui.cjs
           node tests/open_finance_privacy_attributes_ui.cjs
           node tests/open_finance_overview_ui.cjs
       - name: Browser with WSGI and synthetic SQLite

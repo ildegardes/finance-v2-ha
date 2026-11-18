@@ -1,3 +1,4 @@
+const {selectPrivacy}=require('./privacy-menu.cjs');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -57,7 +58,7 @@ const empty = {
     await page.route('http://synthetic.local/**',async route=>{
       const pathname = new URL(route.request().url()).pathname;
       if(pathname==='/'){
-        const body = '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/open-finance.css"></head><body><main><header class="page-header"><div><h1>Open Finance</h1><p>Dados bancários importados</p></div></header><section id="host"><section id="of-panel-overview"></section></section></main></body></html>';
+        const body = '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/open-finance.css"></head><body><button id="money-privacy-toggle">Privacidade</button><main><header class="page-header"><div><h1>Open Finance</h1><p>Dados bancários importados</p></div></header><section id="host"><section id="of-panel-overview"></section></section></main></body></html>';
         return route.fulfill({contentType:'text/html',body});
       }
       const filename=path.join(web,path.basename(pathname));
@@ -89,9 +90,8 @@ const empty = {
       await page.locator('.of-kpi').first().waitFor();
     }
     await mount('false');
-    const mode=page.getByLabel('Privacidade',{exact:true});
-    assert.equal(await mode.inputValue(),'full');
-    assert.equal(await page.locator('.of-kpi').count(),4);
+    assert.equal(await page.locator('html').getAttribute('data-finance-privacy'),'full');
+    assert.equal(await page.locator('.of-kpi').count(),6);
     assert.equal(await page.locator('[data-position-connection]').count(),2);
     assert.equal(await page.locator('select[name=connection_id] option[value=santander-antigo]').count(),0);
     const assertFull=async()=>{
@@ -101,13 +101,13 @@ const empty = {
     };
     await assertFull();
     assert.deepEqual(await page.evaluate(()=>window.labels),['Renda fixa','Classe não identificada','Classe não informada','Saúde','Livrarias','Efetivada','Categoria não identificada']);
-    await mode.selectOption('visible');
+    await selectPrivacy(page,'visible');
     assert.equal(await page.locator('.of-kpi').first().locator('strong').innerText(),'R$ 19.840,55');
     assert.equal(await page.locator('.of-net-value').innerText(),'R$ 6.726,95');
     assert.equal(await page.locator('.of-column').count(),8);
     assert.equal(await page.locator('.of-allocation-ring').count(),1);
     await page.getByRole('button',{name:'Transferência entre contas próprias'}).click();
-    assert.equal(await page.evaluate(()=>window.navigationResult.category),'pluggy:transfer');
+    assert.equal(await page.evaluate(()=>window.navigationResult.effective_key),'pluggy:transfer');
     assert.equal(await page.evaluate(()=>window.navigationResult.direction),'outgoing');
     await page.getByRole('button',{name:'Renda fixa'}).click();
     assert.equal(await page.evaluate(()=>window.assetResult.type),'FIXED INCOME');
@@ -118,7 +118,7 @@ const empty = {
     await page.getByText('Ver dados do gráfico em texto').click();
     assert.match(await page.locator('.of-chart-alternative').innerText(),/sem registro/);
     await page.getByText('Ver dados do gráfico em texto').click();
-    const labels = await page.locator('#of-panel-overview select,#of-panel-overview input').evaluateAll(nodes=>nodes.every(node=>node.labels.length));
+    const labels = await page.locator('#of-panel-overview select,#of-panel-overview input').evaluateAll(nodes=>nodes.every(node=>node.labels.length||node.getAttribute('aria-label')));
     assert.ok(labels);
     const output=process.env.OF_OVERVIEW_SHOTS;
     if(output)fs.mkdirSync(output,{recursive:true});
@@ -134,18 +134,25 @@ const empty = {
     await page.getByText('Qualidade dos dados',{exact:true}).click();
     await page.locator('[data-position-connection=santander]').getByText('Ver posições e datas').click();
     await capture('cobertura-parcial');
-    await mode.selectOption('masked');
+    await selectPrivacy(page,'masked');
     assert.equal(await page.locator('.of-column').count(),8);
     assert.equal(await page.locator('.of-chart-axis').count(),0);
     assert.doesNotMatch(await page.locator('.of-column').first().getAttribute('title'),/R\$/);
     assert.doesNotMatch(await page.locator('#of-panel-overview').ariaSnapshot(),/R\$/);
     await capture('ocultar-valores');
     await mount();
-    assert.equal(await mode.inputValue(),'masked');
-    await mode.selectOption('full');
+    assert.equal(await page.locator('html').getAttribute('data-finance-privacy'),'masked');
+    await selectPrivacy(page,'full');
     await assertFull();
     await capture('privacidade-total');
-    await page.getByLabel('Período',{exact:true}).selectOption('previous');
+    await page.getByLabel('Período',{exact:true}).selectOption('year');
+    await page.waitForFunction(()=>window.calls.at(-1)?.start==='2026-01-01');
+    assert.equal(await page.evaluate(()=>window.calls.at(-1).end),'2026-10-31');
+    await page.getByRole('button',{name:'Período anterior',exact:true}).click();
+    await page.waitForFunction(()=>window.calls.at(-1)?.start==='2025-01-01');
+    assert.equal(await page.evaluate(()=>window.calls.at(-1).end),'2025-12-31');
+    await page.getByLabel('Período',{exact:true}).selectOption('month');
+    await page.getByRole('button',{name:'Período anterior',exact:true}).click();
     await page.waitForFunction(()=>window.calls.at(-1)?.start==='2026-09-01');
     assert.equal(await page.evaluate(()=>window.calls.at(-1).end),'2026-09-30');
     await page.locator('select[name=connection_id]').selectOption('!history');
@@ -162,7 +169,7 @@ const empty = {
     await page.getByText('Nenhuma conexão ativa neste escopo.').waitFor();
     await page.evaluate(()=>window.delayed[0]());
     assert.equal(await page.locator('[data-position-connection]').count(),0);
-    await mode.selectOption('visible');
+    await selectPrivacy(page,'visible');
     await capture('vazio');
     await page.evaluate(()=>window.strategy='error');
     await page.getByRole('button',{name:'Aplicar',exact:true}).click();

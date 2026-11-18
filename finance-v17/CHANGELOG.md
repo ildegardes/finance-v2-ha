@@ -1,3 +1,10 @@
+# 0.1.34-open-finance.1
+
+- Categoria efetiva unificada entre ranking, movimentações e navegação contextual.
+- Perspectivas econômica e bancária, seis indicadores e posições compactas por instituição e cartão.
+- Controle de privacidade global, navegação mensal e anual, identidades locais e resumo de qualidade.
+- Migration aditiva para schema 14 com snapshots prospectivos dos investimentos.
+
 # 0.1.33-open-finance.1
 
 - Classificação analítica local com regras nativas e personalizadas, revisão manual e auditoria.

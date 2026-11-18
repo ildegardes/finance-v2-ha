@@ -26,29 +26,30 @@ REGISTRY_TABLES = {
 }
 
 
-@lru_cache(maxsize=1)
-def _classification_schema():
+@lru_cache(maxsize=2)
+def _classification_schema(version):
     from .migrations import MIGRATIONS, _digest
-    migration=MIGRATIONS[12]
-    require(migration.version==13 and _digest(migration.path)==migration.expected_sha256,
+    additions=MIGRATIONS[12:version]
+    require(all(_digest(migration.path)==migration.expected_sha256 for migration in additions),
             'UNEXPECTED_OPEN_FINANCE_SCHEMA')
     with closing(sqlite3.connect(':memory:')) as model:
         model.execute('CREATE TABLE of_sync_runs(id TEXT PRIMARY KEY)')
-        model.executescript(migration.path.read_text(encoding='utf8'))
+        for migration in additions:
+            model.executescript(migration.path.read_text(encoding='utf8'))
         return {tuple(row) for row in model.execute(
-            "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name LIKE 'of_classification_%'"
+            "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name LIKE 'of_classification_%' OR name LIKE 'of_portfolio_%'"
         )}
 
 
 def schema_check(c,expected,*,registry=False):
     version=c.execute('PRAGMA user_version').fetchone()[0]
-    require(version in ((12,13) if registry else (11,)),
+    require(version in ((12,13,14) if registry else (11,)),
             'UNSUPPORTED_REGISTRY_SCHEMA' if registry else 'SCHEMA_NOT_11')
     all_tables={r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     of_tables={n for n in all_tables if n.startswith('of_')}
-    classification=_classification_schema() if version==13 else set()
+    classification=_classification_schema(version) if version>=13 else set()
     installed={tuple(row) for row in c.execute(
-        "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name LIKE 'of_classification_%'"
+        "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name LIKE 'of_classification_%' OR name LIKE 'of_portfolio_%'"
     )}
     require(installed==classification,'UNEXPECTED_OPEN_FINANCE_SCHEMA')
     extra={name for kind,name,_,_ in classification if kind=='table'}
@@ -81,7 +82,8 @@ def schema_check(c,expected,*,registry=False):
             if registry and name == 'of_connection_registry' and tuple(fk[2:5]) == ('of_connections','connection_id','id'):
                 continue
             if name in extra and (name,fk[2]) in (
-                ('of_classification_events','of_resource_records'),('of_classification_import_order','of_sync_runs')
+                ('of_classification_events','of_resource_records'),('of_classification_import_order','of_sync_runs'),
+                ('of_portfolio_snapshots','of_sync_runs')
             ):
                 continue
             inbound+=fk[2] in TABLES

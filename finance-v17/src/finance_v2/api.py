@@ -134,7 +134,7 @@ class Application:
     if route.operation.startswith('open_finance_recovery_') and route.write and origin:
      expected_origin=environ.get('wsgi.url_scheme','http')+'://'+environ.get('HTTP_HOST','')
      if origin!=expected_origin and origin not in self.settings.cors_origins:raise HttpError(403,'CSRF_ORIGIN_INVALID','origin is not allowed')
-    body,query=open_finance_http.request(environ,limit=8192 if route.operation.startswith('open_finance_registry_') else 1_000_000,query_limit=24 if route.operation=='open_finance_analytics' else 20)
+    body,query=open_finance_http.request(environ,limit=8192 if route.operation.startswith('open_finance_registry_') else 1_000_000,query_limit=30 if route.operation=='open_finance_analytics' else 20)
     try:payload,status=open_finance_http.dispatch(self,route.operation,identity,body,query)
     except SyncError:raise
     except Exception:raise HttpError(503,'STORAGE_UNAVAILABLE','staging unavailable') from None

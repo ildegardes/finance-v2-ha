@@ -59,7 +59,7 @@ def classification_center(items, group_by='pattern', order='count'):
         label = {'pattern':lambda:normalize(description),
                  'recurring':lambda:re.sub(r'\b[0-9]{4,}\b','…',normalize(description)), 'institution':lambda:row['institution'],
                  'account':lambda:row['account_name'], 'direction':lambda:row['direction'],
-                 'category':lambda:row['category'].get('name')}[group_by]() or 'Sem informação'
+                 'category':lambda:row['effective_category'].get('name')}[group_by]() or 'Sem informação'
         key = (row['connection_id'],row['account_id'] if group_by in ('pattern','recurring','account') else None,row['direction'],label)
         group = groups.setdefault(key,{'label':label,'count':0,'start':row['date'],'end':row['date'],
                                        'institution':row['institution'],'direction':row['direction'],
@@ -85,6 +85,7 @@ def banking_insights(items, bank):
     by_asset = {}
     income_rows = []
     pending = 0
+    automatic_pending = defaultdict(lambda:None)
     for row in items:
         if row['product']!='BANK':
             continue
@@ -99,6 +100,9 @@ def banking_insights(items, bank):
             pending+=1
         buckets[bucket][direction]=(buckets[bucket][direction] or Decimal(0))+amount
         series[(row['date'],bucket,direction)]+=amount
+        if (tag.get('investment')==AUTOMATIC and tag['nature']=='REDEMPTION'
+                and tag['review']=='CONFIRMED' and direction=='incoming' and bucket=='pending'):
+            automatic_pending[direction]=(automatic_pending[direction] or Decimal(0))+amount
         if tag.get('investment')==AUTOMATIC and tag['review']=='CONFIRMED':
             key = {'APPLICATION':'applied','REDEMPTION':'redeemed','INVESTMENT_INCOME':'credited','TAX':'tax',
                    'CHARGE':'charge'}.get(tag['nature'])
@@ -141,7 +145,7 @@ def banking_insights(items, bank):
                   for (day,bucket,direction),value in sorted(series.items())],
         'automatic':{'value':_totals(totals),'counts':dict(automatic_counts),
                      'months':[{'month':month,**_totals(values)} for month,values in sorted(automatic.items())],
-                     'return_state':'NOT_ESTABLISHED'},
+                     'pending':_totals(automatic_pending),'position':None,'return_state':'NOT_ESTABLISHED'},
         'income':{'value':_amount_text(sum(income.values(),Decimal(0))) if income else None,'by_kind':_totals(income),
                   'assets':[{**group,'value':_amount_text(group['value'])} for group in by_asset.values()],
                   'events':income_rows[:300], 'event_count':len(income_rows),
@@ -164,6 +168,7 @@ def masked_card_text(value):
 
 def card_insights(accounts,current,views,currency,parse_amount,today):
     cards = []
+    obligation_keys = []
     for (cid,external),row in accounts.items():
         data = row['data']
         if cid not in current or data.get('type')!='CREDIT' or data.get('currencyCode')!=currency:
@@ -182,14 +187,23 @@ def card_insights(accounts,current,views,currency,parse_amount,today):
         limit = parse_amount(usable.get('limitAmount')) if usable else parse_amount(credit.get('creditLimit'))
         available = parse_amount(usable.get('availableAmount')) if usable and usable.get('availableAmountCurrencyCode')==currency else parse_amount(credit.get('availableCreditLimit'))
         due = civil(credit.get('balanceDueDate'))
+        collection = row.get('last_run_id')
+        identity = usable.get('identificationNumber')
+        explicit = usable and isinstance(identity,str) and bool(identity.strip()) and credit.get('holderType')=='MAIN'
+        obligation_keys.append((cid,identity,collection) if explicit and collection else None)
         cards.append({'connection_id':cid,'account_id':external,'institution':views[cid].institution,
                       'name':masked_card_text(data.get('marketingName') or data.get('name')) or 'Cartão sem nome',
                       'brand':masked_card_text(credit.get('brand')), 'status':status,'holder':credit.get('holderType'),
                       'balance':_amount_text(parse_amount(data.get('balance'))),'used':_amount_text(used),
                       'limit':_amount_text(limit),'available':_amount_text(available),'utilization':_percent(used,limit),
                       'shared_or_unknown':not bool(usable), 'due':due, 'observed_at':row['observed_at']})
-    # Per-card evidence never establishes disjoint lines across connections or banks.
-    used = (cards[0]['used'] if len(cards)==1 else None)
+    used = cards[0]['used'] if len(cards)==1 else None
+    # Unique reported individual obligations in one collection scope support
+    # used-balance aggregation. Credit limits have a separate shared-line policy.
+    if len(cards)>1 and all(obligation_keys) and all(card['used'] is not None for card in cards):
+        contexts = {(cid,run) for cid,_,run in obligation_keys}
+        if len(contexts)==1 and len({identity for _,identity,_ in obligation_keys})==len(cards):
+            used = format(sum((Decimal(card['used']) for card in cards),Decimal(0)),'f')
     next_due = min((card['due'] for card in cards if card['due'] and card['due']>=today),default=None)
     return {'items':cards,'active_count':sum(card['status']=='ACTIVE' for card in cards),
             'count':len(cards),'used':used,'limit':None,'utilization':None,'next_reported_due':next_due,

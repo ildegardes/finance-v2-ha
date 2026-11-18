@@ -15,6 +15,20 @@ class BrowserClassification(unittest.TestCase):
         data=fixture.ClassificationTest('test_automatic_investment_example_and_coverage')
         self.addCleanup(data.doCleanups)
         data.setUp()
+        provider=data.fixture.provider
+        original=provider.send
+        reference='2026-09-25'
+        position=201
+        def send(method,path,*args):
+            status,payload=original(method,path,*args)
+            if path.startswith('/investments?') and status==200:
+                payload['results'][0].update(date=reference,balance=position)
+            return status,payload
+        provider.send=send
+        self.assertEqual(data.fixture.sync()['state'],'SUCCEEDED')
+        reference='2026-10-25'
+        position=235
+        self.assertEqual(data.fixture.sync()['state'],'SUCCEEDED')
         data.write("UPDATE of_connection_registry SET label='Itaú' WHERE connection_id='bank-test'")
         for id,desc,value,direction in [
             ('apply-auto','Aplicação APL APLIC AUT MAIS',10000,'DEBIT'),

@@ -52,6 +52,48 @@ export function installPrivacy(doc=document,win=window){
   try{mode=fromStorage(win.localStorage.getItem(PRIVACY_KEY))}catch{/* Fail closed when storage is unavailable. */}
   const originals=new WeakMap(),attributes=new WeakMap(),inputs=new WeakMap();
   const button=doc.querySelector('#money-privacy-toggle');
+  const menu=button?doc.createElement('div'):null;
+  const paths={visible:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+    masked:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><path d="m3 3 18 18"/>',
+    full:'<path d="M12 2l8 4v6c0 5-5 8-8 10-3-2-8-5-8-10V6z"/><path d="m9 12 2 2 4-4"/>'};
+  const glyph=value=>'<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">'+paths[value]+'</svg>';
+  const descriptions={visible:'Exibir valores e gráficos',masked:'Ocultar valores e manter proporções',full:'Ocultar valores e proporções'};
+  if(menu){
+    const wrapper=doc.createElement('span');wrapper.className='privacy-control';
+    button.replaceWith(wrapper);wrapper.append(button,menu);
+    menu.className='privacy-menu';menu.id='money-privacy-menu';menu.hidden=true;
+    menu.setAttribute('role','menu');menu.setAttribute('aria-label','Privacidade financeira');
+    button.setAttribute('aria-haspopup','menu');button.setAttribute('aria-controls',menu.id);
+    button.setAttribute('aria-expanded','false');
+    for(const [value,name] of Object.entries(PRIVACY_MODES)){
+      const option=doc.createElement('button');option.type='button';option.dataset.privacyMode=value;
+      option.setAttribute('role','menuitemradio');option.tabIndex=-1;
+      option.innerHTML=glyph(value)+'<span><strong>'+name+'</strong><small>'+descriptions[value]+'</small></span>';
+      option.onclick=()=>{setMode(value);closeMenu(true);};
+      menu.append(option);
+    }
+    button.onclick=()=>menu.hidden?openMenu():closeMenu(false);
+    button.onkeydown=event=>{if(event.key==='ArrowDown'){event.preventDefault();openMenu();}};
+    menu.onkeydown=event=>{
+      const options=[...menu.children],index=options.indexOf(doc.activeElement);
+      if(event.key==='Escape'){event.preventDefault();closeMenu(true);return;}
+      if(event.key==='Tab'){closeMenu(true);return;}
+      const indexFor={ArrowDown:(index+1)%options.length,ArrowUp:(index-1+options.length)%options.length,Home:0,End:options.length-1};
+      if(Object.hasOwn(indexFor,event.key)){event.preventDefault();options[indexFor[event.key]].focus();}
+    };
+    doc.addEventListener('pointerdown',event=>{if(!wrapper.contains(event.target))closeMenu(false);});
+  }
+  function openMenu(){
+    menu.hidden=false;
+    button.setAttribute('aria-expanded','true');
+    menu.querySelector('[aria-checked=true]')?.focus();
+  }
+  function closeMenu(focus){
+    if(!menu||menu.hidden)return;
+    menu.hidden=true;
+    button.setAttribute('aria-expanded','false');
+    if(focus)button.focus();
+  }
   function project(current,entry){
     const original=entry&&current===entry.masked?entry.original:current;
     return {original,masked:maskText(original)};
@@ -96,12 +138,13 @@ export function installPrivacy(doc=document,win=window){
     doc.documentElement.dataset.financePrivacy=mode;
     doc.documentElement.dataset.moneyPrivacy=visible?'visible':'hidden';
     if(button){
-      button.setAttribute('aria-pressed',String(visible));
-      button.setAttribute('aria-label',visible?'Ocultar valores monetários':'Exibir valores monetários');
-      button.title=visible?'Ocultar valores':'Exibir valores';
-      button.innerHTML=`<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>${visible?'':'<path d="m3 3 18 18"/>'}</svg>`;
+      button.setAttribute('aria-label','Privacidade: '+PRIVACY_MODES[mode]);
+      button.title=PRIVACY_MODES[mode];
+      button.innerHTML=glyph(mode);
+      for(const option of menu.children)option.setAttribute('aria-checked',String(option.dataset.privacyMode===mode));
     }
     refresh();
+    doc.dispatchEvent(new win.CustomEvent('finance-privacy-changed',{detail:mode}));
     for(const host of doc.querySelectorAll('[data-of-privacy-host]')){
       host.dispatchEvent(new win.CustomEvent('finance-privacy-changed',{detail:mode}));
     }
@@ -113,9 +156,6 @@ export function installPrivacy(doc=document,win=window){
     apply();
   }
   doc.addEventListener('finance-privacy-request',event=>setMode(event.detail));
-  if(button)button.addEventListener('click',()=>{
-    setMode(visible?'full':'visible');
-  });
   // Mutation observers run before rendering: asynchronous screens and dialogs
   // are projected before the next paint. Originals live only in weak references.
   const observer=new win.MutationObserver(refresh);

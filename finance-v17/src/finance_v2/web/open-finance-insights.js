@@ -1,3 +1,4 @@
+import {cardIdentity} from './open-finance-identity.js';
 import {bankMoney,dateBR,privacyMode} from './privacy.js';
 import {countBR,institutionName,statusLabel} from './open-finance-labels.js';
 import {proventNames} from './open-finance-classification-ui.js';
@@ -23,38 +24,40 @@ export function bridgePanel(insights,amount,esc){
 
 export function cardPanel(cards,amount,mode,esc){
   if(!cards)return '';
-  const showRatio=mode!=='full';
   const list=cards.items.map((card,index)=>{
-    const available=card.available!=null?'<div><dt>Limite disponível informado</dt><dd>'+amount(card.available)+'</dd></div>':'';
-    return '<li class="of-insight-card-row"><div><strong>'+esc(card.name)+'</strong><small>'+esc(institutionName(card.institution))+' · '+
-      esc(card.brand||'Bandeira não informada')+' · '+esc(statusLabel(card.status))+
-      (card.holder==='ADDITIONAL'?' · Adicional':card.holder==='MAIN'?' · Titular':'')+'</small></div><span>'+amount(card.balance)+'</span>'+
-      '<details><summary>Limite e posição</summary><dl class="of-class-fields"><div><dt>Saldo informado</dt><dd>'+amount(card.balance)+'</dd></div>'+
-      '<div><dt>Saldo utilizado identificado</dt><dd>'+amount(card.used)+'</dd></div><div><dt>Limite informado</dt><dd>'+amount(card.limit)+'</dd></div>'+
-      available+(showRatio&&card.utilization!=null?'<div><dt>Utilização individual</dt><dd>'+esc(percent.format(Number(card.utilization)))+'%</dd></div>':'')+
-      '<div><dt>Vencimento informado</dt><dd>'+esc(date(card.due))+'</dd></div><div><dt>Última observação</dt><dd>'+esc(date(card.observed_at))+'</dd></div></dl></details>'+
-      '<button type="button" class="of-link" data-overview-card="'+index+'">Ver cartão</button></li>';
+    const identity=cardIdentity(card,esc);
+    const suffix=identity.tail&&mode!=='full'?' · •••• '+esc(identity.tail):'';
+    return '<li><button type="button" class="of-card-compact" data-overview-card="'+index+'">'+identity.mark+
+      '<span><strong>'+esc(identity.label)+'</strong><small>'+esc(institutionName(card.institution))+
+      (identity.network?' · '+esc(identity.network):'')+suffix+'</small></span><span><strong>'+amount(card.used??card.balance)+'</strong><small>'+
+      (card.used!=null?'Utilizado':'Saldo informado')+'</small></span></button></li>';
   }).join('');
-  return '<section class="of-summary-card of-card-insight"><div class="of-section-heading"><h3>Cartões de crédito</h3>'+
-    '<button type="button" class="of-link" data-all-overview-cards>Ver todos os cartões</button></div><p>'+
-    esc(countBR.format(cards.active_count))+' com situação ativa informada'+
-    (cards.active_count!==cards.count?' · '+esc(countBR.format(cards.count-cards.active_count))+' sem situação confirmada':'')+'</p>'+
-    (cards.used!=null?'<p>Saldo utilizado identificado <strong>'+amount(cards.used)+'</strong></p>':'')+
-    (cards.next_reported_due?'<p>Próximo vencimento informado '+esc(date(cards.next_reported_due))+'</p>':'')+
-    (list?'<ul class="of-category-list">'+list+'</ul><p>Limite consolidado indisponível sem comprovação de linhas distintas. Compras e faturas têm valores próprios na aba Cartões.</p>':'<p>Nenhum cartão encontrado neste escopo.</p>')+'</section>';
+  return '<section class="of-summary-card of-card-insight"><div class="of-section-heading"><div><h3>Cartões de crédito</h3><p>'+
+    esc(countBR.format(cards.active_count))+' ativos informados</p></div><button type="button" class="of-link" data-all-overview-cards>Ver todos</button></div>'+
+    (cards.used!=null?'<p>Saldo utilizado consolidado <strong>'+amount(cards.used)+'</strong></p>':'')+
+    (list?'<ul class="of-compact-cards">'+list+'</ul>':'<p>Nenhum cartão encontrado neste escopo.</p>')+'</section>';
 }
 
 function proportions(rows,mode,amount,esc){
   if(mode==='full')return '<p class="of-chart-placeholder">Valores e proporções ocultos em privacidade total.</p>';
   if(!rows.length)return '<p class="of-chart-placeholder">Nenhum rendimento identificado neste período.</p>';
   const max=rows.reduce((found,row)=>Math.max(found,Number(row.value)),0);
-  return '<ul class="of-ranking">'+rows.map(row=>'<li><div><span>'+esc(row.label)+'</span><strong>'+amount(row.value)+'</strong></div>'+
+  return '<ul class="of-ranking">'+rows.map(row=>'<li><div>'+(row.key?'<button type="button" class="of-link" data-provent="'+esc(row.key)+'">'+esc(row.label)+'</button>':'<span>'+esc(row.label)+'</span>')+'<strong>'+amount(row.value)+'</strong></div>'+
     '<span class="of-ranking-track" aria-hidden="true"><i style="width:'+(max>0?100*Number(row.value)/max:0)+'%"></i></span></li>').join('')+'</ul>';
 }
 
 export function incomePanel(insights,amount,mode,esc){
   if(!insights)return '';
-  const rows=Object.entries(insights.income.by_kind).map(([key,value])=>({label:proventNames[key]||key,value}));
+  const automatic=insights.automatic;
+  const auto=automatic&&Object.keys(automatic.counts).length?'<details class="of-automatic-card"><summary>Aplic Aut Mais</summary><ul class="of-category-list">'+
+    Object.entries(volumeNames).map(([key,label])=>'<li>'+
+      (key==='capital_flow'?'<span>'+label+'</span>':'<button type="button" class="of-link" data-auto-category="'+key+'">'+label+'</button>')+
+      '<strong>'+amount(automatic.value[key])+'</strong>'+
+      (automatic.counts[key]?'<small>'+esc(countBR.format(automatic.counts[key]))+' movimentos</small>':'')+'</li>').join('')+
+      '<li><button type="button" class="of-link" data-auto-category="pending">Resgates pendentes</button><strong>'+amount(automatic.pending?.incoming)+'</strong></li>'+
+      '<li><span>Posição informada do produto</span><strong>'+amount(automatic.position)+'</strong></li></ul></details>':'';
+  const monthlyNote=insights.income.comparison==null?'':'<p>Diferença de rendimentos frente ao período anterior '+amount(insights.income.comparison)+'.</p>';
+  const rows=Object.entries(insights.income.by_kind).map(([key,value])=>({key,label:proventNames[key]||key,value}));
   return '<section class="of-summary-card of-income-insight"><div class="of-section-heading"><div><h3>Rendimentos de investimentos</h3>'+
     '<p>Créditos bancários identificados no período</p></div><button type="button" class="of-link" data-open-income>Ver rendimentos e proventos</button></div>'+
     '<strong class="of-net-value">'+amount(insights.income.value)+'</strong>'+proportions(rows,mode,amount,esc)+
@@ -109,7 +112,7 @@ export function mountInvestmentIncome({host,api,esc,navigation,getScope}){
       '<h4>Por ativo</h4>'+(assetsHtml?'<ul class="of-category-list">'+assetsHtml+'</ul>':'<p>Nenhum provento identificado neste período.</p>')+
       '<details><summary>Créditos registrados</summary><p>Até 300 registros recentes desta consulta.</p><ul class="of-category-list">'+events+'</ul></details>'+
       '<details><summary>Aplic Aut Mais</summary><ul class="of-category-list">'+autTotals+'</ul>'+
-      '<h4>Histórico mensal da aplicação automática</h4><ul class="of-category-list">'+autMonths+'</ul>'+
+      '<p>Posição do produto '+amount(automatic.position)+' · Resgates pendentes '+amount(automatic.pending?.incoming)+'</p><h4>Histórico mensal da aplicação automática</h4><ul class="of-category-list">'+autMonths+'</ul>'+
       '<p>A rentabilidade e a composição dos resgates dependem de dados adicionais.</p></details>';
   }
   async function load(){
