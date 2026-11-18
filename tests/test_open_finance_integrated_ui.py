@@ -1,5 +1,6 @@
 """Real WSGI and disposable synthetic SQLite, never production data."""
 import subprocess
+import os
 from dataclasses import replace
 import threading
 import unittest
@@ -103,7 +104,7 @@ class BrowserIntegration(unittest.TestCase):
             server=make_server('127.0.0.1',0,Application(case.settings),handler_class=Quiet)
             thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
             try:
-                proc=subprocess.run(['node','tests/open_finance_integrated_ui.cjs',f'http://127.0.0.1:{server.server_port}'],capture_output=True,text=True,timeout=40)
+                proc=subprocess.run(['node','tests/open_finance_integrated_ui.cjs',f'http://127.0.0.1:{server.server_port}'],capture_output=True,text=True,timeout=120 if os.environ.get('OF_AUDIT_SHOTS') else 40)
                 self.assertEqual(proc.returncode,0,proc.stderr)
                 self.assertIn('PASS:',proc.stdout)
             finally:

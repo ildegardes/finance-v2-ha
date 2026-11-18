@@ -43,6 +43,15 @@ jobs:
         run: python -m unittest discover -s tests -p test_gate_b.py
       - name: C6R synthetic concurrency
         run: python -m unittest discover -s tests -p test_gate_c6r.py
+      - name: C6R 100-iteration synthetic stress
+        run: python tests/c6r_stress_campaign.py --iterations 100 > c6r-stress.jsonl
+      - name: Preserve C6R stress evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: c6r-stress-synthetic
+          path: c6r-stress.jsonl
+          if-no-files-found: ignore
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
