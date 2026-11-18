@@ -1,4 +1,8 @@
-# Finance V17 — 0.1.30-open-finance.1
+# Finance V17 — 0.1.31-open-finance.1
+
+Antes de atualizar pelo catálogo do Home Assistant, crie um backup do add-on e confirme que pode recuperá-lo. Depois da atualização, confirme a versão, consulte os logs e verifique a saúde em /api/v2/health. Percorra as seis abas, compare as instituições ativas e arquivadas com o histórico esperado e teste o controle de ocultação de valores.
+
+Se precisar reverter, pare o add-on e preserve um backup separado do estado pós-atualização. Compare o schema e os dados gravados após a atualização antes de restaurar um backup anterior. Valide a versão e os registros recuperados antes de retomar a operação.
 
 Os filtros de instituição do Open Finance oferecem conexões ativas. A opção **Todas** mantém o escopo histórico e **Instituições Financeiras** continua exibindo conexões arquivadas para consulta e auditoria.
 

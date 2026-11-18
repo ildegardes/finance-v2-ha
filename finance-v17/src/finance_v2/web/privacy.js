@@ -58,7 +58,8 @@ export function installPrivacy(doc=document,win=window){
     for(let node=walker.nextNode();node;node=walker.nextNode()){
       if(node.parentElement?.closest('script,style,textarea'))continue;
       const entry=project(node.data,originals.get(node));
-      if(node.parentElement?.closest('[data-private-financial]')&&entry.original.trim())entry.masked=MASK;
+      const privateField=node.parentElement?.closest('[data-private-financial]');
+      if(privateField&&entry.original.trim())entry.masked=privateField.getAttribute('data-private-mask')==='neutral'?'••••••':MASK;
       const next=visible?entry.original:entry.masked;
       if(entry.original!==entry.masked)originals.set(node,entry);else originals.delete(node);
       if(node.data!==next)node.data=next;
@@ -67,7 +68,10 @@ export function installPrivacy(doc=document,win=window){
       let records=attributes.get(element);if(!records){records={};attributes.set(element,records)}
       for(const name of ['title','aria-label','aria-valuetext']){
         if(!element.hasAttribute(name)){delete records[name];continue}
-        const entry=project(element.getAttribute(name),records[name]);records[name]=entry;
+        const entry=project(element.getAttribute(name),records[name]);
+        const privateField=element.closest('[data-private-financial]');
+        if(privateField&&entry.original.trim())entry.masked=privateField.getAttribute('data-private-mask')==='neutral'?'••••••':MASK;
+        records[name]=entry;
         const next=visible?entry.original:entry.masked;
         if(element.getAttribute(name)!==next)element.setAttribute(name,next);
       }
