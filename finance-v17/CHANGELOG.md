@@ -1,3 +1,10 @@
+# 0.1.31-open-finance.1
+
+- Open Finance com visão geral, movimentações, cartões, investimentos, crédito e conexões.
+- Consolidados e filtros por período, moeda e instituição, com indicação de cobertura e frescor quando disponíveis.
+- Proteção visual de valores e navegação contextual entre registros relacionados.
+- Schema 12 preservado. Homologação operacional pelo proprietário pendente.
+
 # 0.1.30-open-finance.1
 
 - Filtros operacionais do Open Finance mostram apenas conexões ativas. Todas mantém o histórico e a administração continua exibindo conexões arquivadas.
