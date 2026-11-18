@@ -1,3 +1,4 @@
+import {bankMark} from './open-finance-identity.js';
 import {mountInvestmentIncome} from './open-finance-insights.js';
 // Imported bank staging only. No provider calls or official financial writes.
 import {createQueryGeneration} from './query-generation.js';
@@ -62,6 +63,7 @@ export function createOpenFinance({api,view,heading,esc,navigation=null,state={}
     const overview=state.overview??={};
     const incomes=mountInvestmentIncome({host,api,esc,navigation,getScope:()=>overview});
     mountAnalyticsOverview({host,api,esc,catalog,navigation,state:overview,today:today?.(),
+      onPeriod:filters=>{for(const key of ['start','end','currency'])analyticsState[key]=filters[key];},
       onNavigate:context=>{flow.update(context,{load:selectedTab==='flow'});selectTab('flow',true)},
       onAssets:context=>{domains.updateAssets(context);selectTab('assets',true);if(context.income)incomes.open();},
       onCards:context=>{domains.updateCard(context);selectTab('cards',true);},
@@ -108,7 +110,7 @@ export function connectionCards(catalog,esc){
   return `<div class="of-connection-grid">${catalog.connections.map(c=>{
     const accounts=catalog.accounts.filter(a=>a.connection_id===c.id),banks=accounts.filter(a=>a.type==='BANK').length,cards=accounts.filter(a=>a.type==='CREDIT').length;
     const run=catalog.runs.find(r=>r.connection_id===c.id),state=c.historical?'Histórica':c.enabled?'Habilitada':'Desabilitada';
-    return `<article class="of-connection-card" data-connection-id="${esc(c.id)}"><h3>${esc(connectionLabel(c,catalog.connections))}</h3><span class="status">${esc(state)}</span><details><summary>Identificação original</summary><p>${esc(c.institution)} · ${esc(c.id)}</p></details><p>${banks} ${banks===1?'conta':'contas'} · ${cards} ${cards===1?'cartão':'cartões'} no catálogo</p><p>${run?`Última sincronização registrada: ${esc(dateBR(run.started_at))} · ${esc(runStateLabel(run.state))}`:'Nenhuma sincronização registrada.'}</p><div data-connection-coverage><small>Cobertura ainda não consultada.</small></div>${c.enabled&&!c.historical?`<button type="button" class="quiet" data-connection-diagnostic="${esc(c.id)}">Consultar diagnóstico</button>`:'<small>Histórico preservado; seleção operacional indisponível.</small>'}</article>`;
+    return `<article class="of-connection-card" data-connection-id="${esc(c.id)}"><h3>${bankMark(c.institution,esc)}${esc(connectionLabel(c,catalog.connections))}</h3><span class="status">${esc(state)}</span><details><summary>Identificação original</summary><p>${esc(c.institution)} · ${esc(c.id)}</p></details><p>${banks} ${banks===1?'conta':'contas'} · ${cards} ${cards===1?'cartão':'cartões'} no catálogo</p><p>${run?`Última sincronização registrada: ${esc(dateBR(run.started_at))} · ${esc(runStateLabel(run.state))}`:'Nenhuma sincronização registrada.'}</p><div data-connection-coverage><small>Cobertura ainda não consultada.</small></div>${c.enabled&&!c.historical?`<button type="button" class="quiet" data-connection-diagnostic="${esc(c.id)}">Consultar diagnóstico</button>`:'<small>Histórico preservado; seleção operacional indisponível.</small>'}</article>`;
   }).join('')}</div>`;
 }
 

@@ -1,14 +1,32 @@
-
-# Finance V17 0.1.33-open-finance.1
+# Finance V17 0.1.34-open-finance.1
 
 ## Atualização e reversão
 
-1. Faça um backup recuperável do add-on e confirme que contém o banco e as configurações em /data. Registre a versão instalada.
-2. Atualize o catálogo do repositório no Supervisor e instale a versão 0.1.33-open-finance.1. O add-on executa a migration aditiva 013 na inicialização.
-3. Confira os logs e o endpoint /api/v2/health. O estado esperado é `ok` e `migrations.current_version=13`. Compare instituições ativas, histórico arquivado e lançamentos oficiais.
-4. Para reverter, pare o add-on, preserve separadamente o backup posterior à atualização e restaure o backup de schema 12 anterior à atualização com a versão correspondente. O código 0.1.32 exige schema 12. A migração foi projetada para avançar do 12 para o 13.
+Faça um backup recuperável do add-on antes da atualização. Recarregue o catálogo e instale a versão 0.1.34-open-finance.1 pelo Supervisor. A inicialização aplica a migration aditiva 014 e o healthcheck em `/api/v2/health` deve indicar `migrations.current_version=14`. A configuração e os dados permanecem em `/data`.
 
-O slug, as portas 8766 e 8767, as opções, a autenticação, as credenciais Pluggy e o diretório /data foram preservados. A homologação do Supervisor, a conferência com os dados da instalação e o teste de leitor de tela ficam com o proprietário.
+Para retornar à 0.1.33, preserve um backup separado com os dados posteriores à atualização e restaure o backup de schema 13 anterior à instalação. A versão anterior exige seu próprio schema. As migrações 001 a 013 continuam sendo as já distribuídas.
+
+## Perspectivas e categorias
+
+- A visão **Econômica** usa receitas e despesas bancárias identificadas, pelo período da data bancária. A visão **Bancária** usa todos os movimentos efetivados no escopo. A decomposição separa capital, transferências internas, liquidações e registros em revisão.
+- O ranking e a listagem usam a mesma categoria efetiva. As categorias Finance V17 usam chave derivada do texto canônico da classificação, independente da tradução na interface. Categorias do provedor mantêm sua chave de origem. A categoria original e a evidência continuam disponíveis nos detalhes.
+- Pagamentos de fatura ficam no grupo de liquidações. A cobertura das compras, estornos e parcelamentos de cartões ainda é analisada separadamente. A mistura de data da compra, liquidação bancária e competência exigiria evidência temporal e reconciliação adicionais.
+- Aplicações e resgates de principal confirmados aparecem como movimentos patrimoniais. Resgates com composição desconhecida permanecem em revisão. O Aplic Aut Mais tem resumo de volumes, créditos, tributos e registros correspondentes. A posição do produto depende de identificação explícita no provedor.
+- Rendimentos são somados pelos créditos bancários classificados, com cada crédito em uma categoria de provento. A comparação usa janelas de mesma duração quando os dois intervalos têm cobertura datada e classificação econômica suficiente.
+
+## Posições, cartões e histórico
+
+- Saldo, investimentos e cartões mostram as últimas posições conhecidas. O período controla os movimentos. As datas financeiras e as observações ficam nos detalhes da posição.
+- O saldo utilizado pode ser consolidado para obrigações individuais de titulares, com identificadores distintos, mesma moeda e mesma coleta da conexão. Limites compartilhados e faturas ficam separados.
+- O histórico de revisões anterior a esta versão guarda mudanças de registros. A migration 014 cria snapshots prospectivos. Apenas coletas bem-sucedidas com cobertura de investimentos verificada e posições válidas geram registros. Ausência de posição e falhas preservam a última observação registrada.
+- A série exige pelo menos duas datas financeiras comparáveis na mesma moeda e conexão. Quando há várias conexões, selecione uma para evitar sobreposição. A variação inclui os efeitos de aportes, resgates e mudanças de mercado. Os pontos representam observações reais.
+- Em **Qualidade dos dados**, disponibilidade dos recursos, completude temporal, classificação e disponibilidade de histórico ficam separadas. Uma coleção retornada integralmente pode ter um intervalo financeiro desconhecido.
+
+## Privacidade e identidades
+
+O ícone ao lado de **Sair** define a privacidade da aplicação. **Valores visíveis** mostra valores e gráficos. **Ocultar valores** mantém as proporções. **Privacidade total** oculta também gráficos e rankings financeiros. A preferência segue o perfil do navegador, com sincronização entre abas da mesma origem. A proteção visual atua sobre a apresentação dos dados já autorizados.
+
+As identidades locais são monogramas e silhuetas genéricas desenhados no projeto em CSS. Os nomes comerciais identificam a instituição, o produto e a bandeira. Ícones não oficiais usam cores e iniciais, sem dependência de arquivos de marca licenciados ou serviços externos. Produtos desconhecidos recebem a mesma silhueta genérica. A homologação no Supervisor e o teste com leitor de tela ficam com o proprietário.
 
 ## Classificação financeira
 
@@ -22,14 +40,7 @@ Uma regra prospectiva vale para novas identidades importadas por coletas iniciad
 
 Para aplicar ao histórico, selecione uma regra e **Simular histórico**. Revise intervalo, quantidade, conflitos, exceções protegidas e amostra. Marque a confirmação para aplicar. Uma mudança concorrente relevante invalida a simulação. Em **Auditoria e reversão**, a reversão restaura somente decisões do lote que ainda estão vigentes e preserva alterações posteriores independentes.
 
-## Fluxo, cartões e proventos
-
-- **Fluxo bancário bruto** mantém os movimentos importados. **Fluxo ajustado** usa as receitas e despesas bancárias conhecidas. A ponte mostra capital, liquidações, transferências internas e registros em revisão. O resultado é restrito à janela bancária e à cobertura indicada.
-- Pagamentos de cartão reconhecidos continuam sendo liquidações. A existência de uma descrição de pagamento não estabelece a fatura específica. Compras, faturas, estornos e pagamentos permanecem separados.
-- **Cartões de crédito** exibe última posição, saldo e limites informados. Um limite individual compatível pode exibir utilização. O estado de linhas compartilhadas pode impedir a consolidação. `balance`do cartão continua rotulado como saldo informado, e valores de fatura ficam na aba Cartões.
-- **Rendimentos e proventos** usa créditos bancários identificados. O uso dessa fonte única evita somar a mesma operação de outro recurso financeiro à estatística. Um código extraído da descrição tem estado sugerido. O proprietário pode registrar o código na classificação manual, sem presumir vínculo com a posição atual.
-- **Aplic Aut Mais** separa aplicação, resgate, crédito de rendimento e tributos reconhecidos. Resgates sem decomposição permanecem em revisão econômica. O resumo mensal apresenta volumes e créditos; a rentabilidade e o saldo atual dependem de dados adicionais.
-- **Privacidade total** oculta valores, percentuais, eixos e proporções financeiras. A autenticação e a autorização continuam exigidas pelas rotas.
+## Referência operacional de versões anteriores
 
 As seis áreas consultam projeções tipadas do staging, sem criar lançamentos oficiais.
 Contas e cartões navegam para movimentos, faturas e referências de extratos;

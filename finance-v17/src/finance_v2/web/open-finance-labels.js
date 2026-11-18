@@ -7,7 +7,7 @@ const investments=new Map([
   ['COE','COE'],['SAVINGS','Poupança'],['DEBENTURE','Debêntures'],['FII','Fundos imobiliários'],
 ]);
 const categories=new Map([
-  ['SAME PERSON TRANSFER','Transferência entre contas próprias'],['KINDERGARTEN','Educação infantil'],
+  ['INVESTMENTS','Investimentos'],['INVESTMENT','Investimentos'],['SAME PERSON TRANSFER','Transferência entre contas próprias'],['KINDERGARTEN','Educação infantil'],
   ['BOOKSTORE','Livrarias'],['SERVICES','Serviços'],['ELECTRICITY','Energia elétrica'],
   ['FOOD','Alimentação'],['RESTAURANTS','Restaurantes'],['GROCERIES','Supermercado'],
   ['SHOPPING','Compras'],['TRANSPORTATION','Transporte'],['HEALTH','Saúde'],['PHARMACY','Farmácia'],

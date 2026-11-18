@@ -223,6 +223,10 @@ class OpenFinanceService:
             if row and row['lease_token']==token:
                 if row['lease_until']<=epoch:error='LEASE_LOST'
                 state='INTERRUPTED' if interrupted else 'FAILED' if error else 'SUCCEEDED'
+                if state=='SUCCEEDED':
+                    from .open_finance_analytics import _amount
+                    from .open_finance_portfolio import capture_snapshot
+                    capture_snapshot(c,config.id,run_id,_amount)
                 c.execute('UPDATE of_sync_runs SET state=?,finished_at=?,error_code=? WHERE id=? AND state=\'RUNNING\'',
                           (state,stamp,error,run_id))
                 c.execute('UPDATE of_connections SET sync_state=?,lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?',

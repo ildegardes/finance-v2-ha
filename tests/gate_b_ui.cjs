@@ -1,3 +1,4 @@
+const {selectPrivacy,togglePrivacy}=require('./privacy-menu.cjs');
 // Actual candidate DTOs, real browser, synthetic API responses; zero external connections.
 const {test,before,after,beforeEach,afterEach}=require('node:test');
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
@@ -54,8 +55,8 @@ test('all domains use typed components, private by default, no JSON dump or iden
 test('17 positions show stale cache, quantities/rates hidden and navigation scopes movements',async()=>{
  const panel=await select('assets','investments');assert.equal(await panel.locator('.of-resource-card').count(),17);
  assert.match(await panel.innerText(),/Desatualização informada na coleta de origem deste conteúdo/);assert.match(await panel.innerText(),/Execução parcial/);
- await page.locator('#money-privacy-toggle').click();assert.match(await panel.innerText(),/2,123456/);assert.match(await panel.innerText(),/R\$ 1\.000,00/);
- await page.locator('#money-privacy-toggle').click();await panel.getByRole('button',{name:'Ver Movimentos de investimentos'}).first().click();
+ await togglePrivacy(page);assert.match(await panel.innerText(),/2,123456/);assert.match(await panel.innerText(),/R\$ 1\.000,00/);
+ await togglePrivacy(page);await panel.getByRole('button',{name:'Ver Movimentos de investimentos'}).first().click();
  await panel.locator('[data-domain-kind=INVESTMENT_MOVEMENT]').waitFor();
  const last=requests.filter(r=>r.path.endsWith('/domain')).at(-1);assert.equal(last.query.parent_id,'position-0');assert.equal(last.query.connection_id,'bank-test');assert.equal(last.query.resource,'investment_transactions');
  assert.equal(await panel.locator('[data-private-financial]').first().innerText(),'R$ ••••••');
@@ -68,7 +69,7 @@ test('cards navigate bills, exact relationships distinguish pending without bill
 });
 test('statements are metadata only; loan and consent fields use provider data without new writes',async()=>{
  const statements=await select('overview','statements');assert.match(await statements.innerText(),/download de documento não habilitado/);assert.equal(await statements.locator('a[download]').count(),0);
- const credit=await select('credit','loans');await page.locator('#money-privacy-toggle').click();assert.match(await credit.innerText(),/R\$ 500,00/);assert.match(await credit.innerText(),/2 \(unidade informada pelo provedor\)/);
+ const credit=await select('credit','loans');await togglePrivacy(page);assert.match(await credit.innerText(),/R\$ 500,00/);assert.match(await credit.innerText(),/2 \(unidade informada pelo provedor\)/);
  const connection=await select('connections','consents');assert.match(await connection.innerText(),/Associação validada na última consulta/);assert.match(await connection.innerText(),/não comprova autorização atual/);
 });
 test('empty, unsupported, failed, interrupted and unqueried collections remain distinguishable',async()=>{

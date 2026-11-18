@@ -7,3 +7,13 @@ html[data-money-privacy="hidden"] .privacy-field-mask{display:flex;position:abso
 html[data-money-privacy="hidden"] [data-money-input]{color:transparent;caret-color:transparent}
 .app-header>.actions{flex-wrap:nowrap}
 @media(max-width:420px){.brand strong{font-size:.85rem}.brand-mark{display:none}.app-header{gap:.4rem}.app-header>.actions{gap:.25rem}}
+
+.privacy-control{position:relative;display:inline-flex}
+.privacy-menu[hidden]{display:none}
+.privacy-menu{position:absolute;right:0;top:calc(100% + .45rem);z-index:20;width:min(18rem, calc(100vw - 1.55rem));padding:.35rem;background:#fff;color:#14352c;border:1px solid #c8ddd3;border-radius:.85rem;box-shadow:0 14px 36px #12352b26}
+.privacy-menu button{display:flex;align-items:center;gap:.65rem;text-align:left;width:100%;padding:.6rem;background:#fff;color:#15382d;border:0;border-radius:.58rem}
+.privacy-menu button:hover,.privacy-menu [aria-checked=true]{background:#e9f4ee;color:#13453a}
+.privacy-menu strong,.privacy-menu small{display:block}
+.privacy-menu small{font-size:.78rem;color:#37584f}
+.privacy-menu svg{fill:none;stroke:currentColor;stroke-width:1.7;flex:none}
+html[data-finance-privacy=full] :is(.positive,.negative){color:inherit}

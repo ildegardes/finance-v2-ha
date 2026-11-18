@@ -297,12 +297,13 @@ class ClassificationTest(unittest.TestCase):
 class ClassificationMigrationTest(unittest.TestCase):
     def test_schema_12_snapshot_migrates_idempotently_and_failed_ddl_rolls_back(self):
         with tempfile.TemporaryDirectory() as path:
-            all_migrations=migrations.MIGRATIONS
+            all_migrations=migrations.MIGRATIONS[:13]
             legacy=fixtures.CoverageTests(methodName='test_all_products_projection_history_and_financial_preservation')
             self.addCleanup(legacy.doCleanups)
             with patch.object(migrations,'MIGRATIONS',all_migrations[:-1]):
                 legacy.setUp()
-                legacy.sync()
+                with patch('finance_v2.open_finance_portfolio.capture_snapshot'):
+                    legacy.sync()
             db=legacy.db
             with closing(connect(db)) as c:
                 c.execute("INSERT INTO categories(name,normalized_name,active) VALUES ('Exemplo sintético','exemplo sintetico',1)")
@@ -320,8 +321,9 @@ class ClassificationMigrationTest(unittest.TestCase):
             with closing(connect(db)) as c:
                 self.assertEqual(c.execute('PRAGMA user_version').fetchone()[0],12)
                 self.assertEqual(c.execute("SELECT count(*) FROM sqlite_master WHERE name LIKE 'of_classification_%'").fetchone()[0],0)
-            self.assertEqual(migrations.migrate(db),[13])
-            self.assertEqual(migrations.migrate(db),[])
+            with patch.object(migrations,'MIGRATIONS',all_migrations):
+                self.assertEqual(migrations.migrate(db),[13])
+                self.assertEqual(migrations.migrate(db),[])
             with closing(connect(db)) as c:
                 self.assertEqual(c.execute('PRAGMA user_version').fetchone()[0],13)
                 self.assertEqual(c.execute('PRAGMA integrity_check').fetchone()[0],'ok')

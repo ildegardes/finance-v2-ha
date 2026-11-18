@@ -15,6 +15,20 @@ class BrowserClassification(unittest.TestCase):
         data=fixture.ClassificationTest('test_automatic_investment_example_and_coverage')
         self.addCleanup(data.doCleanups)
         data.setUp()
+        provider=data.fixture.provider
+        original=provider.send
+        reference='2026-09-25'
+        position=201
+        def send(method,path,*args):
+            status,payload=original(method,path,*args)
+            if path.startswith('/investments?') and status==200:
+                payload['results'][0].update(date=reference,balance=position)
+            return status,payload
+        provider.send=send
+        self.assertEqual(data.fixture.sync()['state'],'SUCCEEDED')
+        reference='2026-10-25'
+        position=235
+        self.assertEqual(data.fixture.sync()['state'],'SUCCEEDED')
         data.write("UPDATE of_connection_registry SET label='Itaú' WHERE connection_id='bank-test'")
         for id,desc,value,direction in [
             ('apply-auto','Aplicação APL APLIC AUT MAIS',10000,'DEBIT'),
@@ -29,7 +43,7 @@ class BrowserClassification(unittest.TestCase):
         for n in range(12):
             data.tx(f'pay-{n:02}','Crédito de empregador fictício','2015.55')
         data.label('shop','EXPENSE','Mercado')
-        data.write("""UPDATE of_resource_records SET payload_json=json_set(payload_json,'$.name','Cartão sintético 4111 2222 3333 4444',
+        data.write("""UPDATE of_resource_records SET payload_json=json_set(payload_json,'$.name','Itaú Personnalité The One Mastercard 4111 2222 3333 4444',
             '$.creditData.status','ACTIVE','$.creditData.creditLimit',9999.00) WHERE resource='accounts' AND external_id='account-CREDIT'""")
         data.fixture.no_network.stop()
         server=make_server('127.0.0.1',0,Application(data.settings),handler_class=Quiet)

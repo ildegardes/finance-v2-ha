@@ -41,6 +41,7 @@ MIGRATIONS = (
     Migration(11, "open_finance_domain_links", MIGRATIONS_DIR / "011_open_finance_domain_links.sql", "8fcee297fb2d8e9ccee6b98c154d7f147ab83d48d991d9e1113819128a5dda65"),
     Migration(12, "open_finance_registry", MIGRATIONS_DIR / "012_open_finance_registry.sql", "33b959d3c16eeb7bbd3559b0d8fa53dbc30a5d942742d7fa629f64bdaab1fc86"),
     Migration(13, "open_finance_classification", MIGRATIONS_DIR / "013_open_finance_classification.sql", "58b1e585ab73cb27f77bb5b43311092645a84e2b45b84469c9e3179150e2745a"),
+    Migration(14, "open_finance_portfolio", MIGRATIONS_DIR / "014_open_finance_portfolio.sql", "e3a1a67be487f2898686ce3d1cd9f68534ca7710aac83e32b8f15d84da9996de"),
 )
 
 
