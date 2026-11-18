@@ -148,6 +148,67 @@ class AnalyticsTests(fixtures.CoverageTests):
             self.assertEqual(card['items'][0]['economic_classification'], 'NOT_ESTABLISHED')
         self.assertEqual(self.financial(), before)
 
+    def test_persisted_disable_with_legacy_config_keeps_history_out_of_budget_and_current_totals(self):
+        self.sync()
+        with closing(connect(self.db)) as c:
+            c.execute("UPDATE of_connections SET enabled=0 WHERE id='bank-test'")
+            c.commit()
+            before = list(c.iterdump())
+            current = analytics(c, self.settings, {})
+            self.assertEqual(current['institutions'], [])
+            self.assertEqual(current['coverage'], [])
+            self.assertEqual(current['series'], [])
+            self.assertIsNone(current['positions']['accounts']['value'])
+            historical = analytics(c, self.settings, {'history':['1'], 'connection_id':['bank-test']})
+            self.assertGreater(historical['total'], 0)
+            self.assertFalse(historical['institutions'][0]['current'])
+            self.assertIsNone(historical['positions']['accounts']['value'])
+            self.assertEqual(list(c.iterdump()), before)
+
+    def test_current_positions_use_one_observation_and_respect_explicit_closure(self):
+        self.sync()
+        with closing(connect(self.db)) as c:
+            source = c.execute("SELECT * FROM of_resource_records WHERE resource='accounts' AND external_id='account-BANK'").fetchone()
+            base = json.loads(source['payload_json'])
+            c.execute("""INSERT INTO of_resource_revisions
+                (connection_id,resource,parent_id,external_id,run_id,observed_at,payload_json,payload_hash,state)
+                VALUES (?,?,?,?,?,?,?,?,?)""",
+                (source['connection_id'], 'accounts', '', source['external_id'], source['last_run_id'],
+                 '2026-09-01T00:00:00Z', json.dumps({**base, 'balance': '800'}), source['payload_hash'], 'PRESENT'))
+            c.execute("""INSERT INTO of_resource_records
+                (connection_id,resource,parent_id,external_id,payload_json,payload_hash,state,first_run_id,last_run_id,observed_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (source['connection_id'], 'accounts', '', 'closed',
+                 json.dumps({**base, 'id': 'closed', 'balance': '900', 'status': 'CLOSED'}),
+                 source['payload_hash'], 'PRESENT', source['first_run_id'], source['last_run_id'], source['observed_at']))
+            c.commit()
+            before = list(c.iterdump())
+            result = analytics(c, self.settings, {})
+            self.assertEqual(result['institutions'][0]['accounts']['value'], '125.5')
+            self.assertEqual([row['external_id'] for row in result['positions']['accounts']['items']], ['account-BANK'])
+            self.assertEqual(list(c.iterdump()), before)
+
+    def test_period_evidence_controls_zero_net_and_comparison(self):
+        self.sync()
+        query = {'start':['2026-10-16'], 'end':['2026-10-31']}
+        with closing(connect(self.db)) as c:
+            result = analytics(c, self.settings, query)['flow']['BANK']
+            self.assertIsNone(result['net'])
+            self.assertIsNone(result['reported']['incoming'])
+            self.assertIsNone(result['comparison'])
+            c.execute('PRAGMA query_only=OFF')
+            c.execute("UPDATE of_sync_runs SET date_from='2026-09-01', date_to='2026-10-31'")
+            c.execute("UPDATE of_resource_coverage SET omitted_field_count=0 WHERE resource IN ('accounts','transactions')")
+            c.commit()
+            result = analytics(c, self.settings, query)['flow']['BANK']
+            self.assertEqual(result['coverage_state'], 'COMPLETE')
+            self.assertEqual(result['reported']['incoming'], '0')
+            self.assertEqual(result['net'], '-10')
+            self.assertEqual(result['comparison'], {'start':'2026-09-30','end':'2026-10-15','incoming':'0','outgoing':'10','net':'-10'})
+            empty = analytics(c, self.settings, {'start':['2026-09-20'], 'end':['2026-09-25']})['flow']['BANK']
+            self.assertEqual(empty['net'], '0')
+            self.assertEqual(empty['reported'], {'incoming':'0','outgoing':'0'})
+
     def test_investment_classes_are_exact_and_position_ignores_flow_period(self):
         self.sync()
         with closing(connect(self.db)) as c:

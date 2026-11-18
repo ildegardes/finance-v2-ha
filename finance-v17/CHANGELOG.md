@@ -1,3 +1,10 @@
+# 0.1.32-open-finance.1
+
+- Visão geral do Open Finance com indicadores, fluxo agrupado, composição da carteira e ranking de saídas.
+- Posições atuais restritas às conexões elegíveis, com zero confirmado distinto de saldo indisponível.
+- Histórico completo, filtros rápidos, qualidade dos dados e modos de privacidade visual.
+- Apresentação em português brasileiro. Schema 12 preservado.
+
 # 0.1.31-open-finance.1
 
 - Open Finance com visão geral, movimentações, cartões, investimentos, crédito e conexões.

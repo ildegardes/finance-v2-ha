@@ -34,10 +34,14 @@ class ConnectionView:
 def connection_views(db, settings):
     """Owner-facing metadata only, including retained historical connections."""
     legacy = {cfg.id: cfg for cfg in settings.pluggy_connections}
+    persisted = {row["id"]: row for row in db.execute("SELECT id,institution,enabled FROM of_connections")}
     views = {
-        cid: ConnectionView(cid, cfg.institution, cfg.enabled, False, cfg.access_mode, cfg.auto_sync_enabled)
+        cid: ConnectionView(cid, cfg.institution, cfg.enabled and (cid not in persisted or bool(persisted[cid]["enabled"])),
+                            False, cfg.access_mode, cfg.auto_sync_enabled)
         for cid, cfg in legacy.items()
     }
+    for cid, row in persisted.items():
+        views.setdefault(cid, ConnectionView(cid, row["institution"], False, True, "strict", False))
     for row in db.execute(
         """SELECT r.connection_id,r.source,r.lifecycle,r.label,a.environment,i.auto_sync_enabled
            FROM of_connection_registry r
@@ -48,7 +52,7 @@ def connection_views(db, settings):
         if row["lifecycle"] == "REMOVED":
             views.pop(cid, None)
             continue
-        active = row["lifecycle"] == "ACTIVE"
+        active = row["lifecycle"] == "ACTIVE" and bool(persisted[cid]["enabled"])
         if row["source"] == "MANAGED":
             mode = ACCESS_MODES.get(row["environment"])
             enabled = active and mode is not None

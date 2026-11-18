@@ -7,7 +7,7 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || path.join(process.en
 
 const web = path.resolve(__dirname, '../finance-v17/src/finance_v2/web');
 const assets = new Set(['financial-institutions.js', 'privacy.js', 'open-finance-errors.js', 'open-finance-status.js',
-  'open-finance.js', 'open-finance-flow.js', 'open-finance-coverage.js', 'open-finance-domain.js',
+  'open-finance.js', 'open-finance-labels.js', 'open-finance-overview.js', 'open-finance-flow.js', 'open-finance-coverage.js', 'open-finance-domain.js',
   'santander-binding-recovery.js', 'navigation.js', 'query-generation.js']);
 let server, browser, origin;
 

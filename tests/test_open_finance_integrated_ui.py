@@ -22,9 +22,9 @@ class BrowserIntegration(unittest.TestCase):
         case=fixture.CoverageTests(methodName='test_all_products_projection_history_and_financial_preservation')
         case.setUp()
         try:
-            case.config=replace(case.config,institution='Banco sintético')
-            second=replace(case.config,id='bank-other',institution='Outra instituição sintética',client_id='synthetic-other-client')
-            archived=replace(case.config,id='bank-history',institution='Instituição arquivada sintética',client_id='synthetic-history-client')
+            case.config=replace(case.config,institution='Itaú - itau')
+            second=replace(case.config,id='bank-other',institution='Santander - Banco Santander Pessoa Física',client_id='synthetic-other-client')
+            archived=replace(case.config,id='bank-history',institution='Santander',client_id='synthetic-history-client')
             case.settings=replace(case.settings,pluggy_connections=(case.config,second,archived))
             original_send=case.provider.send
             def repair(value):
@@ -38,6 +38,10 @@ class BrowserIntegration(unittest.TestCase):
                 status, payload=original_send(*args)
                 payload=repair(payload)
                 if args[1].startswith('/accounts?'):
+                    if 'bank-other' in sync_connection:
+                        payload['results'][0]['balance']=0
+                    if 'bank-test' in sync_connection:
+                        payload['results'][0].pop('balance',None)
                     extra=dict(payload['results'][1]);extra.update(id='account-CREDIT-2',name='Segundo cartão sintético',creditData=None)
                     payload['results'].append(extra);payload['total']=len(payload['results'])
                 if args[1].startswith('/bills?'):
@@ -58,7 +62,9 @@ class BrowserIntegration(unittest.TestCase):
                     payload['results'].append(other)
                 return status, payload
             case.service=OpenFinanceService(case.settings,client_factory=lambda config: PluggyClient(config,send=synthetic_send,sleep=lambda _:None))
+            sync_connection=[]
             for connection in case.settings.pluggy_connections:
+                sync_connection[:]=[connection.id]
                 run=sync_full(case.service,connection.id,actor='UI:local')
                 self.assertEqual(run['state'],'SUCCEEDED',run)
             with closing(connect(case.db)) as db:
@@ -69,11 +75,16 @@ class BrowserIntegration(unittest.TestCase):
             status, data=case.request('/api/v2/open-finance/analytics?currency=BRL')
             self.assertEqual(status,200,data)
             self.assertEqual(data['positions']['investments']['value'],'400')
+            active = {row['connection_id']: row for row in data['institutions']}
+            self.assertEqual(set(active), {'bank-test', 'bank-other'})
+            self.assertEqual(active['bank-other']['accounts']['value'], '0')
+            self.assertIsNone(active['bank-test']['accounts']['value'])
+            self.assertNotIn('bank-history', {row['connection_id'] for row in data['coverage']})
             self.assertEqual(data['positions']['investments']['unavailable'],2)
             status, usd_data=case.request('/api/v2/open-finance/analytics?currency=USD&connection_id=bank-other')
             self.assertEqual(status,200,usd_data)
             self.assertEqual(usd_data['positions']['investments']['value'],'25')
-            self.assertEqual(usd_data['positions']['investments']['items'][0]['institution'],'Outra instituição sintética')
+            self.assertEqual(usd_data['positions']['investments']['items'][0]['institution'],'Santander - Banco Santander Pessoa Física')
             self.assertEqual(usd_data['positions']['investments']['items'][0]['reference_date'],'2025-01-01')
             self.assertEqual(usd_data['positions']['investments']['items'][0]['provider_updated_at'],'2026-10-01T12:00:00Z')
             status,catalog=case.request('/api/v2/open-finance/catalogs')

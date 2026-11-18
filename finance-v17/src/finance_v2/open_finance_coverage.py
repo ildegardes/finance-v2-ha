@@ -193,7 +193,9 @@ def query(c, settings, values, *, manage_transaction=True):
     coverage_args = [value for clause, value in zip(clauses, args) if clause != 'state=?']
     for name, expression in (('type', "json_extract(payload_json,'$.type')"), ('currency', "COALESCE(json_extract(payload_json,'$.currencyCode'),json_extract(payload_json,'$.totalAmountCurrencyCode'))")):
         if name in values:
-            if not re.fullmatch('[A-Za-z0-9_-]{1,64}', values[name][0]):
+            value = values[name][0]
+            valid = re.fullmatch('[A-Z]{3}', value) if name == 'currency' else 0 < len(value) <= 64 and value.isprintable()
+            if not valid:
                 raise SyncError('INVALID_QUERY', 422)
             clauses.append(expression + '=?')
             args.append(values[name][0])

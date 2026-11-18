@@ -1,13 +1,21 @@
-# Finance V17 — 0.1.31-open-finance.1
+# Finance V17 — 0.1.32-open-finance.1
 
-Antes de atualizar pelo catálogo do Home Assistant, crie um backup do add-on e confirme que pode recuperá-lo. Depois da atualização, confirme a versão, consulte os logs e verifique a saúde em /api/v2/health. Percorra as seis abas, compare as instituições ativas e arquivadas com o histórico esperado e teste o controle de ocultação de valores.
+## Atualização e reversão
 
-Se precisar reverter, pare o add-on e preserve um backup separado do estado pós-atualização. Compare o schema e os dados gravados após a atualização antes de restaurar um backup anterior. Valide a versão e os registros recuperados antes de retomar a operação.
+1. Faça um backup recuperável do add-on no Home Assistant e confirme a versão instalada.
+2. Recarregue o catálogo do repositório Finance V17 no Supervisor e selecione a atualização para 0.1.32-open-finance.1.
+3. Após reiniciar, confirme a versão, inspecione os logs e verifique /api/v2/health. Confira as conexões ativas, o histórico e os três modos de privacidade na Visão geral.
+4. Para reverter, pare o add-on, faça um backup separado do estado pós-atualização e restaure o backup anterior pelo Supervisor. Confirme a versão recuperada e confira os registros antes de voltar a operar.
 
-Os filtros de instituição do Open Finance oferecem conexões ativas. A opção **Todas** mantém o escopo histórico e **Instituições Financeiras** continua exibindo conexões arquivadas para consulta e auditoria.
+Esta atualização preserva schema 12, slug finance_v17, portas 8766 e 8767, persistência /data, configurações e credenciais. A versão 0.1.31-open-finance.1 permanece no histórico de releases.
 
-Schema 12, com migração aditiva do registro de conexões. A instalação operacional depende de homologação e autorização.
-O slug finance_v17, porta 8766 e persistência /data são preservados.
+## Interpretação da Visão geral
+
+- **Todas as ativas** usa a situação da conexão armazenada e sua configuração efetiva. **Histórico completo** inclui movimentos das conexões arquivadas. As posições continuam limitadas às conexões ativas.
+- Os filtros de datas controlam os movimentos. A data financeira, a coleta e a atualização informada pelo provedor são exibidas separadamente quando disponíveis.
+- O fluxo líquido com cobertura parcial, quando exibido, usa apenas movimentos conhecidos. A comparação com o período anterior requer cobertura datada para todos os produtos relevantes nos dois intervalos. O cache padrão não fornece essa garantia.
+- As revisões preservadas podem representar alterações de conteúdo e observações com datas e coberturas diferentes, sem base suficiente para uma série patrimonial comparável.
+- **Ocultar valores** mantém as proporções. **Privacidade total** também remove gráficos e percentuais. Esta preferência atua na apresentação, e a autorização de acesso é independente.
 
 As seis áreas consultam projeções tipadas do staging, sem criar lançamentos oficiais.
 Contas e cartões navegam para movimentos, faturas e referências de extratos;
