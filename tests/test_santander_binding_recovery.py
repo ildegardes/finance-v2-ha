@@ -41,7 +41,7 @@ class RecoveryTests(unittest.TestCase):
         with closing(base.connect(self.db)) as c:
             self.assertEqual(c.execute('PRAGMA user_version').fetchone()[0],11)
         with patch.object(SantanderBindingRecovery,'records',return_value=[{'phase':'ABORTED'}]):
-            self.assertEqual(base.migrations.migrate(self.db),[12])
+            self.assertEqual(base.migrations.migrate(self.db),[12,13])
     def snapshot(self):
         with closing(base.connect(self.db)) as c:
             return {n:[tuple(r) for r in c.execute('SELECT * FROM "'+n+'" ORDER BY rowid')] for n, in c.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").fetchall()}

@@ -1,3 +1,10 @@
+# 0.1.33-open-finance.1
+
+- Classificação analítica local com regras nativas e personalizadas, revisão manual e auditoria.
+- Simulação e aplicação retroativa com proteção de decisões manuais e reversão auditável.
+- Fluxo ajustado, posições de cartões e rendimentos identificados no Open Finance.
+- Migração aditiva do schema 12 para 13. Orientações de reversão em DOCS.md.
+
 # 0.1.32-open-finance.1
 
 - Visão geral do Open Finance com indicadores, fluxo agrupado, composição da carteira e ranking de saídas.

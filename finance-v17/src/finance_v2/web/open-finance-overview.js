@@ -1,3 +1,4 @@
+import {bridgePanel,cardPanel,incomePanel} from './open-finance-insights.js';
 import {createQueryGeneration} from './query-generation.js';
 import {bankMoney,dateBR,privacyMode,PRIVACY_MODES} from './privacy.js';
 import {activeConnections,connectionLabel} from './open-finance-status.js';
@@ -11,7 +12,7 @@ const monthStart=value=>value.slice(0,7)+'-01';
 const minDate=(a,b)=>a<b?a:b;
 const maxDate=(a,b)=>a>b?a:b;
 const decimalScale=10n**20n;
-const periodLabels={month:'Este mês',previous:'Mês anterior',days30:'Últimos 30 dias',days90:'Últimos 90 dias',year:'Este ano',custom:'Personalizado'};
+const periodLabels={month:'Este mês',previous:'Mês anterior',days30:'Últimos 30 dias',days90:'Últimos 90 dias',year:'Este ano',yearRolling:'Últimos 12 meses',custom:'Personalizado'};
 const directionLabels={incoming:'Entradas',outgoing:'Saídas'};
 const palette=['#08765f','#377db8','#9461aa','#c57925','#6e8320','#95705c','#5a737e'];
 const resources={accounts:'Contas',investments:'Investimentos',transactions:'Movimentações'};
@@ -43,6 +44,9 @@ function periodRange(key,today){
   if(key==='previous')return [monthStart(shift(month,-1)),shift(month,-1)];
   if(key==='days30')return [shift(today,-29),today];
   if(key==='days90')return [shift(today,-89),today];
+  if(key==='yearRolling'){
+    const first=asDate(month);first.setUTCMonth(first.getUTCMonth()-11);return [iso(first),today];
+  }
   if(key==='year')return [today.slice(0,4)+'-01-01',today];
   return [month,today];
 }
@@ -163,7 +167,7 @@ function positionRows(data,catalog,amount,esc){
   }).join('')+'</div>';
 }
 
-export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,today,onNavigate=()=>{},onAssets=()=>{},onConnections=()=>{}}) {
+export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,today,onNavigate=()=>{},onAssets=()=>{},onCards=()=>{},onConnections=()=>{}}) {
   const panel=host.querySelector('#of-panel-overview');
   today ||= new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo'}).format(new Date());
   const [first,last]=periodRange('month',today);
@@ -179,7 +183,13 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
   const people=form.elements.connection_id,privacy=form.elements.privacy;
   const queries=createQueryGeneration(navigation);
   const fields=['start','end','currency'];
-  let filters,loaded=null,grouping,chartPage=0;
+  let filters,loaded=null,grouping,chartPage=0,flowMode='gross';
+  const bucketFor=()=>flowMode==='adjusted'?'operating':'internal';
+  function chartData(){
+    if(flowMode==='gross'||!loaded.insights)return loaded;
+    return {flow:{BANK:{coverage_state:loaded.insights.coverage==='COMPLETE_BANK_SCOPE'?'COMPLETE':'PARTIAL'}},
+      series:loaded.insights.series.filter(row=>row.bucket===bucketFor()).map(row=>({...row,product:'BANK'}))};
+  }
   host.dataset.ofPrivacyHost='';
   function paint(){
     const mode=privacyMode(host.ownerDocument);
@@ -190,8 +200,10 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
     const amount=value=>value==null?'Indisponível':mode==='visible'?esc(money(value)):'<span aria-label="Valor oculto">••••••</span>';
     const metric=(icon,title,value,detail)=>'<article class="of-metric of-kpi"><div><span class="of-kpi-icon '+icon+'"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="'+icons[icon]+'"></path></svg></span><h3><button type="button" class="of-link" data-metric="'+icon+'">'+title+'</button></h3></div><strong>'+amount(value)+'</strong><small>'+esc(detail)+'</small></article>';
     const positionNote=position=>countBR.format(position.known||0)+' '+(position.known===1?'posição informada':'posições informadas')+' · '+coverageLabel(position.coverage_state);
-    const net=flow.net??flow.observed_net;
-    const netNote=flow.net!=null?'Entradas menos saídas':net!=null?'Saldo dos movimentos conhecidos · cobertura parcial':'Resultado indisponível para a cobertura deste período';
+    const insights=loaded.insights,showAdjusted=insights&&flowMode==='adjusted',showInternal=insights&&flowMode==='internal';
+    const flowTitle=showAdjusted?'Resultado econômico identificado':showInternal?'Movimentações internas':'Fluxo bancário líquido';
+    const net=showAdjusted?insights.known.net:showInternal?null:flow.net??flow.observed_net;
+    const netNote=showAdjusted?(insights.coverage==='COMPLETE_BANK_SCOPE'?'Cobertura integral da janela bancária':'Cobertura parcial dos movimentos bancários') :showInternal?'Transferências e movimentações internas confirmadas':flow.net!=null?'Entradas menos saídas':net!=null?'Saldo dos movimentos conhecidos · cobertura parcial':'Resultado indisponível para a cobertura deste período';
     const comparison=flow.comparison?'<p class="of-comparison">Diferença frente a '+esc(dateBR(flow.comparison.start))+' a '+esc(dateBR(flow.comparison.end))+' · Entradas '+amount(flow.comparison.incoming)+' · Saídas '+amount(flow.comparison.outgoing)+' · Fluxo '+amount(flow.comparison.net)+'</p>':'<p class="of-comparison">Comparação com período anterior indisponível.</p>';
     const coverage=loaded.coverage||[];
     const lastCollection=coverage.map(point=>point.observed_at).filter(Boolean).sort().at(-1);
@@ -201,12 +213,21 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
     }).join('');
     result.innerHTML=(filters.history==='1'?'<p class="of-notice">Histórico completo · O fluxo inclui conexões arquivadas. As posições abaixo têm como referência somente conexões ativas.</p>':'')+
       '<div class="of-metrics">'+metric('accounts','Saldo em contas',accounts.value,positionNote(accounts))+metric('investments','Investimentos',investments.value,positionNote(investments))+metric('incoming','Entradas bancárias',flow.reported?.incoming,coverageLabel(flow.coverage_state))+metric('outgoing','Saídas bancárias',flow.reported?.outgoing,coverageLabel(flow.coverage_state))+'</div>'+
-      '<section class="of-summary-card of-bank-flow"><div class="of-section-heading"><div><h3>Fluxo bancário líquido</h3><strong class="of-net-value">'+amount(net)+'</strong><p>'+netNote+'</p></div><label>Agrupar por<select data-grouping aria-label="Agrupar por"><option value="day">Dia</option><option value="week">Semana</option><option value="month">Mês</option></select></label></div>'+
-      '<div data-flow-chart>'+flowChart(loaded,filters,grouping,chartPage,mode,money,esc)+'</div>'+comparison+'</section>'+
+      '<section class="of-summary-card of-bank-flow"><div class="of-section-heading"><div><h3>'+flowTitle+'</h3>'+
+      (showInternal?'<p>Entradas '+amount(insights.bridge.internal.incoming)+' · Saídas '+amount(insights.bridge.internal.outgoing)+'</p>':'<strong class="of-net-value">'+amount(net)+'</strong>')+
+      '<p>'+netNote+'</p></div><div class="actions of-insight-selects">'+(insights?'<label>Visão do fluxo<select data-financial-flow aria-label="Visão do fluxo"><option value="gross">Fluxo bancário bruto</option><option value="adjusted">Fluxo ajustado</option><option value="internal">Movimentações internas</option></select></label>':'')+
+      '<label>Agrupar por<select data-grouping aria-label="Agrupar por"><option value="day">Dia</option><option value="week">Semana</option><option value="month">Mês</option></select></label></div></div>'+
+      '<div data-flow-chart>'+flowChart(chartData(),filters,grouping,chartPage,mode,money,esc)+'</div>'+
+      (flowMode==='gross'?comparison:'')+bridgePanel(insights,amount,esc)+
+      (insights?.unresolved_scope?'<p>Há registros fora do recorte por falta de data, moeda ou situação comprovada.</p>':'')+
+      (insights?'<button type="button" class="of-link" data-classification-pending>Ver '+countBR.format(insights.pending)+' movimentações pendentes de classificação</button>':'')+
+      '</section>'+
       '<div class="of-overview-grid"><section class="of-summary-card"><div class="of-section-heading"><div><h3>Composição da carteira</h3><p>'+esc(coverageLabel(investments.coverage_state))+'</p></div><button type="button" class="of-link" data-open-assets>Ver investimentos</button></div>'+allocation(investments,mode,amount,esc)+'</section><section class="of-summary-card"><h3>Principais categorias de saída</h3><p>Participação nas saídas informadas</p>'+categoryRanking(loaded,mode,amount,esc)+'</section></div>'+
-      '<section class="of-summary-card" data-current-positions tabindex="-1"><h3>Posições por instituição</h3><p>Últimas posições conhecidas. O período selecionado vale para movimentações.</p>'+positionRows(loaded,catalog,amount,esc)+'</section>'+
+      '<div class="of-overview-grid"><section class="of-summary-card" data-current-positions tabindex="-1"><h3>Posições por instituição</h3><p>Últimas posições conhecidas. O período selecionado vale para movimentações.</p>'+positionRows(loaded,catalog,amount,esc)+'</section>'+cardPanel(loaded.cards,amount,mode,esc)+'</div>'+incomePanel(insights,amount,mode,esc)+
       '<details class="of-summary-card of-quality"><summary>Qualidade dos dados</summary><ul class="of-category-list">'+quality+'</ul><p>Última coleta registrada no escopo '+esc(dateBR(lastCollection))+'. Consulte as posições para ver a data financeira e a atualização informada pelo provedor.</p><p>Movimentos brutos incluem transferências e pagamentos. Posições e saldos podem se sobrepor.</p><div class="actions"><button type="button" class="of-link" data-open-connections>Conexões</button><button type="button" class="of-link" data-open-diagnostics>Diagnóstico</button></div></details>';
     result.querySelector('[data-grouping]').value=grouping;
+    const kind=result.querySelector('[data-financial-flow]');
+    if(kind)kind.value=flowMode;
   }
 
   function syncForm(){
@@ -280,6 +301,9 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
     else queries.cancel();
   });
   result.onchange=event=>{
+    if(event.target.matches('[data-financial-flow]')){
+      flowMode=event.target.value;chartPage=0;paint();result.querySelector('[data-financial-flow]').focus();return;
+    }
     if(!event.target.matches('[data-grouping]'))return;
     grouping=event.target.value;chartPage=0;paint();
     result.querySelector('[data-grouping]').focus();
@@ -291,6 +315,15 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
     const context={...filters,account_id:'',product:'BANK',status:'POSTED',direction:'all',category:'',search:'',bill_id:''};
     if(button.dataset.metric==='accounts'){
       const target=result.querySelector('[data-current-positions]');target.focus();target.scrollIntoView({block:'start'});
+    }else if(button.matches('[data-open-income]')){
+      onAssets({...context,income:true});
+    }else if(button.matches('[data-overview-card],[data-all-overview-cards]')){
+      const card=button.dataset.overviewCard===undefined?null:loaded.cards.items[Number(button.dataset.overviewCard)];
+      onCards({connection_id:card?.connection_id||filters.connection_id,account_id:card?.account_id||'',currency:filters.currency});
+    }else if(button.matches('[data-classification-pending]')){
+      onNavigate({...context,bucket:'pending',openClassification:true});
+    }else if(button.dataset.insightBucket){
+      onNavigate({...context,bucket:button.dataset.insightBucket,direction:button.dataset.insightDirection});
     }else if(button.matches('[data-investment-class],[data-open-assets],[data-metric="investments"]')){
       onAssets({connection_id:filters.connection_id,currency:filters.currency,type:button.dataset.investmentClass||''});
     }else if(button.matches('[data-open-connections],[data-open-diagnostics]')){
@@ -303,8 +336,8 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
     }else if(button.dataset.overviewInstitution){
       onNavigate({...context,connection_id:button.dataset.overviewInstitution,history:'0'});
     }else if(button.dataset.bucket){
-      const bucket=flowBuckets(loaded.series,filters,grouping)[chartPage*12+Number(button.dataset.bucket)];
-      onNavigate({...context,start:bucket.start,end:bucket.end,direction:button.dataset.direction});
+      const bucket=flowBuckets(chartData().series,filters,grouping)[chartPage*12+Number(button.dataset.bucket)];
+      onNavigate({...context,start:bucket.start,end:bucket.end,direction:button.dataset.direction,...(flowMode==='gross'?{}:{bucket:bucketFor()})});
     }else if(button.dataset.chartPage){
       chartPage+=Number(button.dataset.chartPage);paint();
       const next=result.querySelector('[data-chart-page="'+button.dataset.chartPage+'"]:not(:disabled)')||result.querySelector('[data-chart-page]:not(:disabled)');

@@ -106,3 +106,40 @@ button.of-column{position:relative;background:transparent;border-radius:.2rem;pa
   .of-kpi .of-kpi-icon{width:28px;height:28px}
   .of-kpi-icon svg{width:16px;height:16px}
 }
+.of-center-entry{margin:.35rem 0 1rem}
+.of-class-center{margin:1rem 0;padding:clamp(.85rem,2vw,1.35rem);overflow-wrap:anywhere}
+.of-class-center h3,.of-class-center h4{margin:.1rem 0 .7rem}
+.of-class-totals{color:var(--brand-dark);font-weight:650}
+.of-class-center [data-class-management]{margin-top:1rem}
+.of-class-center [data-class-management]:empty{display:none}
+.of-class-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr));gap:.35rem .85rem;margin:.55rem 0;text-align:left}
+.of-class-fields dt{font-size:.82rem;font-weight:700;color:var(--muted)}
+.of-class-fields dd{margin:.1rem 0 .35rem;overflow-wrap:anywhere}
+.of-class-edit{min-height:38px}
+.of-class-dialog{width:min(690px,calc(100% - 2rem));max-width:none;max-height:calc(100dvh - 2rem);overflow:auto;overflow-wrap:anywhere}
+.of-class-dialog h3{margin:.1rem 0 .5rem}
+.of-class-dialog form{margin-top:.8rem}
+.of-class-dialog .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}
+.of-class-dialog .form-grid input,.of-class-dialog .form-grid select{min-width:0}
+.of-class-dialog .form-grid>.actions,.of-class-dialog .form-grid>details{grid-column:1/-1}
+.of-class-dialog details,.of-class-center details,.of-investment-income details{margin:.65rem 0}
+.of-class-dialog summary,.of-class-center summary,.of-investment-income summary{color:var(--brand-dark);font-weight:700;cursor:pointer}
+.of-class-dialog .of-history-choice,.of-class-options .of-history-choice{display:flex;align-items:center;gap:.5rem}
+.of-class-dialog input[type=checkbox]{width:auto;flex:0 0 auto}
+.of-class-dialog [data-preview] button{margin-top:.7rem}
+.of-class-options{margin:.8rem 0}
+.of-insight-selects{align-items:flex-end}
+.of-insight-bridge li>div{display:flex;gap:.45rem 1rem;flex-wrap:wrap}
+.of-insight-card-row details{flex:1 1 100%}
+.of-insight-card-row>div:first-child{min-width:0}
+.of-investment-income{margin-top:1rem}
+.of-investment-income .of-overview-filters{margin:.7rem 0}
+.of-investment-income h4{margin:1.15rem 0 .35rem}
+.of-investment-income .of-ranking{margin-bottom:.85rem}
+@media(max-width:600px){
+  .of-class-dialog .form-grid{grid-template-columns:minmax(0,1fr)}
+  .of-class-dialog .actions{gap:.45rem}
+  .of-insight-selects label{flex:1 1 100%}
+  .of-chart-group:not(:first-child):not(:last-child):not(:nth-child(3n+1)) time,
+  .of-chart-group:nth-last-child(2):not(:first-child) time{visibility:hidden}
+}
