@@ -391,7 +391,7 @@ def analytics(c, settings, query, today=None):
             raise SyncError('QUERY_BUDGET_EXCEEDED',503)
         insights = banking_insights(items,flow['BANK'])
         automatic_positions = [item for item in positions['investments']['items']
-                               if normalize(item['name']) == normalize(AUTOMATIC)]
+                               if isinstance(item['name'], str) and normalize(item['name']) == normalize(AUTOMATIC)]
         if len(automatic_positions)==1:
             insights['automatic']['position'] = automatic_positions[0]['value']
         if prior_bank and insights['coverage']=='COMPLETE_BANK_SCOPE':

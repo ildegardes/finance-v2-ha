@@ -54,6 +54,15 @@ class Overview34Tests(unittest.TestCase):
         self.assertEqual(provider_before,case.sql("""SELECT external_id,payload_json FROM of_resource_records
                                                      WHERE resource='transactions' ORDER BY external_id"""))
 
+    def test_automatic_position_requires_explicit_product_identity(self):
+        case=self.case
+        edit="""UPDATE of_resource_records SET payload_json=json_set(payload_json,'$.name',?)
+                WHERE resource='investments'"""
+        case.write(edit,(None,))
+        self.assertIsNone(case.report()['insights']['automatic']['position'])
+        case.write(edit,('Aplic Aut Mais',))
+        self.assertIsNotNone(case.report()['insights']['automatic']['position'])
+
     def test_valuation_is_persisted_from_completed_synthetic_collections(self):
         case=self.case
         provider=case.fixture.provider
