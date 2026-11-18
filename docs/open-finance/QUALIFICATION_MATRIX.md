@@ -19,7 +19,7 @@ Os testes usam dados sintéticos. PASS em uma verificação não implica aprova�
 
 ## Reproduzir a campanha
 
-Com `PYTHONPATH=finance-v17/src;tests` no Windows ou `finance-v17/src:tests` no Linux, execute `python tests/c6r_stress_campaign.py --iterations 100`. Cada linha JSON registra duração, resultado, erros reconhecidos, verificação de integridade/idempotência e, somente em falha, tipo/código/estágio sanitizados. Não registra mensagens de exceção, credenciais ou payloads. Os arquivos da campanha desta execução estão em `artifacts/c6r-stress/`. A campanha não substitui as contraprovas de FIFO, cancelamento e contenção em `test_gate_c6r.py`.
+Com `PYTHONPATH=finance-v17/src;tests` no Windows ou `finance-v17/src:tests` no Linux, execute `python tests/c6r_stress_campaign.py --iterations 100`. Cada linha JSON registra duração, resultado, erros reconhecidos, verificação de integridade/idempotência e, somente em falha, tipo/código/estágio sanitizados. Não registra mensagens de exceção, credenciais ou payloads. `test_c6r_stress_instrumentation.py` injeta uma exceção sintética para verificar que tipo e etapa são capturados sem a mensagem. Os arquivos da campanha desta execução estão em `artifacts/c6r-stress/`. A campanha não substitui as contraprovas de FIFO, cancelamento e contenção em `test_gate_c6r.py`.
 
 ## Roteiro manual de leitor de tela
 

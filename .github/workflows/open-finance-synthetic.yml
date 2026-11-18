@@ -43,6 +43,8 @@ jobs:
         run: python -m unittest discover -s tests -p test_gate_b.py
       - name: C6R synthetic concurrency
         run: python -m unittest discover -s tests -p test_gate_c6r.py
+      - name: C6R sanitized diagnostics negative test
+        run: python -m unittest discover -s tests -p test_c6r_stress_instrumentation.py
       - name: C6R 100-iteration synthetic stress
         run: python tests/c6r_stress_campaign.py --iterations 100 > c6r-stress.jsonl
       - name: Preserve C6R stress evidence

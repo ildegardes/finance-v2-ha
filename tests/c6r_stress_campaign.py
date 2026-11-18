@@ -15,6 +15,24 @@ from pathlib import Path
 from test_gate_c6r import ConcurrencyTests
 
 
+def exception_tracer(caught, lock):
+    """Trace only _sync_full exceptions; never retain exception messages."""
+    def trace_frame(frame, event, arg):
+        if event == 'exception':
+            cls, exc, tb = arg
+            if issubclass(cls, (sqlite3.Error, ValueError, RuntimeError)):
+                stack = [f'{Path(x.filename).name}:{x.name}:{x.lineno}'
+                         for x in traceback.extract_tb(tb) if 'finance_v2' in x.filename]
+                with lock:
+                    caught.append({'type': cls.__name__, 'sqlite_code': getattr(exc, 'sqlite_errorcode', None),
+                                   'stack': stack})
+        return trace_frame
+
+    def trace_calls(frame, event, arg):
+        return trace_frame if event == 'call' and frame.f_code.co_name == '_sync_full' else None
+    return trace_calls
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--iterations', type=int, default=100)
@@ -26,22 +44,7 @@ def main():
         caught = []
         lock = threading.Lock()
 
-        def trace_frame(frame, event, arg):
-            if event == 'exception':
-                cls, exc, tb = arg
-                if issubclass(cls, (sqlite3.Error, ValueError, RuntimeError)):
-                    stack = [f'{Path(x.filename).name}:{x.name}:{x.lineno}'
-                             for x in traceback.extract_tb(tb)
-                             if 'finance_v2' in x.filename]
-                    with lock:
-                        caught.append({'type': cls.__name__, 'sqlite_code': getattr(exc, 'sqlite_errorcode', None),
-                                       'stack': stack})
-            return trace_frame
-
-        def trace_calls(frame, event, arg):
-            return trace_frame if event == 'call' and frame.f_code.co_name == '_sync_full' else None
-
-        threading.settrace(trace_calls)
+        threading.settrace(exception_tracer(caught, lock))
         case = ConcurrencyTests('test_four_concurrent_items_and_idempotent_reimport')
         result = unittest.TestResult()
         start = time.monotonic()
