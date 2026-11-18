@@ -1,5 +1,6 @@
 import {createQueryGeneration} from './query-generation.js';
 import {bankMoney,dateBR} from './privacy.js';
+import {classLabel,coverageLabel,institutionName,statusLabel,typeLabel} from './open-finance-labels.js';
 import {openFinanceError} from './open-finance-errors.js';
 import {activeConnections,connectionLabel,runSummary,consentNotice,collectionDiagnostic} from './open-finance-status.js';
 
@@ -11,7 +12,7 @@ const consentStates={NOT_QUERIED:'Consentimento não consultado',ASSOCIATION_INC
 export function temporalHtml(row,esc){
   const t=row.temporal||{},date=value=>value?esc(dateBR(value)):'Não informada';
   const observation=Object.values(t.financial_observation||{}).map(date).join(' · ')||'Não informada';
-  return `<dl class="of-temporal-provenance"><dt>Data financeira informada</dt><dd>${observation}</dd><dt>Coleta da revisão</dt><dd>${date(t.collected_at)}</dd><dt>Primeira coleta deste conteúdo</dt><dd>${date(t.content_first_collected_at)}</dd><dt>Última presença observada no staging</dt><dd>${date(t.last_seen_at)}</dd><dt>Ausência observada no staging</dt><dd>${date(t.absence_observed_at)}</dd><dt>Atualização deste registro no provedor</dt><dd>${date(t.provider_updated_at)}</dd><dt>Sincronização atual (contexto separado)</dt><dd>${esc(t.current_sync?.state||'Não consultada')}</dd><dt>Frescor financeiro efetivo</dt><dd>${t.effective_freshness==='STALE'?'Desatualização informada na coleta':'Não estabelecido; coleta recente não comprova data financeira recente'}</dd></dl>`;
+  return `<dl class="of-temporal-provenance"><dt>Data financeira informada</dt><dd>${observation}</dd><dt>Coleta da revisão</dt><dd>${date(t.collected_at)}</dd><dt>Primeira coleta deste conteúdo</dt><dd>${date(t.content_first_collected_at)}</dd><dt>Última coleta com o registro</dt><dd>${date(t.last_seen_at)}</dd><dt>Ausência observada na coleta</dt><dd>${date(t.absence_observed_at)}</dd><dt>Atualização deste registro no provedor</dt><dd>${date(t.provider_updated_at)}</dd><dt>Sincronização atual (contexto separado)</dt><dd>${esc(statusLabel(t.current_sync?.state,'Não consultada'))}</dd><dt>Frescor financeiro efetivo</dt><dd>${t.effective_freshness==='STALE'?'Desatualização informada na coleta':'Não estabelecido; coleta recente não comprova data financeira recente'}</dd></dl>`;
 }
 
 export function fieldHtml(node,esc){
@@ -22,10 +23,12 @@ export function fieldHtml(node,esc){
   if(node.kind==='RATE'||node.kind==='QUANTITY')return `<span data-private-financial data-private-mask="neutral">${esc(String(node.value).replace('.',','))}${node.kind==='RATE'?' (unidade informada pelo provedor)':''}</span>`;
   if(node.kind==='CIVIL_DATE'||node.kind==='INSTANT')return esc(dateBR(node.value))+(node.kind==='INSTANT'?` <small>Horário e fuso da origem: ${esc(String(node.value).slice(11))}</small>`:'');
   if(node.kind==='BOOLEAN')return node.value?'Sim':'Não';
+  if(node.key==='status'||node.key==='executionStatus')return esc(statusLabel(node.value));
+  if(node.key==='type'||node.key==='subtype')return esc(typeLabel(node.value));
   return esc(String(node.value));
 }
-function fieldsHtml(nodes,esc){
-  const list=values=>`<dl class="of-resource-fields">${values.map(n=>`<div><dt>${esc(n.label)}</dt><dd>${fieldHtml(n,esc)}</dd></div>`).join('')}</dl>`;
+function fieldsHtml(nodes,esc,kind){
+  const list=values=>`<dl class="of-resource-fields">${values.map(n=>`<div><dt>${esc(n.label)}</dt><dd>${kind==='INVESTMENT_POSITION'&&n.key==='type'&&n.state==='VALUE'?esc(classLabel(n.value)):fieldHtml(n,esc)}</dd></div>`).join('')}</dl>`;
   const absent=nodes.filter(n=>n.state==='ABSENT'),present=nodes.filter(n=>n.state!=='ABSENT');
   return list(present)+(absent.length?`<details class="of-absent-fields"><summary>Campos não fornecidos (${absent.length})</summary>${list(absent)}</details>`:'');
 }
@@ -35,17 +38,18 @@ export function productSummary(row,esc){
   const wanted=choices[row.kind];if(!wanted)return '';
   const found=[];
   function visit(nodes){for(const node of nodes||[]){if(wanted.includes(node.key)&&node.state==='VALUE'&&node.kind!=='SECTION'&&node.kind!=='COLLECTION')found.push(node);if(node.kind==='SECTION')visit(node.children)}}
-  visit(row.fields);return found.length?`<dl class="of-product-summary">${found.map(node=>`<div><dt>${esc(node.label)}</dt><dd>${fieldHtml(node,esc)}</dd></div>`).join('')}</dl>`:'<p class="muted">Dados resumidos indisponíveis; consulte os detalhes.</p>';
+  visit(row.fields);return found.length?`<dl class="of-product-summary">${found.map(node=>`<div><dt>${esc(node.label)}</dt><dd>${row.kind==='INVESTMENT_POSITION'&&node.key==='type'?esc(classLabel(node.value)):fieldHtml(node,esc)}</dd></div>`).join('')}</dl>`:'<p class="muted">Dados resumidos indisponíveis; consulte os detalhes.</p>';
 }
 
 export function mountDomains({host,api,esc,catalog,navigation=null,domainSelections={},onCardFlow=null,onBillFlow=null,analyticsState={}}){
   const active=activeConnections(catalog);
-  const areas={overview:'accounts',cards:'accounts',assets:'investments',credit:'loans',connections:'item'},controllers=[];
+  let updateAssets=()=>{};
+  const areas={cards:'accounts',assets:'investments',credit:'loans',connections:'item'},controllers=[];
   for(const [area,initial]of Object.entries(areas)){
     const panel=host.querySelector('#of-panel-'+area);if(!panel)continue;
-    if(area==='overview'||area==='assets')panel.replaceChildren();
+    if(area==='assets')panel.replaceChildren();
     const section=document.createElement('section');section.className='panel of-coverage';
-    section.innerHTML=`<h2>${esc({overview:'Contas, saldos e cobertura',cards:'Cartões e faturas',assets:'Carteira e movimentações',credit:'Crédito e obrigações',connections:'Diagnóstico de cobertura'}[area])}</h2><p class="of-notice">Staging bancário, separado dos lançamentos oficiais. Cache completo não significa dados atualizados. Ausência, indisponibilidade e zero são distintos. Saldos e investimentos não são somados como patrimônio: moedas e possíveis sobreposições não estão comprovadas.</p><form class="of-resource-filter form-grid"><label>Recurso<select name="resource">${Object.entries(kinds).map(([id,label])=>`<option value="${id}">${label}</option>`).join('')}</select></label><label>Instituição<select name="connection_id"><option value="">Todas</option>${active.map(c=>`<option value="${esc(c.id)}">${esc(connectionLabel(c,active))}</option>`).join('')}</select></label><label>Tipo / classe informado<input name="type" maxlength="64" pattern="[A-Za-z0-9_-]*" placeholder="Ex.: FIXED_INCOME"></label><label>Moeda<input name="currency" maxlength="3" pattern="[A-Z]{3}" placeholder="Ex.: BRL"></label><label class="of-history-choice"><input name="history" type="checkbox"> Histórico de observações (não é rentabilidade calculada)</label><button type="submit">Consultar staging</button></form><div class="of-resource-result" aria-live="polite"></div>`;
+    section.innerHTML=`<h2>${esc({overview:'Contas, saldos e cobertura',cards:'Cartões e faturas',assets:'Carteira e movimentações',credit:'Crédito e obrigações',connections:'Diagnóstico de cobertura'}[area])}</h2><p class="of-notice">Dados bancários importados. Cache completo não significa dados atualizados. Ausência, indisponibilidade e zero são distintos. Saldos e investimentos não são somados como patrimônio: moedas e possíveis sobreposições não estão comprovadas.</p><form class="of-resource-filter form-grid"><label>Recurso<select name="resource">${Object.entries(kinds).map(([id,label])=>`<option value="${id}">${label}</option>`).join('')}</select></label><label>Instituição<select name="connection_id"><option value="">Todas</option>${active.map(c=>`<option value="${esc(c.id)}">${esc(connectionLabel(c,active))}</option>`).join('')}</select></label><label>Tipo / classe informado<input name="type" maxlength="64" placeholder="Classe do investimento"></label><label>Moeda<input name="currency" maxlength="3" pattern="[A-Z]{3}" placeholder="Ex.: BRL"></label><label class="of-history-choice"><input name="history" type="checkbox"> Histórico de observações (não é rentabilidade calculada)</label><button type="submit">Consultar staging</button></form><div class="of-resource-result" aria-live="polite"></div>`;
     panel.append(section);
     let loadInvestmentSummary=null,summaryQueries=null;
     if(area==='assets'){
@@ -61,7 +65,7 @@ export function mountDomains({host,api,esc,catalog,navigation=null,domainSelecti
         const params=new URLSearchParams({currency});if(form.elements.connection_id.value)params.set('connection_id',form.elements.connection_id.value);
         try{const data=await api('/open-finance/analytics?'+params,{queryScope:query});if(!query.current()||!host.isConnected)return;
           const positions=data.positions.investments,classes=positions.by_class||[];
-          summary.innerHTML=`<div class="of-metric"><span>Investimentos informados · ${esc(currency)}</span><strong ${positions.value===null?'':currency==='BRL'?'data-private-financial':'data-private-financial data-private-mask="neutral"'}>${positions.value===null?'Indisponível':esc(bankMoney(positions.value,currency))}</strong><small>${positions.coverage_state==='COMPLETE'?'Cobertura informada como completa':'Cobertura parcial ou não estabelecida'}</small></div><section class="of-summary-card"><h3>Distribuição por classe informada</h3>${classes.length?`<ul class="of-category-list">${classes.map(c=>`<li><span>${esc(c.type)}</span><strong ${c.value===null?'':currency==='BRL'?'data-private-financial':'data-private-financial data-private-mask="neutral"'}>${c.value===null?'Indisponível':esc(bankMoney(c.value,currency))}</strong>${c.unavailable?'<small>Dados parciais nesta classe</small>':''}</li>`).join('')}</ul>`:'<p>Distribuição indisponível.</p>'}</section>`;
+          summary.innerHTML=`<div class="of-metric"><span>Investimentos informados · ${esc(currency)}</span><strong ${positions.value===null?'':currency==='BRL'?'data-private-financial':'data-private-financial data-private-mask="neutral"'}>${positions.value===null?'Indisponível':esc(bankMoney(positions.value,currency))}</strong><small>${esc(coverageLabel(positions.coverage_state))}</small></div><section class="of-summary-card"><h3>Distribuição por classe informada</h3>${classes.length?`<ul class="of-category-list">${classes.map(c=>`<li><span>${esc(classLabel(c.type))}</span><strong ${c.value===null?'':currency==='BRL'?'data-private-financial':'data-private-financial data-private-mask="neutral"'}>${c.value===null?'Indisponível':esc(bankMoney(c.value,currency))}</strong>${c.unavailable?'<small>Dados parciais nesta classe</small>':''}</li>`).join('')}</ul>`:'<p>Distribuição indisponível.</p>'}</section>`;
         }catch(_){if(query.current()&&host.isConnected)summary.innerHTML='<p role="alert">Resumo de investimentos indisponível.</p>'}
       };
       host.addEventListener('of-tab-selected',event=>{if(event.detail==='assets')loadInvestmentSummary()});
@@ -84,11 +88,12 @@ export function mountDomains({host,api,esc,catalog,navigation=null,domainSelecti
     form.elements.resource.parentElement.append(selectedResource);
     function showSelectedResource(){selectedResource.textContent=form.elements.resource.selectedOptions[0]?.textContent||''}
     form.elements.resource.addEventListener('change',showSelectedResource);showSelectedResource();
-    let page=1,generation=0,parent=null,parentConnection=null;const queries=createQueryGeneration(navigation);
+    let page=1,generation=0,parent=null,parentConnection=null,contextualType='';const queries=createQueryGeneration(navigation);
     async function load(){
       const query=queries.begin(),mine=++generation;result.setAttribute('aria-busy','true');result.innerHTML='<p role="status" data-query-loading>Consultando dados importados…</p>';
       const q=new URLSearchParams({resource:form.elements.resource.value,page:String(page),page_size:'25'});
       for(const key of ['connection_id','type','currency'])if(form.elements[key].value)q.set(key,form.elements[key].value);
+      if(contextualType)q.set('type',contextualType);
       if(form.elements.history.checked)q.set('history','1');
       if(parent){q.set('parent_id',parent);q.set('connection_id',parentConnection);}
       if(area==='cards'&&q.get('resource')==='accounts')q.set('type','CREDIT');
@@ -97,18 +102,29 @@ export function mountDomains({host,api,esc,catalog,navigation=null,domainSelecti
         if(!query.current()||!host.isConnected||mine!==generation)return;
         const diagnostics=(response.checkpoints||[]).map(c=>`${collectionDiagnostic(c,response.consent_diagnostics||[],states[c.state]||'Estado não reconhecido')} · ${c.record_count} registros · ${c.page_count} páginas${c.error_code&&c.error_code!=='ITEM_ID_DIFFERENT'?' · '+openFinanceError(c.error_code):c.error_code==='ITEM_ID_DIFFERENT'&&!(c.resource==='consents'&&response.consent_diagnostics?.some(d=>d.connection_id===c.connection_id&&d.access_mode==='meupluggy_personal'))?' · '+openFinanceError(c.error_code):''}`).join(' | ');
         const consent=[...new Set((response.consent_diagnostics||[]).map(c=>consentNotice(c,consentStates[c.state]||'Associação não estabelecida')))].join(' | ');
-        result.innerHTML=`<p>${esc(diagnostics||states.NOT_QUERIED)} · Página ${page} · ${response.total} registros preservados</p>${consent?`<p class="of-notice">${esc(consent)}</p>`:''}${parent?'<button type="button" data-domain-back>Remover filtro do produto</button>':''}${response.items.length?response.items.map((row,index)=>`${['cards','assets','credit'].includes(area)&&(index===0||response.items[index-1].identity.connection_id!==row.identity.connection_id)?`<h3 class="of-institution-group">${esc(catalog.connections.find(c=>c.id===row.identity.connection_id)?.institution||'Instituição histórica')}</h3>`:''}<article class="of-resource-card" data-domain-kind="${esc(row.kind)}"><h3>${esc(row.name)}</h3><p>${esc(catalog.connections.find(c=>c.id===row.identity.connection_id)?.institution||'Instituição histórica')} · ${row.record_state==='NOT_SEEN'?'Não observado na última consulta completa; não significa exclusão':'Registro preservado'}</p><p>${esc(row.freshness.state==='STALE'?'Desatualização informada na coleta de origem deste conteúdo':'Frescor financeiro não estabelecido')}${row.freshness.provider_execution_partial?' · Execução parcial no provedor na coleta de origem deste conteúdo':''} · ${row.freshness.warning_count||0} avisos de qualidade</p>${relations[row.relation.state]?`<p>${esc(relations[row.relation.state])}</p>`:''}${row.kind==='CREDIT_BILL'&&form.elements.history.checked?'<p class="of-notice">Consulta de transações vinculadas por fatura não está disponível no histórico.</p>':''}${productSummary(row,esc)}<details class="of-resource-details"><summary>Detalhes do produto</summary>${fieldsHtml(row.fields,esc)}</details><div class="actions">${row.kind==='CREDIT_CARD'&&onCardFlow?`<button type="button" data-card-flow="${index}">Ver movimentações do cartão</button>`:''}${row.kind==='CREDIT_BILL'&&onBillFlow&&!form.elements.history.checked&&row.record_state==='PRESENT'?`<button type="button" data-bill-flow="${index}">Ver transações vinculadas</button>`:''}${row.children.map(child=>`<button type="button" data-domain-child="${child}" data-row="${index}">Ver ${esc(kinds[child])}</button>`).join('')}</div>${response.resource==='statements'?'<p>Somente metadados; download de documento não habilitado.</p>':''}<details><summary>Proveniência</summary><p>Fonte: staging externo. ${temporalHtml(row,esc)} Histórico de revisões não representa evolução patrimonial nem rentabilidade calculada. Nenhum lançamento oficial foi criado.</p></details></article>`).join(''):`<p class="empty">${response.checkpoints?.some(c=>c.state==='EMPTY')?'Consulta concluída sem registros neste escopo.':'Nenhum registro preservado neste escopo; isso não comprova ausência do produto. Confira o estado da consulta.'}</p>`}<div class="actions"><button type="button" data-resource-prev ${page===1?'disabled':''}>Anterior</button><button type="button" data-resource-next ${!response.has_more?'disabled':''}>Próxima</button></div>`;
+        result.innerHTML=`<p>${esc(diagnostics||states.NOT_QUERIED)} · Página ${page} · ${response.total} registros preservados</p>${consent?`<p class="of-notice">${esc(consent)}</p>`:''}${parent?'<button type="button" data-domain-back>Remover filtro do produto</button>':''}${response.items.length?response.items.map((row,index)=>`${['cards','assets','credit'].includes(area)&&(index===0||response.items[index-1].identity.connection_id!==row.identity.connection_id)?`<h3 class="of-institution-group">${esc(institutionName(catalog.connections.find(c=>c.id===row.identity.connection_id)?.institution||'Instituição histórica'))}</h3>`:''}<article class="of-resource-card" data-domain-kind="${esc(row.kind)}"><h3>${esc(row.name)}</h3><p>${esc(institutionName(catalog.connections.find(c=>c.id===row.identity.connection_id)?.institution||'Instituição histórica'))} · ${row.record_state==='NOT_SEEN'?'Não observado na última consulta completa; não significa exclusão':'Registro preservado'}</p><p>${esc(row.freshness.state==='STALE'?'Desatualização informada na coleta de origem deste conteúdo':'Frescor financeiro não estabelecido')}${row.freshness.provider_execution_partial?' · Execução parcial no provedor na coleta de origem deste conteúdo':''} · ${row.freshness.warning_count||0} avisos de qualidade</p>${relations[row.relation.state]?`<p>${esc(relations[row.relation.state])}</p>`:''}${row.kind==='CREDIT_BILL'&&form.elements.history.checked?'<p class="of-notice">Consulta de transações vinculadas por fatura não está disponível no histórico.</p>':''}${productSummary(row,esc)}<details class="of-resource-details"><summary>Detalhes do produto</summary>${fieldsHtml(row.fields,esc,row.kind)}</details><div class="actions">${row.kind==='CREDIT_CARD'&&onCardFlow?`<button type="button" data-card-flow="${index}">Ver movimentações do cartão</button>`:''}${row.kind==='CREDIT_BILL'&&onBillFlow&&!form.elements.history.checked&&row.record_state==='PRESENT'?`<button type="button" data-bill-flow="${index}">Ver transações vinculadas</button>`:''}${row.children.map(child=>`<button type="button" data-domain-child="${child}" data-row="${index}">Ver ${esc(kinds[child])}</button>`).join('')}</div>${response.resource==='statements'?'<p>Somente metadados; download de documento não habilitado.</p>':''}<details><summary>Proveniência</summary><p>Origem: dados importados. ${temporalHtml(row,esc)} Histórico de revisões não representa evolução patrimonial nem rentabilidade calculada. Nenhum lançamento oficial foi criado.</p></details></article>`).join(''):`<p class="empty">${response.checkpoints?.some(c=>c.state==='EMPTY')?'Consulta concluída sem registros neste escopo.':'Nenhum registro preservado neste escopo; isso não comprova ausência do produto. Confira o estado da consulta.'}</p>`}<div class="actions"><button type="button" data-resource-prev ${page===1?'disabled':''}>Anterior</button><button type="button" data-resource-next ${!response.has_more?'disabled':''}>Próxima</button></div>`;
         result.querySelector('[data-resource-prev]').onclick=()=>{page--;load()};result.querySelector('[data-resource-next]').onclick=()=>{page++;load()};
         result.querySelector('[data-domain-back]')?.addEventListener('click',()=>{parent=null;page=1;load()});
         result.querySelectorAll('[data-card-flow]').forEach(button=>button.onclick=()=>onCardFlow(response.items[Number(button.dataset.cardFlow)].identity));
         result.querySelectorAll('[data-bill-flow]').forEach(button=>button.onclick=()=>onBillFlow(response.items[Number(button.dataset.billFlow)].identity));
-        result.querySelectorAll('[data-domain-child]').forEach(button=>button.onclick=()=>{const row=response.items[Number(button.dataset.row)];parent=row.identity.external_id;parentConnection=row.identity.connection_id;form.elements.connection_id.value=active.some(c=>c.id===parentConnection)?parentConnection:'';showSelectedInstitution();form.elements.resource.value=button.dataset.domainChild;showSelectedResource();form.elements.type.value='';form.elements.currency.value='';page=1;load()});
+        result.querySelectorAll('[data-domain-child]').forEach(button=>button.onclick=()=>{const row=response.items[Number(button.dataset.row)];parent=row.identity.external_id;parentConnection=row.identity.connection_id;form.elements.connection_id.value=active.some(c=>c.id===parentConnection)?parentConnection:'';showSelectedInstitution();form.elements.resource.value=button.dataset.domainChild;showSelectedResource();form.elements.type.value='';contextualType='';form.elements.currency.value='';page=1;load()});
       }catch(_){if(query.current()&&host.isConnected&&mine===generation)result.innerHTML='<p role="alert">Não foi possível consultar a cobertura. Nenhum valor foi estimado. Verifique schema e armazenamento.</p>'}finally{if(query.current()&&mine===generation){result.removeAttribute('aria-busy');result.querySelector('[data-query-loading]')?.remove()}}
     }
     function cancelPending(){generation++;queries.cancel();result.removeAttribute('aria-busy')}
     function filterChanged(){cancelPending();summaryQueries?.cancel();result.innerHTML='<p role="status">Filtros alterados. Aplique para consultar.</p>';if(area==='assets')panel.querySelector('.of-investment-overview').innerHTML='<p role="status">Filtros alterados. Aplique para consultar.</p>';}
-    form.addEventListener('input',filterChanged);
+    form.addEventListener('input',event=>{if(event.target===form.elements.type)contextualType='';filterChanged()});
     form.elements.connection_id.onchange=()=>{domainSelections[area]=form.elements.connection_id.value;showSelectedInstitution();parent=null;parentConnection=null;page=1};
+    if(area==='assets')updateAssets=context=>{
+      parent=null;parentConnection=null;page=1;
+      form.elements.resource.value='investments';
+      form.elements.connection_id.value=context.connection_id||'';
+      form.elements.currency.value=context.currency;
+      contextualType=context.type==='Não informada'?'':context.type;
+      form.elements.type.value=contextualType?classLabel(contextualType):'';
+      form.elements.history.checked=false;
+      domainSelections[area]=form.elements.connection_id.value;
+      showSelectedInstitution();showSelectedResource();
+    };
     form.onsubmit=e=>{e.preventDefault();parent=null;page=1;load();if(loadInvestmentSummary)loadInvestmentSummary()};controllers.push({area,load,cancel:()=>{cancelPending();summaryQueries?.cancel()}});
   }
   host.addEventListener('of-tab-selected',event=>{controllers.forEach(c=>{if(c.area!==event.detail)c.cancel()});controllers.find(c=>c.area===event.detail)?.load()});
@@ -123,4 +139,5 @@ export function mountDomains({host,api,esc,catalog,navigation=null,domainSelecti
     catch(error){if(!navigation||navigation.current())status.textContent=openFinanceError(error.code)}
     finally{if(!navigation||navigation.current())buttons.forEach(b=>b.disabled=false)}
   });
+  return {updateAssets};
 }

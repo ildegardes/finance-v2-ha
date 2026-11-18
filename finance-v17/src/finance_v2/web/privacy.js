@@ -1,5 +1,8 @@
 // Presentation privacy only: never changes API data, form values or financial records.
 export const PRIVACY_KEY='finance-v17:money-visible';
+export const PRIVACY_MODES={visible:'Valores visíveis',masked:'Ocultar valores',full:'Privacidade total'};
+export const privacyMode=(doc=document)=>doc.documentElement.dataset.financePrivacy||'full';
+const fromStorage=value=>value==='true'?'visible':Object.hasOwn(PRIVACY_MODES,value)?value:'full';
 export const MASK='R$ ••••••';
 export const money=cents=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format((cents||0)/100);
 
@@ -45,8 +48,8 @@ export const maskText=value=>String(value).replace(monetary,MASK);
 const moneyNames=new Set(['amount','total','amount_cents','total_cents','limit','balance']);
 
 export function installPrivacy(doc=document,win=window){
-  let visible=false;
-  try{visible=win.localStorage.getItem(PRIVACY_KEY)==='true'}catch{/* Fail closed when storage is unavailable. */}
+  let mode='full',visible=false;
+  try{mode=fromStorage(win.localStorage.getItem(PRIVACY_KEY))}catch{/* Fail closed when storage is unavailable. */}
   const originals=new WeakMap(),attributes=new WeakMap(),inputs=new WeakMap();
   const button=doc.querySelector('#money-privacy-toggle');
   function project(current,entry){
@@ -89,6 +92,8 @@ export function installPrivacy(doc=document,win=window){
     }
   }
   function apply(){
+    visible=mode==='visible';
+    doc.documentElement.dataset.financePrivacy=mode;
     doc.documentElement.dataset.moneyPrivacy=visible?'visible':'hidden';
     if(button){
       button.setAttribute('aria-pressed',String(visible));
@@ -97,16 +102,25 @@ export function installPrivacy(doc=document,win=window){
       button.innerHTML=`<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>${visible?'':'<path d="m3 3 18 18"/>'}</svg>`;
     }
     refresh();
+    for(const host of doc.querySelectorAll('[data-of-privacy-host]')){
+      host.dispatchEvent(new win.CustomEvent('finance-privacy-changed',{detail:mode}));
+    }
   }
-  if(button)button.addEventListener('click',()=>{
-    visible=!visible;try{win.localStorage.setItem(PRIVACY_KEY,String(visible))}catch{/* In-memory control remains usable. */}
+  function setMode(next){
+    if(!Object.hasOwn(PRIVACY_MODES,next))return;
+    mode=next;
+    try{win.localStorage.setItem(PRIVACY_KEY,next)}catch{/* In-memory control remains usable. */}
     apply();
+  }
+  doc.addEventListener('finance-privacy-request',event=>setMode(event.detail));
+  if(button)button.addEventListener('click',()=>{
+    setMode(visible?'full':'visible');
   });
   // Mutation observers run before rendering: asynchronous screens and dialogs
   // are projected before the next paint. Originals live only in weak references.
   const observer=new win.MutationObserver(refresh);
   observer.observe(doc.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['title','aria-label','aria-valuetext']});
-  win.addEventListener('storage',event=>{if(event.key===PRIVACY_KEY||event.key===null){visible=event.key!==null&&event.newValue==='true';apply()}});
+  win.addEventListener('storage',event=>{if(event.key===PRIVACY_KEY||event.key===null){mode=fromStorage(event.newValue);apply()}});
   apply();
   return {refresh,isVisible:()=>visible,disconnect:()=>observer.disconnect()};
 }

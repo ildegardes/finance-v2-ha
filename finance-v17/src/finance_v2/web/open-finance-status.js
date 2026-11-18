@@ -1,3 +1,5 @@
+import {institutionName} from './open-finance-labels.js';
+
 // Closed display vocabulary. No authorization decisions or provider/Item access.
 export function runSummary(run,fallback){
   const p=run?.operational_presentation;
@@ -32,8 +34,8 @@ export function activeConnections(catalog) {
 }
 
 export function connectionLabel(connection, choices) {
-  const name = connection.institution || 'Instituição indisponível';
-  const peers = choices.filter(row => (row.institution || 'Instituição indisponível') === name);
+  const name = institutionName(connection.institution);
+  const peers = choices.filter(row => institutionName(row.institution) === name);
   return name + (peers.length > 1 ? ' · Conexão ' + (peers.indexOf(connection) + 1) : '')
     + (connection.historical ? ' (histórica)' : '');
 }
