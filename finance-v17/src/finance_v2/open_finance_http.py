@@ -60,6 +60,13 @@ OPERATIONS = (
     ('GET','connections','connections'), ('POST','sync','sync'),
     ('POST','sync-all','sync_all'), ('GET','sync-runs','runs'),
     ('GET','sync-run','run'), ('GET','transactions','transactions'),
+    ('GET','classification/catalog','classification_catalog'),
+    ('GET','classification/audit','classification_audit'),
+    ('POST','classification/rule','classification_rule'),
+    ('POST','classification/manual','classification_manual'),
+    ('POST','classification/preview','classification_preview'),
+    ('POST','classification/apply','classification_apply'),
+    ('POST','classification/undo','classification_undo'),
     ('GET','catalogs','catalogs'), ('GET','analytics','analytics'),
     ('GET','resources','resources'), ('GET','coverage','coverage'),
     ('POST','coverage-sync','coverage_sync'),
@@ -68,7 +75,7 @@ OPERATIONS = (
 )
 
 
-def request(e, *, limit=1_000_000):
+def request(e, *, limit=1_000_000, query_limit=20):
     def unique(pairs):
         result={}
         for key,value in pairs:
@@ -85,10 +92,10 @@ def request(e, *, limit=1_000_000):
         body=json.loads(raw,object_pairs_hook=unique,parse_constant=lambda _: (_ for _ in ()).throw(ValueError())) if raw else {}
         if not isinstance(body,dict):raise ValueError()
         raw_query=e.get('QUERY_STRING','')
-        query=parse_qs(raw_query,keep_blank_values=True,strict_parsing=True,max_num_fields=20) if raw_query else {}
+        query=parse_qs(raw_query,keep_blank_values=True,strict_parsing=True,max_num_fields=query_limit) if raw_query else {}
         if 'contract' in query:
             if len(raw_query.encode('utf-8'))>8192 or re.search(r'%(?![0-9a-fA-F]{2})',raw_query):raise ValueError()
-            query=parse_qs(raw_query,keep_blank_values=True,strict_parsing=True,max_num_fields=20,errors='strict')
+            query=parse_qs(raw_query,keep_blank_values=True,strict_parsing=True,max_num_fields=query_limit,errors='strict')
             if any(len(v)!=1 for v in query.values()):raise ValueError()
             if raw:raise SyncError('GET_BODY_NOT_ALLOWED',422)
         elif any(len(v)!=1 or not v[0] for v in query.values()):raise ValueError()
@@ -186,6 +193,9 @@ def _dispatch_raw(app,operation,identity,body,query):
     if identity.role!='UI' or identity.client_id!='UI:local':raise SyncError('FORBIDDEN',403)
     service=OpenFinanceService(app.settings,app.clock)
     op=operation.removeprefix('open_finance_')
+    if op.startswith('classification_'):
+        from .open_finance_classification_admin import dispatch
+        return dispatch(app,op,identity,body,query)
     if op=='domain_sync':
         if query or set(body)!={'connection_id','mode'} or not isinstance(body.get('connection_id'),str) or not re.fullmatch(r'[a-z][a-z0-9-]{1,63}',body['connection_id']) or not isinstance(body.get('mode'),str) or body['mode'] not in {'FULL','INCREMENTAL','RESUME'}:
             raise SyncError('INVALID_REQUEST',422)
@@ -223,7 +233,7 @@ def _dispatch_raw(app,operation,identity,body,query):
     with closing(app.db()) as c:
         if op=='analytics':
             from .open_finance_analytics import analytics
-            return analytics(c,app.settings,query),200
+            return analytics(c,app.settings,query,today=str(app.clock.today())),200
         if op=='catalogs':
             if query:raise SyncError('INVALID_QUERY',422)
             return catalogs(c,connection_views(c,app.settings).values()),200
@@ -373,6 +383,15 @@ def openapi_paths():
                 'page':{'type':'integer'},'page_size':{'type':'integer'},'has_more':{'type':'boolean'}}}
             if op=='transactions':schema['properties']['query_meta']=query_meta
             statuses.append(404)
+        elif op.startswith('classification_'):
+            spec['description']='Classificação analítica local. Requer sessão autenticada do proprietário.'
+            if method=='POST':
+                parameters=[{'name':'X-CSRF-Token','in':'header','required':True,'schema':text}]
+                spec['requestBody']={'required':True,'content':{'application/json':{'schema':{'type':'object'}}}}
+            if op=='classification_audit':
+                parameters=[{'name':'before','in':'query','required':False,'schema':integer}]
+            schema={'type':'object'}
+            statuses += [404,409,415]
         elif op=='analytics':
             from .open_finance_analytics import PARAMS
             parameters=[{'name':name,'in':'query','required':False,'schema':text} for name in sorted(PARAMS)]

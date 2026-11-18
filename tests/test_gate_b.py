@@ -278,7 +278,7 @@ class GateBTests(unittest.TestCase):
             self.assertEqual(c.execute('PRAGMA user_version').fetchone()[0],10)
             self.assertIsNone(c.execute("SELECT name FROM sqlite_master WHERE name='of_resource_links'").fetchone())
             self.assertEqual([tuple(row) for row in c.execute('SELECT * FROM accounts')],snapshot)
-        self.assertEqual(migrations.migrate(path),[11,12]);self.assertEqual(migrations.migrate(path),[])
+        self.assertEqual(migrations.migrate(path),[11,12,13]);self.assertEqual(migrations.migrate(path),[])
         with closing(connect(path)) as c:
             self.assertEqual(c.execute('PRAGMA integrity_check').fetchone()[0],'ok')
             self.assertEqual(c.execute('PRAGMA foreign_key_check').fetchall(),[])

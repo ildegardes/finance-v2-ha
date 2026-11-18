@@ -1,21 +1,35 @@
-# Finance V17 — 0.1.32-open-finance.1
+
+# Finance V17 0.1.33-open-finance.1
 
 ## Atualização e reversão
 
-1. Faça um backup recuperável do add-on no Home Assistant e confirme a versão instalada.
-2. Recarregue o catálogo do repositório Finance V17 no Supervisor e selecione a atualização para 0.1.32-open-finance.1.
-3. Após reiniciar, confirme a versão, inspecione os logs e verifique /api/v2/health. Confira as conexões ativas, o histórico e os três modos de privacidade na Visão geral.
-4. Para reverter, pare o add-on, faça um backup separado do estado pós-atualização e restaure o backup anterior pelo Supervisor. Confirme a versão recuperada e confira os registros antes de voltar a operar.
+1. Faça um backup recuperável do add-on e confirme que contém o banco e as configurações em /data. Registre a versão instalada.
+2. Atualize o catálogo do repositório no Supervisor e instale a versão 0.1.33-open-finance.1. O add-on executa a migration aditiva 013 na inicialização.
+3. Confira os logs e o endpoint /api/v2/health. O estado esperado é `ok` e `migrations.current_version=13`. Compare instituições ativas, histórico arquivado e lançamentos oficiais.
+4. Para reverter, pare o add-on, preserve separadamente o backup posterior à atualização e restaure o backup de schema 12 anterior à atualização com a versão correspondente. O código 0.1.32 exige schema 12. A migração foi projetada para avançar do 12 para o 13.
 
-Esta atualização preserva schema 12, slug finance_v17, portas 8766 e 8767, persistência /data, configurações e credenciais. A versão 0.1.31-open-finance.1 permanece no histórico de releases.
+O slug, as portas 8766 e 8767, as opções, a autenticação, as credenciais Pluggy e o diretório /data foram preservados. A homologação do Supervisor, a conferência com os dados da instalação e o teste de leitor de tela ficam com o proprietário.
 
-## Interpretação da Visão geral
+## Classificação financeira
 
-- **Todas as ativas** usa a situação da conexão armazenada e sua configuração efetiva. **Histórico completo** inclui movimentos das conexões arquivadas. As posições continuam limitadas às conexões ativas.
-- Os filtros de datas controlam os movimentos. A data financeira, a coleta e a atualização informada pelo provedor são exibidas separadamente quando disponíveis.
-- O fluxo líquido com cobertura parcial, quando exibido, usa apenas movimentos conhecidos. A comparação com o período anterior requer cobertura datada para todos os produtos relevantes nos dois intervalos. O cache padrão não fornece essa garantia.
-- As revisões preservadas podem representar alterações de conteúdo e observações com datas e coberturas diferentes, sem base suficiente para uma série patrimonial comparável.
-- **Ocultar valores** mantém as proporções. **Privacidade total** também remove gráficos e percentuais. Esta preferência atua na apresentação, e a autorização de acesso é independente.
+Em **Open Finance → Movimentações**, use **Classificar movimentação** para salvar uma decisão individual. Categoria, natureza, origem e estado de revisão são campos separados. A área Detalhes preserva a categoria do provedor e explica a condição aplicada.
+
+A precedência é decisão manual, regra personalizada, regra nativa e categoria original. Regras de mesma prioridade com resultados divergentes geram revisão. A direção bancária e a categoria original continuam disponíveis como contexto.
+
+Use **Central de classificação** para revisar padrões recorrentes. Em **Gerenciar regras**, crie ou edite uma regra. Defina a conexão, os termos da descrição e, quando necessário, uma conta, uma direção e uma moeda. Para salário, crie uma regra do seu próprio remetente após conferir o significado dos créditos. A origem é local, auditável e sem chamadas a serviços externos.
+
+Uma regra prospectiva vale para novas identidades importadas por coletas iniciadas após aquela revisão. A decisão individual usa a identidade estável da movimentação e permanece disponível nas reimportações. A atualização aplica a leitura automática das regras nativas vigentes aos dados existentes, sem registrar alterações manuais ou lotes retroativos por conta própria.
+
+Para aplicar ao histórico, selecione uma regra e **Simular histórico**. Revise intervalo, quantidade, conflitos, exceções protegidas e amostra. Marque a confirmação para aplicar. Uma mudança concorrente relevante invalida a simulação. Em **Auditoria e reversão**, a reversão restaura somente decisões do lote que ainda estão vigentes e preserva alterações posteriores independentes.
+
+## Fluxo, cartões e proventos
+
+- **Fluxo bancário bruto** mantém os movimentos importados. **Fluxo ajustado** usa as receitas e despesas bancárias conhecidas. A ponte mostra capital, liquidações, transferências internas e registros em revisão. O resultado é restrito à janela bancária e à cobertura indicada.
+- Pagamentos de cartão reconhecidos continuam sendo liquidações. A existência de uma descrição de pagamento não estabelece a fatura específica. Compras, faturas, estornos e pagamentos permanecem separados.
+- **Cartões de crédito** exibe última posição, saldo e limites informados. Um limite individual compatível pode exibir utilização. O estado de linhas compartilhadas pode impedir a consolidação. `balance`do cartão continua rotulado como saldo informado, e valores de fatura ficam na aba Cartões.
+- **Rendimentos e proventos** usa créditos bancários identificados. O uso dessa fonte única evita somar a mesma operação de outro recurso financeiro à estatística. Um código extraído da descrição tem estado sugerido. O proprietário pode registrar o código na classificação manual, sem presumir vínculo com a posição atual.
+- **Aplic Aut Mais** separa aplicação, resgate, crédito de rendimento e tributos reconhecidos. Resgates sem decomposição permanecem em revisão econômica. O resumo mensal apresenta volumes e créditos; a rentabilidade e o saldo atual dependem de dados adicionais.
+- **Privacidade total** oculta valores, percentuais, eixos e proporções financeiras. A autenticação e a autorização continuam exigidas pelas rotas.
 
 As seis áreas consultam projeções tipadas do staging, sem criar lançamentos oficiais.
 Contas e cartões navegam para movimentos, faturas e referências de extratos;

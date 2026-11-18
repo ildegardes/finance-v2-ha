@@ -160,6 +160,10 @@ def query_domain(c,settings,values):
                 parent='investments' if resource=='investment_transactions' else 'accounts'
                 parent_currency=_context_at_origin(c,row['connection_id'],parent,row['parent_id'],origin_run).get('currencyCode')
                 currency=_currency(data,parent_currency)
+            if kind=='CREDIT_CARD':
+                from .open_finance_insights import masked_card_text
+                data={**data, **{key:masked_card_text(data[key]) for key in ('name','marketingName')
+                                  if isinstance(data.get(key),str)}}
             fields=[field(k,s,data.get(k),k in data,parent_currency if k=='amountInAccountCurrency' else data.get(k+'CurrencyCode') if k+'CurrencyCode' in data else currency) for k,s in CONTRACT['resources'][resource]['schema']['properties'].items() if k not in HIDDEN]
             identity={k:row[k] for k in ('connection_id','parent_id','external_id')}
             checkpoint=c.execute('SELECT state,page_count,record_count,last_complete_run_id,error_code FROM of_collection_checkpoints WHERE connection_id=? AND resource=? AND parent_id=?',

@@ -1,6 +1,8 @@
 """Schema-11 guards reused from the isolated recovery qualification. No database I/O on import."""
 
 import sqlite3,re
+from functools import lru_cache
+from contextlib import closing
 
 TABLES=('of_connections', 'of_sync_runs', 'of_accounts', 'of_categories', 'of_transactions', 'of_transaction_revisions', 'of_resource_records', 'of_resource_revisions', 'of_resource_coverage', 'of_resource_links', 'of_resource_link_revisions', 'of_collection_checkpoints', 'of_domain_sync_audit')
 
@@ -24,12 +26,34 @@ REGISTRY_TABLES = {
 }
 
 
+@lru_cache(maxsize=1)
+def _classification_schema():
+    from .migrations import MIGRATIONS, _digest
+    migration=MIGRATIONS[12]
+    require(migration.version==13 and _digest(migration.path)==migration.expected_sha256,
+            'UNEXPECTED_OPEN_FINANCE_SCHEMA')
+    with closing(sqlite3.connect(':memory:')) as model:
+        model.execute('CREATE TABLE of_sync_runs(id TEXT PRIMARY KEY)')
+        model.executescript(migration.path.read_text(encoding='utf8'))
+        return {tuple(row) for row in model.execute(
+            "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name LIKE 'of_classification_%'"
+        )}
+
+
 def schema_check(c,expected,*,registry=False):
-    require(c.execute('PRAGMA user_version').fetchone()[0]==(12 if registry else 11),
-            'SCHEMA_NOT_12' if registry else 'SCHEMA_NOT_11')
+    version=c.execute('PRAGMA user_version').fetchone()[0]
+    require(version in ((12,13) if registry else (11,)),
+            'UNSUPPORTED_REGISTRY_SCHEMA' if registry else 'SCHEMA_NOT_11')
     all_tables={r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     of_tables={n for n in all_tables if n.startswith('of_')}
-    require(of_tables==set(TABLES) | (REGISTRY_TABLES if registry else set()),'UNEXPECTED_OPEN_FINANCE_SCHEMA')
+    classification=_classification_schema() if version==13 else set()
+    installed={tuple(row) for row in c.execute(
+        "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name LIKE 'of_classification_%'"
+    )}
+    require(installed==classification,'UNEXPECTED_OPEN_FINANCE_SCHEMA')
+    extra={name for kind,name,_,_ in classification if kind=='table'}
+    require(of_tables==set(TABLES) | (REGISTRY_TABLES if registry else set()) | extra,
+            'UNEXPECTED_OPEN_FINANCE_SCHEMA')
     for n in TABLES:
         actual={'columns':[list(r) for r in c.execute('PRAGMA table_xinfo("'+n+'")')],'fks':[list(r) for r in c.execute('PRAGMA foreign_key_list("'+n+'")')]}
         actual['ddl']=re.sub(r'\s+',' ',c.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?",(n,)).fetchone()[0].strip())
@@ -47,13 +71,18 @@ def schema_check(c,expected,*,registry=False):
         actual['columns']=normalize_columns(actual['columns'])
         require(actual==comparable,'UNEXPECTED_OPEN_FINANCE_SCHEMA')
     guarded = tuple(of_tables)
-    require(c.execute("SELECT count(*) FROM sqlite_master WHERE type='trigger' AND tbl_name IN ("+','.join('?' for _ in guarded)+')',guarded).fetchone()[0]==0,'UNEXPECTED_OPEN_FINANCE_TRIGGER')
+    triggers={tuple(row) for row in c.execute("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name IN ("+','.join('?' for _ in guarded)+')',guarded)}
+    require(triggers=={obj for obj in classification if obj[0]=='trigger'},'UNEXPECTED_OPEN_FINANCE_TRIGGER')
     inbound=0
     for name in all_tables-set(TABLES):
         for fk in c.execute('PRAGMA foreign_key_list("'+name.replace('"','""')+'")'):
             if registry and fk[2] in set(TABLES) | REGISTRY_TABLES:
                 require(fk[6] in ('NO ACTION','RESTRICT'),'UNEXPECTED_DELETE_ACTION')
             if registry and name == 'of_connection_registry' and tuple(fk[2:5]) == ('of_connections','connection_id','id'):
+                continue
+            if name in extra and (name,fk[2]) in (
+                ('of_classification_events','of_resource_records'),('of_classification_import_order','of_sync_runs')
+            ):
                 continue
             inbound+=fk[2] in TABLES
     require(inbound==0,'UNEXPECTED_EXTERNAL_DEPENDENCY')

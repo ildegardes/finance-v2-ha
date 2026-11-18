@@ -1,3 +1,4 @@
+import {mountInvestmentIncome} from './open-finance-insights.js';
 // Imported bank staging only. No provider calls or official financial writes.
 import {createQueryGeneration} from './query-generation.js';
 import {dateBR} from './privacy.js';
@@ -59,9 +60,11 @@ export function createOpenFinance({api,view,heading,esc,navigation=null,state={}
       form.requestSubmit();section.scrollIntoView({block:'start',behavior:'smooth'});
     });
     const overview=state.overview??={};
+    const incomes=mountInvestmentIncome({host,api,esc,navigation,getScope:()=>overview});
     mountAnalyticsOverview({host,api,esc,catalog,navigation,state:overview,today:today?.(),
       onNavigate:context=>{flow.update(context,{load:selectedTab==='flow'});selectTab('flow',true)},
-      onAssets:context=>{domains.updateAssets(context);selectTab('assets',true)},
+      onAssets:context=>{domains.updateAssets(context);selectTab('assets',true);if(context.income)incomes.open();},
+      onCards:context=>{domains.updateCard(context);selectTab('cards',true);},
       onConnections:(id,diagnostic)=>{
         selectTab('connections',true);
         if(diagnostic){

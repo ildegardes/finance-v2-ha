@@ -163,7 +163,7 @@ def _sync_full(service, connection_id, *, actor, check=lambda: None, minimum_int
 
 def query(c, settings, values, *, manage_transaction=True):
     from .open_finance_registry import connection_views
-    allowed = {'resource', 'connection_id', 'parent_id', 'state', 'page', 'page_size', 'type', 'currency', 'history'}
+    allowed = {'resource', 'connection_id', 'parent_id', 'state', 'page', 'page_size', 'type', 'currency', 'history', 'external_id'}
     if set(values) - allowed or any(len(v) != 1 for v in values.values()):
         raise SyncError('INVALID_QUERY', 422)
     resource = values.get('resource', ['accounts'])[0]
@@ -178,7 +178,7 @@ def query(c, settings, values, *, manage_transaction=True):
     if size not in (25, 50, 100):
         raise SyncError('INVALID_PAGINATION', 422)
     clauses, args = ['resource=?'], [resource]
-    for name in ('connection_id', 'parent_id', 'state'):
+    for name in ('connection_id', 'parent_id', 'state', 'external_id'):
         if name in values:
             value = values[name][0]
             if not value or len(value) > 200 or any(ord(ch) < 32 for ch in value):
@@ -189,8 +189,10 @@ def query(c, settings, values, *, manage_transaction=True):
                 raise SyncError('CONNECTION_NOT_FOUND', 404)
             clauses.append(name + '=?')
             args.append(value)
-    coverage_clauses = [clause for clause in clauses if clause != 'state=?']
-    coverage_args = [value for clause, value in zip(clauses, args) if clause != 'state=?']
+    if 'external_id' in values and 'connection_id' not in values:
+        raise SyncError('INVALID_QUERY',422)
+    coverage_clauses = [clause for clause in clauses if clause not in ('state=?','external_id=?')]
+    coverage_args = [value for clause, value in zip(clauses, args) if clause not in ('state=?','external_id=?')]
     for name, expression in (('type', "json_extract(payload_json,'$.type')"), ('currency', "COALESCE(json_extract(payload_json,'$.currencyCode'),json_extract(payload_json,'$.totalAmountCurrencyCode'))")):
         if name in values:
             value = values[name][0]
