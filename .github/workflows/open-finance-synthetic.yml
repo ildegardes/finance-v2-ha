@@ -58,5 +58,6 @@ jobs:
           node --test tests/test_financial_institutions_ui.cjs
           node tests/open_finance_product_concurrency_ui.cjs
           node tests/open_finance_product_races_ui.cjs
+          node tests/open_finance_privacy_attributes_ui.cjs
       - name: Browser with WSGI and synthetic SQLite
         run: python -m unittest discover -s tests -p test_open_finance_integrated_ui.py
