@@ -12,7 +12,7 @@ from .open_finance_query import civil, read_view, search_key
 from .open_finance_registry import connection_views
 from .domain.clock import SystemClock
 from .open_finance_portfolio import portfolio_history
-from .open_finance_classification import Classifier, Facts, NATURES, ORIGINS
+from .open_finance_classification import AUTOMATIC, Classifier, Facts, NATURES, ORIGINS, normalize
 from .open_finance_insights import banking_insights, card_insights, classification_center, classified_bucket, masked_card_text
 from .open_finance_domain import _origin, _context_at_origin, _freshness
 
@@ -390,6 +390,10 @@ def analytics(c, settings, query, today=None):
         if time.monotonic()>deadline:
             raise SyncError('QUERY_BUDGET_EXCEEDED',503)
         insights = banking_insights(items,flow['BANK'])
+        automatic_positions = [item for item in positions['investments']['items']
+                               if normalize(item['name']) == normalize(AUTOMATIC)]
+        if len(automatic_positions)==1:
+            insights['automatic']['position'] = automatic_positions[0]['value']
         if prior_bank and insights['coverage']=='COMPLETE_BANK_SCOPE':
             prior_start,prior_end,observations=prior_bank
             historical=[]

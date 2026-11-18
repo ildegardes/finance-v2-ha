@@ -42,6 +42,16 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || path.join(process.env.
     assert.equal(await overview.locator('.of-income-insight .of-net-value').textContent(),'R$ 52,04');
     assert.equal(await overview.locator('.of-card-compact').filter({hasText:'•••• 4444'}).count(),1);
     assert.doesNotMatch(await overview.innerHTML(),/4111 2222 3333/);
+    assert.equal(await overview.locator('.of-card-mark.one').count(),1);
+    const positions=overview.locator('.of-position-list');
+    await positions.getByText('Ver posições e datas').click();
+    await shot('posicoes-por-instituicao',positions);
+    await positions.getByText('Ver posições e datas').click();
+    const automatic=overview.locator('.of-automatic-card');
+    await automatic.getByText('Aplic Aut Mais').click();
+    assert.match(await automatic.innerText(),/Resgates pendentes\s+R\$\s*2\.500,00/);
+    await shot('aplic-aut-mais-visao-geral',automatic);
+    await automatic.getByText('Aplic Aut Mais').click();
     await overview.locator('.of-portfolio-plot').waitFor();
     await shot('investimentos-com-historico',overview.locator('.of-portfolio'));
     await shot('visao-geral');

@@ -43,7 +43,7 @@ class BrowserClassification(unittest.TestCase):
         for n in range(12):
             data.tx(f'pay-{n:02}','Crédito de empregador fictício','2015.55')
         data.label('shop','EXPENSE','Mercado')
-        data.write("""UPDATE of_resource_records SET payload_json=json_set(payload_json,'$.name','Cartão sintético 4111 2222 3333 4444',
+        data.write("""UPDATE of_resource_records SET payload_json=json_set(payload_json,'$.name','Itaú Personnalité The One Mastercard 4111 2222 3333 4444',
             '$.creditData.status','ACTIVE','$.creditData.creditLimit',9999.00) WHERE resource='accounts' AND external_id='account-CREDIT'""")
         data.fixture.no_network.stop()
         server=make_server('127.0.0.1',0,Application(data.settings),handler_class=Quiet)

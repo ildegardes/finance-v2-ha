@@ -33,7 +33,7 @@ export function cardPanel(cards,amount,mode,esc){
       (card.used!=null?'Utilizado':'Saldo informado')+'</small></span></button></li>';
   }).join('');
   return '<section class="of-summary-card of-card-insight"><div class="of-section-heading"><div><h3>Cartões de crédito</h3><p>'+
-    esc(countBR.format(cards.active_count))+' ativos informados</p></div><button type="button" class="of-link" data-all-overview-cards>Ver todos</button></div>'+
+    esc(countBR.format(cards.active_count))+(cards.active_count===1?' cartão ativo informado':' cartões ativos informados')+'</p></div><button type="button" class="of-link" data-all-overview-cards>Ver todos</button></div>'+
     (cards.used!=null?'<p>Saldo utilizado consolidado <strong>'+amount(cards.used)+'</strong></p>':'')+
     (list?'<ul class="of-compact-cards">'+list+'</ul>':'<p>Nenhum cartão encontrado neste escopo.</p>')+'</section>';
 }
@@ -49,7 +49,7 @@ function proportions(rows,mode,amount,esc){
 export function incomePanel(insights,amount,mode,esc){
   if(!insights)return '';
   const automatic=insights.automatic;
-  const auto=automatic&&Object.keys(automatic.counts).length?'<details class="of-automatic-card"><summary>Aplic Aut Mais</summary><ul class="of-category-list">'+
+  const auto=automatic&&(Object.keys(automatic.counts).length||automatic.position!=null)?'<details class="of-automatic-card"><summary>Aplic Aut Mais</summary><ul class="of-category-list">'+
     Object.entries(volumeNames).map(([key,label])=>'<li>'+
       (key==='capital_flow'?'<span>'+label+'</span>':'<button type="button" class="of-link" data-auto-category="'+key+'">'+label+'</button>')+
       '<strong>'+amount(automatic.value[key])+'</strong>'+
@@ -61,7 +61,7 @@ export function incomePanel(insights,amount,mode,esc){
   return '<section class="of-summary-card of-income-insight"><div class="of-section-heading"><div><h3>Rendimentos de investimentos</h3>'+
     '<p>Créditos bancários identificados no período</p></div><button type="button" class="of-link" data-open-income>Ver rendimentos e proventos</button></div>'+
     '<strong class="of-net-value">'+amount(insights.income.value)+'</strong>'+proportions(rows,mode,amount,esc)+
-    '<p>A cobertura depende dos registros disponíveis e das classificações confirmadas.</p>'+'</section>';
+    monthlyNote+'<p>A cobertura depende dos registros disponíveis e das classificações confirmadas.</p>'+auto+'</section>';
 }
 
 export function mountInvestmentIncome({host,api,esc,navigation,getScope}){
