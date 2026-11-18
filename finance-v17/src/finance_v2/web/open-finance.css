@@ -132,6 +132,7 @@ button.of-column{position:relative;background:transparent;border-radius:.2rem;pa
 .of-insight-bridge li>div{display:flex;gap:.45rem 1rem;flex-wrap:wrap}
 .of-insight-card-row details{flex:1 1 100%}
 .of-insight-card-row>div:first-child{min-width:0}
+.of-insight-card-row>div:first-child small{display:block;margin-top:.15rem}
 .of-investment-income{margin-top:1rem}
 .of-investment-income .of-overview-filters{margin:.7rem 0}
 .of-investment-income h4{margin:1.15rem 0 .35rem}
