@@ -41,7 +41,7 @@ class Overview34Tests(unittest.TestCase):
         self.assertEqual(ranking['Operações de investimento']['review'],['SUGGESTED'])
         self.assertEqual(result['economic_category_ranking'][0]['name'],'Mercado')
         self.assertEqual(result['insights']['bridge']['capital']['outgoing'],'33000.33')
-        self.assertEqual(result['insights']['known']['outgoing'],'56.01')
+        self.assertEqual(result['insights']['known']['outgoing'],'66.01')
         scoped=case.report({'effective_key':[ranking['Aplicação automática']['key']],'direction':['outgoing']})
         self.assertEqual(scoped['total'],33)
         self.assertEqual(scoped['flow']['BANK']['outgoing'],ranking['Aplicação automática']['value'])

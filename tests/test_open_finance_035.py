@@ -25,6 +25,8 @@ class Release35Tests(unittest.TestCase):
         self.addCleanup(self.case.doCleanups)
         self.case.setUp()
         self.case.write("UPDATE of_connection_registry SET label='Itaú' WHERE connection_id='bank-test'")
+        self.case.write("""UPDATE of_resource_records SET state='NOT_SEEN'
+            WHERE resource='transactions'""")
 
     def provider_expense(self,key,label,amount,description):
         case=self.case
@@ -37,13 +39,15 @@ class Release35Tests(unittest.TestCase):
         for key,label,amount in [('school','Educação infantil','51.25'),('books','Livrarias','19.75'),
                                  ('power','Energia elétrica','29.00'),('service','Serviços','50')]:
             self.provider_expense(key,label,amount,'Débito identificado '+key)
+        self.provider_expense('school','Kindergarten','51.25','Débito identificado school')
+        self.provider_expense('books','Bookstore','19.75','Débito identificado books')
         case.tx('payroll','Crédito de folha sintético','3500')
         case.label('payroll','SALARY','Salário')
         data=case.report()
         self.assertEqual(data['insights']['known']['outgoing'],'150.00')
         self.assertEqual(data['insights']['known']['net'],'3350.00')
         ranked=data['economic_category_ranking']
-        self.assertEqual({r['name'] for r in ranked},{'Educação infantil','Livrarias','Energia elétrica','Serviços'})
+        self.assertEqual({r['name'] for r in ranked},{'Kindergarten','Bookstore','Energia elétrica','Serviços'})
         for row in ranked:
             scoped=case.report({'direction':['outgoing'],'bucket':['operating'],'effective_key':[row['key']]})
             self.assertEqual(scoped['total'],row['count'])
