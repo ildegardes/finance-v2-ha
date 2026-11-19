@@ -128,9 +128,11 @@ def status(db,settings,epoch):
             FROM st_accounts a ORDER BY a.label,a.id'''):
         accounts[row['connection_id']].append(dict(row))
     coverage=defaultdict(list)
-    for row in db.execute('''SELECT account_id,resource,state,observed_at,error_code,first_date,last_date
+    for row in db.execute('''SELECT account_id,resource,state,observed_at,error_code,first_date,last_date,retry_after
                              FROM st_checkpoints ORDER BY account_id,resource'''):
-        coverage[row['account_id']].append(dict(row))
+        item=dict(row)
+        item['retry_at']=_epoch_iso(item.pop('retry_after')) if row['retry_after'] else None
+        coverage[row['account_id']].append(item)
     rows=[]
     for connection in db.execute('SELECT * FROM st_connections ORDER BY institution,id'):
         matched=accounts[connection['id']]
@@ -233,10 +235,11 @@ def _discovery(service,db,token,reader,secrets,check,ignore_pause=False):
     return pending
 
 
-def _checkpoint(db,account,resource,state,stamp,error=None):
-    db.execute('''INSERT INTO st_checkpoints(account_id,resource,state,observed_at,error_code)
-      VALUES(?,?,?,?,?) ON CONFLICT(account_id,resource) DO UPDATE SET state=excluded.state,
-      observed_at=excluded.observed_at,error_code=excluded.error_code''',(account,resource,state,stamp,error))
+def _checkpoint(db,account,resource,state,stamp,error=None,retry_after=None):
+    db.execute('''INSERT INTO st_checkpoints(account_id,resource,state,observed_at,error_code,retry_after)
+      VALUES(?,?,?,?,?,?) ON CONFLICT(account_id,resource) DO UPDATE SET state=excluded.state,
+      observed_at=excluded.observed_at,error_code=excluded.error_code,retry_after=excluded.retry_after''',
+      (account,resource,state,stamp,error,retry_after))
 
 
 def _as_of(body):
@@ -380,6 +383,10 @@ def sync(service,*,automatic=False,discover=False,connection=None,reader_factory
             for aid,remote,cid,holdings_unavailable in ([] if discover else pending):
                 if connection and cid!=connection:
                     continue
+                retry_at=db.execute('SELECT max(retry_after) FROM st_checkpoints WHERE account_id=?',(aid,)).fetchone()[0]
+                if retry_at and retry_at>service._time()[0]:
+                    result='PARTIAL'
+                    continue
                 snapshot=None
                 balances_ok=False
                 for resource in ('balances','positions','activities'):
@@ -409,8 +416,13 @@ def sync(service,*,automatic=False,discover=False,connection=None,reader_factory
                         result='PARTIAL'
                         if error.code in BLOCKING or error.code in ('SNAPTRADE_INTERRUPTED','SNAPTRADE_LEASE_LOST'):
                             raise
+                        account_rate=error.code=='SNAPTRADE_ACCOUNT_RATE_LIMIT'
                         with _write(service,db,token,check) as stamp:
-                            _checkpoint(db,aid,resource,'UNAVAILABLE' if error.code in ('SNAPTRADE_UNAVAILABLE','SNAPTRADE_FORBIDDEN') else 'FAILED',stamp,error.code)
+                            retry_after=int(service._time()[0])+error.retry if account_rate else None
+                            state='UNAVAILABLE' if error.code in ('SNAPTRADE_UNAVAILABLE','SNAPTRADE_FORBIDDEN') else 'FAILED'
+                            _checkpoint(db,aid,resource,state,stamp,error.code,retry_after)
+                        if account_rate:
+                            break
         except ProviderFailure as error:
             failure=error
             result='PARTIAL' if error.code=='SNAPTRADE_RATE_LIMIT' or result=='PARTIAL' else 'FAILED'
@@ -421,7 +433,7 @@ def sync(service,*,automatic=False,discover=False,connection=None,reader_factory
         with service._write(db):
             current=db.execute('SELECT * FROM st_state WHERE singleton=1').fetchone()
             if current['lease_token']==token and current['lease_until']>epoch:
-                retry=failure.retry if failure else 0
+                retry=failure.retry if failure and failure.code!='SNAPTRADE_ACCOUNT_RATE_LIMIT' else 0
                 delay=max(retry,86400 if failure and failure.code in ('SNAPTRADE_AUTH','SNAPTRADE_FORBIDDEN') else
                           300 if result!='AVAILABLE' else current['interval_hours']*3600)
                 successful=result=='AVAILABLE' and not discover

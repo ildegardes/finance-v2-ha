@@ -13,6 +13,7 @@ const kindNames={stock:'Ações',etf:'ETF',mutualfund:'Fundos',adr:'ADR',bond:'R
   CORPORATE_ACTION:'Evento corporativo',REVIEW:'A revisar'};
 const statusNames={SNAPTRADE_AUTH:'Credencial rejeitada',SNAPTRADE_FORBIDDEN:'Permissão insuficiente',
   SNAPTRADE_RATE_LIMIT:'Limite de chamadas. Aguarde o horário previsto.',SNAPTRADE_BUSY:'Coleta em andamento',
+  SNAPTRADE_ACCOUNT_RATE_LIMIT:'Uma conta atingiu o limite de chamadas.',
   SNAPTRADE_TRANSPORT:'Falha de comunicação com a SnapTrade',SNAPTRADE_CREDENTIALS_LOCKED:'Chave local indisponível',
   SNAPTRADE_INVALID_DATA:'Formato da resposta inválido',PTAX_UNAVAILABLE:'Banco Central indisponível',
   SNAPTRADE_IMPORT_FAILED:'Falha na importação',SNAPTRADE_REMOTE:'Serviço temporariamente indisponível'};
@@ -280,7 +281,8 @@ export function mountSnapTradeConnections({host,panel,api,esc,navigation,today,e
         '<small>Atualização conhecida pela SnapTrade '+fmt(account.provider_updated_at)+'</small>'+
         '<small>Leitura local '+fmt(account.observed_at)+'</small>'+
         (account.coverage.length?'<ul>'+account.coverage.map(item=>'<li>'+esc(resources[item.resource])+' · '+esc(outcomes[item.state]||'Não consultado')+
-           (item.first_date?' · '+formatDate(item.first_date)+' a '+formatDate(item.last_date):'')+'</li>').join('')+'</ul>':'<small>Recursos ainda não consultados</small>')+
+           (item.first_date?' · '+formatDate(item.first_date)+' a '+formatDate(item.last_date):'')+
+           (item.retry_at?' · Próxima tentativa a partir de '+fmt(item.retry_at):'')+'</li>').join('')+'</ul>':'<small>Recursos ainda não consultados</small>')+
         '</li>').join('')+'</ul></details>'+
       '<form data-snap-policy="'+esc(row.id)+'" aria-label="Política de '+esc(row.institution)+'" class="of-presentation">'+
       policy(row,'paused','Pausar coleta automática')+policy(row,'archived','Arquivar localmente')+

@@ -29,7 +29,8 @@ def _retry(headers):
             pass
     reset = [headers.get(prefix+'-Reset','') for prefix in ('X-RateLimit','X-RateLimit-Account')
              if headers.get(prefix+'-Remaining')=='0']
-    return max([300]+[int(raw) for raw in reset if isinstance(raw,str) and raw.isdecimal() and len(raw)<=10])
+    seconds=[int(raw) for raw in reset if isinstance(raw,str) and raw.isdecimal() and len(raw)<=10]
+    return max(60,*seconds) if seconds else 300
 
 
 def validate_read_request(method,url):
@@ -73,7 +74,7 @@ class SnapTradeReader:
             response = self._reads[operation](timeout=(4,8),**parameters).response
             status, headers = response.status,response.headers
             if status != 200:
-                raise ProviderFailure(_status(status),_retry(headers) if status==429 else 0)
+                raise ProviderFailure(_status(status,headers),_retry(headers) if status==429 else 0)
             raw = response.data
             if not isinstance(raw,bytes) or len(raw)>MAX_BYTES:
                 raise ProviderFailure('SNAPTRADE_RESPONSE_LIMIT')
@@ -84,7 +85,7 @@ class SnapTradeReader:
             status = getattr(error,'status',None)
             headers = getattr(error,'headers',None) or {}
             if status:
-                code, delay = _status(status),_retry(headers) if status==429 else 0
+                code, delay = _status(status,headers),_retry(headers) if status==429 else 0
             elif isinstance(error,(ValueError,TypeError)):
                 code, delay = 'SNAPTRADE_INVALID_DATA',0
             else:
@@ -92,7 +93,9 @@ class SnapTradeReader:
             raise ProviderFailure(code,delay) from None
 
 
-def _status(status):
+def _status(status,headers):
+    if status==429 and headers.get('X-RateLimit-Account-Remaining')=='0' and headers.get('X-RateLimit-Remaining')!='0':
+        return 'SNAPTRADE_ACCOUNT_RATE_LIMIT'
     return {401:'SNAPTRADE_AUTH',403:'SNAPTRADE_FORBIDDEN',404:'SNAPTRADE_UNAVAILABLE',
             429:'SNAPTRADE_RATE_LIMIT'}.get(status,'SNAPTRADE_REMOTE')
 

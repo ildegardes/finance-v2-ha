@@ -14,7 +14,7 @@ O cliente instalado e inspecionado é o SDK Python oficial 13.4.4, com autentica
 | Eventos corporativos, proventos, taxas, retenções | Tipos normalizados de atividades | Leitura documentada | Campo e granularidade dependem da conta | Tipos explícitos preservados. Valores bruto, líquido e retenção dependem de evidência |
 | Refresh remoto, ordens de negociação, permissões e desconexão | Existem operações distintas | Dependem da configuração | Fora do fluxo de leitura | Ausentes da allowlist |
 
-A data de atualização de uma posição vem da referência retornada pela API. A coleta local consulta o cache em intervalos independentes do provedor. Limites oficiais podem atuar simultaneamente por cliente e conta. A periodicidade de atualização da Charles Schwab e as lacunas na conta do proprietário ficam para homologação.
+A data de atualização de uma posição vem da referência retornada pela API. A coleta local consulta o cache em intervalos independentes do provedor. Limites oficiais podem atuar simultaneamente por cliente e conta. A próxima tentativa é mantida no banco e a coleta continua nas demais contas quando o provedor identifica uma restrição por conta. A periodicidade de atualização da Charles Schwab e as lacunas na conta do proprietário ficam para homologação.
 
 - [Guia Personal](https://docs.snaptrade.com/docs/build-with-ai.md) · [Autenticação](https://docs.snaptrade.com/docs/authentication-methods) · [Personal e Commercial](https://docs.snaptrade.com/docs/personal-vs-commercial)
 - [Índice oficial](https://docs.snaptrade.com/llms.txt) · [OpenAPI](https://docs.snaptrade.com/openapi.yaml) · [SDK 13.4.4](https://pypi.org/project/snaptrade-python-sdk/13.4.4/)

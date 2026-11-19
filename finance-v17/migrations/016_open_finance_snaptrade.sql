@@ -62,7 +62,7 @@ CREATE TABLE st_activity_rules (
 CREATE TABLE st_checkpoints (
     account_id TEXT NOT NULL REFERENCES st_accounts(id), resource TEXT NOT NULL,
     state TEXT NOT NULL, observed_at TEXT NOT NULL, error_code TEXT,
-    window_start TEXT, window_end TEXT, next_offset INTEGER NOT NULL DEFAULT 0,
+    retry_after INTEGER, window_start TEXT, window_end TEXT, next_offset INTEGER NOT NULL DEFAULT 0,
     page_anchor TEXT, first_date TEXT, last_date TEXT,
     PRIMARY KEY(account_id,resource)
 );

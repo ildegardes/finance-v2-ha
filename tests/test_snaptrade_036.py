@@ -293,6 +293,36 @@ class SnapTradeTests(unittest.TestCase):
             update_credentials(self.service,{'client_id':CLIENT,'consumer_key':'synthetic-invalid'})
             self.assertEqual(self.run_sync()['error_code'],'SNAPTRADE_AUTH')
 
+    def test_account_throttle_preserves_other_brokers(self):
+        from finance_v2.snaptrade_read import _status
+        self.assertEqual(_status(429,{'X-RateLimit-Account-Remaining':'0'}),'SNAPTRADE_ACCOUNT_RATE_LIMIT')
+        self.assertEqual(_status(429,{'X-RateLimit-Account-Remaining':'0','X-RateLimit-Remaining':'0'}),'SNAPTRADE_RATE_LIMIT')
+        self.broker.second_active=True
+        transport=self.broker.read
+        def limited(operation,**query):
+            if operation=='positions' and query.get('account_id')==ACCOUNT:
+                raise ProviderFailure('SNAPTRADE_ACCOUNT_RATE_LIMIT',660)
+            return transport(operation,**query)
+        with patch.object(self.broker,'read',side_effect=limited):
+            result=self.run_sync()
+            self.assertEqual(result,{'state':'PARTIAL','error_code':'SNAPTRADE_ACCOUNT_RATE_LIMIT'})
+            self.assertIn(('positions',ACCOUNT2,None),self.broker.visited)
+            self.broker.visited.clear()
+            self.assertEqual(self.run_sync()['state'],'PARTIAL')
+            self.assertTrue(all(account!=ACCOUNT for _,account,_ in self.broker.visited))
+        with closing(connect(self.case.db)) as db:
+            state=status(db,self.settings,self.clock.now_utc().timestamp())
+        coverage=next(row for row in state['connections'] if row['institution']=='Charles Schwab')['accounts'][0]['coverage']
+        self.assertEqual(next(row for row in coverage if row['resource']=='positions')['retry_at'],'2026-10-20T19:11:00Z')
+
+    def test_legacy_snapshot_run_must_have_one_financial_date(self):
+        run=self.case.next_run()
+        self.case.write("""INSERT INTO of_portfolio_snapshots VALUES
+          (?,'bank-test','asset-first','BRL','100','2026-10-19',?),
+          (?,'bank-test','asset-second','BRL','200','2026-10-20',?)""",(run,STAMP,run,STAMP))
+        data=self.view(view='history',provider='PLUGGY',currency='BRL',start='2026-10-19',end='2026-10-19')
+        self.assertEqual(data['points'],[])
+
     def test_large_activity_and_position_projection(self):
         import time
         import tracemalloc
@@ -309,7 +339,9 @@ class SnapTradeTests(unittest.TestCase):
             db.commit()
             statements=[]
             db.set_trace_callback(statements.append)
-            tracemalloc.start()
+            trace_allocations=not os.environ.get('OF_TEST_NO_MEMORY_TRACE')
+            if trace_allocations:
+                tracemalloc.start()
             start=time.perf_counter()
             try:
                 rows=report(db,self.settings,{'view':['activities'],'page_size':['250'],'page':['48']},TODAY)
@@ -322,7 +354,8 @@ class SnapTradeTests(unittest.TestCase):
             self.assertLess(len(statements),45)
             self.assertLess(elapsed,60)
             self.assertLess(peak,60*1024*1024)
-            print(f'SnapTrade volume: {elapsed:.3f} s, {peak/1024/1024:.1f} MiB, {len(statements)} SQLite commands')
+            memory=f'{peak/1024/1024:.1f} MiB, ' if trace_allocations else ''
+            print(f'SnapTrade volume: {elapsed:.3f} s, {memory}{len(statements)} SQLite commands')
 
     def test_sdk_13_4_4_signs_personal_reads_and_bounds_routes(self):
         from snaptrade_client import __version__

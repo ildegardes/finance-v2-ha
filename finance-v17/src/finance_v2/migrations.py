@@ -43,7 +43,7 @@ MIGRATIONS = (
     Migration(13, "open_finance_classification", MIGRATIONS_DIR / "013_open_finance_classification.sql", "58b1e585ab73cb27f77bb5b43311092645a84e2b45b84469c9e3179150e2745a"),
     Migration(14, "open_finance_portfolio", MIGRATIONS_DIR / "014_open_finance_portfolio.sql", "e3a1a67be487f2898686ce3d1cd9f68534ca7710aac83e32b8f15d84da9996de"),
     Migration(15, "open_finance_sync_preferences", MIGRATIONS_DIR / "015_open_finance_sync_preferences.sql", "35e3a9477f8749781ca9c840115f35ab5e198cb0fbda688faddc5fa8700e4f6b"),
-    Migration(16, "open_finance_snaptrade", MIGRATIONS_DIR / "016_open_finance_snaptrade.sql", "4530920f2315935101bff5e0077de9d4866d4786a970a991ae2c58ba6000da12"),
+    Migration(16, "open_finance_snaptrade", MIGRATIONS_DIR / "016_open_finance_snaptrade.sql", "f9a0a0d980e0f4dd4e686a00ba44b28d74c1049c9618a80d20bbd94b2686096f"),
 )
 
 

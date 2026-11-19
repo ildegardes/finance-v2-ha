@@ -90,7 +90,7 @@ def _pluggy(db,settings,include_history):
     return rows,list(accounts.values())
 
 
-def _snaptrade(db,include_history,settings):
+def _snaptrade(db,include_history,settings,activities=False):
     accounts={}
     for row in _execute(db,'''SELECT a.id,a.label,a.connection_id,a.state,a.suffix,c.institution,c.provider_state,
             c.archived,c.excluded,a.net_value,a.net_currency FROM st_accounts a
@@ -108,9 +108,13 @@ def _snaptrade(db,include_history,settings):
         brokers[row['brokerage'].casefold()].add(row['id'])
     overlap=any(len(scope)>1 for scope in brokers.values())
     scope=json.dumps(list(accounts))
-    positions=[{**accounts[row['account_id']],**dict(row),'account_label':accounts[row['account_id']]['label'],'market':_market(row['country'])}
-      for row in _execute(db,'''SELECT * FROM st_positions WHERE cash_equivalent=0
+    projection='account_id,instrument_id,country,ticker' if activities else '*'
+    positions=[({**dict(row),'market':_market(row['country'])} if activities else
+      {**accounts[row['account_id']],**dict(row),'account_label':accounts[row['account_id']]['label'],'market':_market(row['country'])})
+      for row in _execute(db,'SELECT '+projection+''' FROM st_positions WHERE cash_equivalent=0
       AND account_id IN (SELECT value FROM json_each(?))''',(scope,))]
+    if activities:
+        return positions,[],list(accounts.values()),overlap
     balances=[{**accounts[row['account_id']],**dict(row),'market':'UNKNOWN','kind':'CASH'}
       for row in _execute(db,'''SELECT * FROM st_balances WHERE account_id IN (SELECT value FROM json_each(?))''',(scope,))]
     return positions,balances,list(accounts.values()),overlap
@@ -208,39 +212,58 @@ def classify_activity(service,body):
 
 def _activity_view(db,q,account_index,positions,fx):
     instruments={(row['account_id'],row['instrument_id']):row for row in positions}
-    rows=[]
+    reviewing=q.get('kind')=='OWNER_REVIEW'
+    scope={key:value for key,value in q.items() if key!='kind'} if reviewing else q
+    items=[]
+    total=0
+    income=defaultdict(lambda: defaultdict(Decimal))
+    precision=4 if q.get('group')=='year' else 7
+    page_size,number=q['page_size'],q['page']
+    offset=(number-1)*page_size
+    target=q.get('presentation','original')
+    income_kinds=('DIVIDEND','INTEREST','TAX','FEE')
     if account_index:
+        encoded=json.dumps(list(account_index))
         rules={(row['account_id'],row['provider_kind'],row['description_key']):row['kind'] for row in _execute(db,
-            'SELECT * FROM st_activity_rules WHERE account_id IN (SELECT value FROM json_each(?))',
-            (json.dumps(list(account_index)),))}
-        for row in _execute(db,'''SELECT * FROM st_activities WHERE account_id IN (SELECT value FROM json_each(?))
-           AND date BETWEEN ? AND ? ORDER BY date DESC,account_id,activity_id''',
-           (json.dumps(list(account_index)),q.get('start','0001-01-01'),q.get('end','9999-12-31'))):
+            'SELECT * FROM st_activity_rules WHERE account_id IN (SELECT value FROM json_each(?))',(encoded,))}
+        terms=['account_id IN (SELECT value FROM json_each(?))','date BETWEEN ? AND ?']
+        args=[encoded,q.get('start','0001-01-01'),q.get('end','9999-12-31')]
+        if q.get('currency'):
+            terms.append('currency=?')
+            args.append(q['currency'])
+        if q.get('asset'):
+            terms.append('instrument_id=?')
+            args.append(q['asset'])
+        if reviewing:
+            terms.append("kind='REVIEW' AND description IS NOT NULL")
+        cursor=db.execute('SELECT * FROM st_activities WHERE '+' AND '.join(terms)+
+                          ' ORDER BY date DESC,account_id,activity_id LIMIT ?',(*args,MAX_ROWS+1))
+        for index,row in enumerate(cursor):
+            if index==MAX_ROWS:
+                raise SyncError('QUERY_BUDGET_EXCEEDED',503)
             account=account_index[row['account_id']]
             instrument=instruments.get((row['account_id'],row['instrument_id'])) or {}
-            target=q.get('presentation','original')
-            value,quote=fx.convert(row['amount'],row['currency'],target,row['date']) if target!='original' else (None,None)
-            combined={**account,**dict(row),'market':instrument.get('market','UNKNOWN'),
-                      'country':instrument.get('country'),'presented_amount':_format(value),'fx':quote}
+            combined={**account,**dict(row),'market':instrument.get('market','UNKNOWN'),'country':instrument.get('country')}
             if row['kind']=='REVIEW' and row['description']:
                 effective=rules.get((row['account_id'],row['provider_kind'],normalize(row['description'])))
                 combined.update(rule_eligible=True,classification_source='OWNER_RULE' if effective else 'REVIEW',
                                 kind=effective or row['kind'])
-            scope=q if q.get('kind')!='OWNER_REVIEW' else {key:value for key,value in q.items() if key!='kind'}
-            if (q.get('kind')!='OWNER_REVIEW' or combined.get('rule_eligible')) and _scope(combined,scope) \
-                and (not q.get('asset') or combined['instrument_id']==q['asset']):
-                rows.append(combined)
-    income=defaultdict(lambda: defaultdict(Decimal))
-    precision=4 if q.get('group')=='year' else 7
-    for row in rows:
-        label,currency,value=row['kind'],row['currency'],row['amount']
-        if label in ('DIVIDEND','INTEREST','TAX','FEE') and currency and value is not None:
-            income[(row['date'][:precision],currency)][label]+=Decimal(value)
-    totals=[{'month':month,'currency':currency,'components':{k:_format(v) for k,v in values.items()}}
-            for (month,currency),values in sorted(income.items(),reverse=True)]
-    if q.get('view')=='income':
-        rows=[row for row in rows if row['kind'] in ('DIVIDEND','INTEREST','TAX','FEE','REINVESTMENT')]
-    return {**_page(rows,q),'income':totals,'accounts':list(account_index.values())}
+            if not _scope(combined,scope):
+                continue
+            label,currency,amount=combined['kind'],combined['currency'],combined['amount']
+            if label in income_kinds and currency and amount is not None:
+                income[(row['date'][:precision],currency)][label]+=Decimal(amount)
+            if q.get('view')=='income' and label not in (*income_kinds,'REINVESTMENT'):
+                continue
+            if offset<=total<offset+page_size:
+                value,quote=fx.convert(amount,currency,target,row['date']) if target!='original' else (None,None)
+                combined.update(presented_amount=_format(value),fx=quote)
+                items.append(combined)
+            total+=1
+    totals=[{'month':period,'currency':currency,'components':{k:_format(v) for k,v in values.items()}}
+            for (period,currency),values in sorted(income.items(),reverse=True)]
+    return {'items':items,'total':total,'page':number,'total_pages':max(1,(total+page_size-1)//page_size),
+            'income':totals,'accounts':list(account_index.values())}
 
 
 def _history(db,q,accounts,current,fx,today,has_overlap):
@@ -259,19 +282,25 @@ def _history(db,q,accounts,current,fx,today,has_overlap):
     for row in _execute(db,sql+''' AND account_id IN (SELECT value FROM json_each(?))
            AND reference_date BETWEEN ? AND ?''',((asset,) if asset else ())+(scope,start,end)):
         sources[row['reference_date']][row['account_id']][row['currency']]=Decimal(row['market_value'])
-    latest={}
+    runs={}
     for row in _execute(db,'''SELECT p.connection_id,p.currency,p.reference_date,p.value,p.external_id,p.run_id,
            r.finished_at FROM of_portfolio_snapshots p JOIN of_sync_runs r ON p.run_id=r.id
            WHERE p.connection_id IN (SELECT value FROM json_each(?)) AND r.state='SUCCEEDED'
-           AND p.reference_date BETWEEN ? AND ? AND (? IS NULL OR p.external_id=?)
-           ORDER BY r.finished_at,p.run_id''',(scope,start,end,asset,asset)):
-        tag=(row['reference_date'],row['connection_id'])
-        group=latest.get(tag)
-        if not group or group[0]!=row['run_id']:
-            group=(row['run_id'],defaultdict(Decimal))
-            latest[tag]=group
-        group[1][row['currency']]+=Decimal(row['value'])
-    for (reference,account),(_,values) in latest.items():
+             AND (? IS NULL OR p.external_id=?) AND (? IS NULL OR p.currency=?)
+             AND EXISTS(SELECT 1 FROM of_portfolio_snapshots candidate WHERE candidate.run_id=p.run_id
+                        AND candidate.connection_id=p.connection_id AND candidate.reference_date BETWEEN ? AND ?)
+           ORDER BY r.finished_at,p.run_id''',(scope,asset,asset,q.get('currency'),q.get('currency'),start,end)):
+        runs.setdefault((row['connection_id'],row['run_id']),[]).append(row)
+    for (account,_),rows in runs.items():
+        dates={row['reference_date'] for row in rows}
+        if len(dates)!=1 or None in dates:
+            continue
+        reference=dates.pop()
+        if not start<=reference<=end:
+            continue
+        values=defaultdict(Decimal)
+        for row in rows:
+            values[row['currency']]+=Decimal(row['value'])
         sources[reference][account]=values
     points=[]
     selected_currency=q.get('currency')
@@ -309,15 +338,16 @@ def report(db,settings,query,today):
     include_history=q.get('history')=='1'
     with read_view(db),localcontext() as ctx:
         ctx.prec=82
-        brazil,local=_pluggy(db,settings,include_history) if q.get('provider')!='SNAPTRADE' else ([],[])
-        foreign,balances,international,overlap=_snaptrade(db,include_history,settings) if q.get('provider')!='PLUGGY' else ([],[],[],False)
+        page=q.get('view','portfolio')
+        activities=page in ('activities','income')
+        brazil,local=_pluggy(db,settings,include_history) if not activities and q.get('provider')!='SNAPTRADE' else ([],[])
+        foreign,balances,international,overlap=_snaptrade(db,include_history,settings,activities) if q.get('provider')!='PLUGGY' else ([],[],[],False)
         options=local+international
         institutions={normalize(row['institution']) for row in local if row['state']=='AVAILABLE'}
         overlap|=any(normalize(row['institution']) in institutions for row in international if row['state']=='AVAILABLE')
         accounts=[row for row in options if _scope(row,{k:q[k] for k in ('provider','connection_id','account_id') if k in q})]
         fx=FX(db)
-        page=q.get('view','portfolio')
-        if page in ('activities','income'):
+        if activities:
             return _activity_view(db,q,{row['id']:row for row in accounts if row['provider']=='SNAPTRADE'},foreign,fx)
         if page=='history':
             if q.get('kind') or q.get('market') or q.get('search'):
