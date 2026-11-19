@@ -170,7 +170,7 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(run['state'], 'SUCCEEDED', run)
         self.assertEqual(self.financial(), before)
         with closing(connect(self.db)) as c:
-            self.assertEqual(c.execute('PRAGMA user_version').fetchone()[0], 15)
+            self.assertEqual(c.execute('PRAGMA user_version').fetchone()[0], 16)
             self.assertEqual({r[0] for r in c.execute('SELECT DISTINCT resource FROM of_resource_records')}, set(CONTRACT['resources']))
             self.assertEqual(c.execute('SELECT count(*) FROM of_transactions').fetchone()[0], 2)
             self.assertEqual(c.execute('SELECT count(*) FROM of_transaction_revisions').fetchone()[0], 2)
@@ -345,7 +345,7 @@ class CoverageTests(unittest.TestCase):
         with closing(connect(fresh)) as c:
             c.execute("INSERT INTO accounts(name,active) VALUES('Preservada sintÃ©tica',1)")
             snapshot = list(c.execute('SELECT * FROM accounts'))
-        self.assertEqual(migrations.migrate(fresh), [9, 10, 11, 12, 13, 14, 15])
+        self.assertEqual(migrations.migrate(fresh), [9, 10, 11, 12, 13, 14, 15, 16])
         self.assertEqual(migrations.migrate(fresh), [])
         with closing(connect(fresh)) as c:
             self.assertEqual([tuple(r) for r in c.execute('SELECT * FROM accounts')], [tuple(r) for r in snapshot])

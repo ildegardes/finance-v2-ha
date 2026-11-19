@@ -67,6 +67,12 @@ OPERATIONS = (
     ('POST','classification/preview','classification_preview'),
     ('POST','classification/apply','classification_apply'),
     ('POST','classification/undo','classification_undo'),
+    ('GET','portfolio','portfolio'),
+    ('GET','snaptrade','snaptrade_status'), ('POST','snaptrade/discovery','snaptrade_discovery'),
+    ('POST','snaptrade/sync','snaptrade_sync'), ('POST','snaptrade/preferences','snaptrade_preferences'),
+    ('POST','snaptrade/policy','snaptrade_policy'), ('POST','snaptrade/credentials','snaptrade_credentials'),
+    ('POST','portfolio/fx','portfolio_fx'),
+    ('POST','portfolio/activity-rule','portfolio_activity_rule'),
     ('GET','sync-preferences','sync_preferences'), ('POST','sync-preferences','sync_preferences_write'),
     ('GET','catalogs','catalogs'), ('GET','analytics','analytics'),
     ('GET','resources','resources'), ('GET','coverage','coverage'),
@@ -194,6 +200,52 @@ def _dispatch_raw(app,operation,identity,body,query):
     if identity.role!='UI' or identity.client_id!='UI:local':raise SyncError('FORBIDDEN',403)
     service=OpenFinanceService(app.settings,app.clock)
     op=operation.removeprefix('open_finance_')
+    if op=='portfolio':
+        if body:
+            raise SyncError('INVALID_REQUEST',422)
+        from .open_finance_wealth import report
+        with closing(app.db()) as c:
+            return report(c,app.settings,query,str(app.clock.today())),200
+    if op=='portfolio_activity_rule':
+        if query or not identity.csrf:
+            raise SyncError('FORBIDDEN',403)
+        from .open_finance_wealth import classify_activity
+        return classify_activity(service,body),200
+    if op=='portfolio_fx':
+        if not identity.csrf or not app.settings.snaptrade_enabled:
+            raise SyncError('FORBIDDEN',403)
+        from .portfolio_fx import refresh,fetch
+        from datetime import date
+        try:
+            if query or set(body)!={'start','end'} or not all(isinstance(value,str) and len(value)==10 for value in body.values()):
+                raise ValueError()
+            start,end=(date.fromisoformat(body[name]) for name in ('start','end'))
+        except ValueError:
+            raise SyncError('INVALID_PERIOD',422) from None
+        return refresh(service,start,end,transport=getattr(app,'portfolio_fx_transport',fetch)),200
+    if op.startswith('snaptrade_'):
+        from .snaptrade_sync import status,configure,connection_policy,update_credentials,sync,SnapTradeReader
+        if query or op=='snaptrade_status' and body:
+            raise SyncError('INVALID_REQUEST',422)
+        if op=='snaptrade_status':
+            with closing(app.db()) as c:
+                return status(c,app.settings,service._time()[0]),200
+        if not identity.csrf:
+            raise SyncError('FORBIDDEN',403)
+        if op=='snaptrade_credentials':
+            return update_credentials(service,body),200
+        if op=='snaptrade_preferences':
+            return configure(service,body),200
+        if op=='snaptrade_policy':
+            return connection_policy(service,body),200
+        if op=='snaptrade_discovery' and body or set(body)-{'connection_id'}:
+            raise SyncError('INVALID_REQUEST',422)
+        connection=body.get('connection_id')
+        if 'connection_id' in body and (not isinstance(connection,str) or not re.fullmatch('st-[0-9a-f]{64}',connection)):
+            raise SyncError('INVALID_REQUEST',422)
+        result=sync(service,discover=op=='snaptrade_discovery',connection=connection,
+                    reader_factory=getattr(app,'snaptrade_reader_factory',SnapTradeReader))
+        return result,502 if result['state']=='FAILED' else 200
     if op in ('sync_preferences','sync_preferences_write'):
         if query or (op=='sync_preferences' and body):
             raise SyncError('INVALID_REQUEST',422)
@@ -247,7 +299,10 @@ def _dispatch_raw(app,operation,identity,body,query):
             return analytics(c,app.settings,query,today=str(app.clock.today())),200
         if op=='catalogs':
             if query:raise SyncError('INVALID_QUERY',422)
-            return catalogs(c,connection_views(c,app.settings).values()),200
+            payload=catalogs(c,connection_views(c,app.settings).values())
+            if app.settings.snaptrade_enabled:
+                payload['snaptrade_enabled']=True
+            return payload,200
         if op=='transactions' and 'contract' in query:
             return query_transactions(c,query,connection_views(c,app.settings).values(),
                 origin_evidence=app.settings.open_finance_origin_evidence),200
@@ -368,7 +423,17 @@ def openapi_paths():
         spec={'operationId':'open_finance_'+op,'security':[{'bearerAuth':[]}],
               'x-owner-only':True,'x-external-capability':'not-available',
               'description':'UI owner bearer or existing UI session only. Cookie writes require X-CSRF-Token. No external/OAuth/scheduler access.'}
-        if op in ('sync_preferences','sync_preferences_write'):
+        if op.startswith('snaptrade_') or op in ('portfolio','portfolio_fx','portfolio_activity_rule'):
+            spec['description']='Projeção local multiprovedor e controles do proprietário. A coleta é somente leitura do cache da corretora.'
+            if method=='POST':
+                parameters=[{'name':'X-CSRF-Token','in':'header','required':True,'schema':text}]
+                spec['requestBody']={'required':True,'content':{'application/json':{'schema':{'type':'object'}}}}
+                statuses += [409,429,502]
+            if op=='portfolio':
+                from .open_finance_wealth import PARAMS
+                parameters=[{'name':name,'in':'query','required':False,'schema':text} for name in sorted(PARAMS)]
+            schema={'type':'object'}
+        elif op in ('sync_preferences','sync_preferences_write'):
             from .open_finance_schedule import HOURS
             spec['description']='Preferências locais de sincronização. Alteração exige sessão do proprietário e CSRF.'
             boolean={'type':'boolean'}

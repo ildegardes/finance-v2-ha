@@ -43,7 +43,7 @@ def _classification_schema(version):
 
 def schema_check(c,expected,*,registry=False):
     version=c.execute('PRAGMA user_version').fetchone()[0]
-    require(version in ((12,13,14,15) if registry else (11,)),
+    require(version in ((12,13,14,15,16) if registry else (11,)),
             'UNSUPPORTED_REGISTRY_SCHEMA' if registry else 'SCHEMA_NOT_11')
     all_tables={r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     of_tables={n for n in all_tables if n.startswith('of_')}

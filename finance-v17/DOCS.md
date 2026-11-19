@@ -1,4 +1,23 @@
-# Finance V17 0.1.35-open-finance.1
+# Finance V17 0.1.36-open-finance.1
+
+## Atualização e reversão
+
+Faça um backup recuperável do add-on com banco, opções e chave de credenciais quando utilizada. Atualize o catálogo pelo Supervisor do Home Assistant e instale a atualização do add-on Finance V17. Confira `migrations.current_version=16` em `/api/v2/health`. O slug permanece `finance_v17`. Para retornar à 0.1.35, guarde uma cópia separada dos dados atuais e restaure o backup anterior de schema 15 com suas opções e chave correspondentes.
+
+## SnapTrade Personal e Charles Schwab
+
+Na aba **Configuração** do add-on no Supervisor, marque `snaptrade_enabled`, preencha `snaptrade_client_id` com o Client ID e `snaptrade_consumer_key` com o Consumer Key da conta Personal. Salve e reinicie o add-on. Em uma instalação com Administração privada habilitada por HTTPS confiável e chave local protegida, **Open Finance › Conexões › SnapTrade › Credenciais protegidas** oferece os dois campos equivalentes e tem precedência sobre as opções. Trate o backup das opções ou da chave como material privado.
+
+1. Abra **Open Finance › Conexões › SnapTrade**, clique em **Testar credenciais e descobrir contas** e confira a autorização e as contas da Charles Schwab que já estavam conectadas. O Finance consulta autorizações já existentes da conta Personal. Se a autorização precisar de reautenticação, resolva no portal da SnapTrade e repita a descoberta.
+2. Clique em **Atualizar dados** ou **Atualizar esta conexão**. Abra **Contas e diagnóstico** para comparar o horário local, a referência do provedor e o intervalo importado, incluindo eventuais recursos parciais. Repita a atualização após o horário indicado quando houver bloqueio de taxa.
+3. Em **Investimentos › Carteira unificada**, filtre por provedor, instituição, conta e mercado. Compare quantidade, preço, custo e valor da posição com o extrato da corretora quando cada campo estiver disponível. Expanda **Caixa, poder de compra e margem** para comparar os saldos. Confira ativos remunerados e caixa com o extrato, pois a corretora pode reportar fundos monetários dentro do caixa.
+4. Em **Conexões › Cotações PTAX**, escolha o intervalo e clique em **Atualizar cotações do Banco Central**. Compare **Moedas originais**, **Converter para BRL** e **Converter para USD** na Visão geral ou na carteira. Confira data e taxa em **Taxas e datas da conversão**. A taxa é a PTAX de venda do BCB do próprio dia ou do dia útil anterior dentro da janela de sete dias. Valores sem taxa, de datas diferentes ou com cobertura insuficiente recebem diagnóstico de consolidação.
+5. Compare **Atividades da corretora** e **Proventos internacionais** com o extrato, inclusive dividendos, juros, retenções, taxas e reinvestimentos. A importação inicial percorre a janela disponível no provedor. O histórico da carteira cresce com as coletas que tenham referências financeiras comparáveis. Consulte a [matriz de capacidades](../docs/open-finance/SNAPTRADE_CAPABILITIES.md) para os recursos opcionais.
+6. Para automatizar, marque **Coleta automática** e salve o intervalo em **Conexões › SnapTrade**. O intervalo inicial é 24 h. O agendamento da SnapTrade é independente do Pluggy. Use a política de conexão para pausar, arquivar ou excluir um escopo da consolidação. Para desligar a integração, desmarque `snaptrade_enabled` nas opções e reinicie o add-on.
+
+## Versões anteriores
+
+### Finance V17 0.1.35-open-finance.1
 
 ## Atualização e reversão
 

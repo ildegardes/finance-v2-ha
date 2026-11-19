@@ -33,6 +33,8 @@ jobs:
         run: python -m unittest discover -s tests -p test_open_finance_034.py
       - name: Economic recognition, schedules, snapshots and global pagination
         run: python -m unittest discover -s tests -p test_open_finance_035.py
+      - name: SnapTrade Personal, FX, snapshots and provider isolation
+        run: python -m unittest discover -s tests -p test_snaptrade_036.py
       - name: Automatic schedule and restart policy
         run: python -m unittest discover -s tests/auto_sync -p test_release_policy.py
       - name: Linux keyring and backup restoration
@@ -57,6 +59,7 @@ jobs:
           python -m unittest discover -s tests -p test_full_coverage.py
           python -m unittest discover -s tests -p test_gate_c1.py
           python -m unittest discover -s tests -p test_pluggy_credential_protection.py
+          python -m unittest discover -s tests -p test_santander_binding_recovery.py
       - name: C6R synthetic concurrency
         run: python -m unittest discover -s tests -p test_gate_c6r.py
       - name: C6R sanitized diagnostics negative test
@@ -93,3 +96,29 @@ jobs:
         run: |
           python -m unittest discover -s tests -p test_open_finance_integrated_ui.py
           python -m unittest discover -s tests -p test_open_finance_classification_ui.py
+          python -m unittest discover -s tests -p test_snaptrade_036_ui.py
+
+  addon-image:
+    name: Add-on image (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build with pinned dependencies
+        run: docker build --platform linux/${{ matrix.arch }} -t finance-v17-synthetic ./finance-v17
+      - name: Verify architecture and run isolated fixtures
+        run: |
+          test "$(docker image inspect --format '{{.Architecture}}' finance-v17-synthetic)" = "${{ matrix.arch }}"
+          docker run --rm --network none --entrypoint python finance-v17-synthetic -m pip check
+          docker run --rm --network none --entrypoint python \
+            --mount type=bind,source="$PWD/tests",target=/tests,readonly \
+            -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONPATH=/opt/finance-v2/src:/tests \
+            finance-v17-synthetic -m unittest test_snaptrade_036

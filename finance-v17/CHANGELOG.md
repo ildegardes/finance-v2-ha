@@ -1,3 +1,9 @@
+## 0.1.36-open-finance.1
+
+- SnapTrade Personal opcional e somente leitura para autorizações internacionais já conectadas, com cache e agendamento separado do Pluggy.
+- Carteira unificada, caixa separado, posições, operações, proventos, snapshots e apresentação em moeda original, BRL ou USD com PTAX de venda.
+- Migration aditiva 016 e diagnóstico de cobertura por conta. Homologação com Charles Schwab e Home Assistant pelo proprietário.
+
 # 0.1.35-open-finance.1
 
 - Reconhece despesas bancárias com categoria e evidência compatíveis, preservando a revisão e a proveniência original.

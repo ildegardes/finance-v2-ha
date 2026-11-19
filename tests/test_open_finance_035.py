@@ -23,7 +23,8 @@ class Release35Tests(unittest.TestCase):
     def setUp(self):
         self.case=fixtures.ClassificationTest('test_automatic_investment_example_and_coverage')
         self.addCleanup(self.case.doCleanups)
-        self.case.setUp()
+        with patch.object(migrations,'MIGRATIONS',migrations.MIGRATIONS[:15]):
+            self.case.setUp()
         self.case.write("UPDATE of_connection_registry SET label='Itaú' WHERE connection_id='bank-test'")
         self.case.write("""UPDATE of_resource_records SET state='NOT_SEEN'
             WHERE resource='transactions'""")
@@ -267,8 +268,9 @@ class Release35Tests(unittest.TestCase):
             db.execute('DELETE FROM _finance_v2_schema_migrations WHERE version=15')
             db.execute('PRAGMA user_version=14')
             db.commit()
-        self.assertEqual(migrations.migrate(case.db),[15])
-        self.assertEqual(migrations.migrate(case.db),[])
+        with patch.object(migrations,'MIGRATIONS',migrations.MIGRATIONS[:15]):
+            self.assertEqual(migrations.migrate(case.db),[15])
+            self.assertEqual(migrations.migrate(case.db),[])
         with closing(connect(case.db)) as db:
             self.assertTrue(state.issubset(set(db.iterdump())))
             self.assertEqual(db.execute('PRAGMA integrity_check').fetchone()[0],'ok')

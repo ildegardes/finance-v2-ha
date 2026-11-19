@@ -48,7 +48,8 @@ def provision(settings: Settings):
             if os.path.lexists(path):
                 load_keyring(path)
                 return "CREDENTIAL_KEYRING_PRESENT"
-            if db.execute("SELECT 1 FROM of_connection_credentials LIMIT 1").fetchone():
+            if db.execute("SELECT 1 FROM of_connection_credentials LIMIT 1").fetchone() or db.execute(
+                    "SELECT 1 FROM st_credentials LIMIT 1").fetchone():
                 raise CredentialProtectionError("CREDENTIAL_KEY_RESTORE_REQUIRED")
             _install_new_keyring(path)
             load_keyring(path)

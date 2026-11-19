@@ -1,5 +1,5 @@
 name: Finance V17
-version: "0.1.35-open-finance.1"
+version: "0.1.36-open-finance.1"
 slug: finance_v17
 description: Finance V17 local API and scheduler
 url: https://github.com/ildegardes/finance-v2-ha
@@ -24,6 +24,9 @@ options:
   external_clients: "{}"
   oauth_clients: "{}"
   open_finance_enabled: false
+  snaptrade_enabled: false
+  snaptrade_client_id: ""
+  snaptrade_consumer_key: ""
   open_finance_auto_sync_enabled: false
   open_finance_auto_sync_interval_hours: "24"
   pluggy_admin_origin: ""
@@ -43,6 +46,9 @@ schema:
   external_clients: str
   oauth_clients: str
   open_finance_enabled: bool
+  snaptrade_enabled: bool
+  snaptrade_client_id: password
+  snaptrade_consumer_key: password
   open_finance_auto_sync_enabled: bool
   open_finance_auto_sync_interval_hours: list(1|2|4|6|12|24|48)
   pluggy_admin_origin: str

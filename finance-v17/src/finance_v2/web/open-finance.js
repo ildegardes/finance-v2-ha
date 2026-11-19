@@ -1,3 +1,4 @@
+import {mountWealth,mountSnapTradeConnections} from './open-finance-wealth.js';
 import {mountSyncPreferences} from './open-finance-schedule.js';
 import {bankMark} from './open-finance-identity.js';
 import {mountInvestmentIncome} from './open-finance-insights.js';
@@ -64,10 +65,14 @@ export function createOpenFinance({api,view,heading,esc,navigation=null,state={}
     });
     const overview=state.overview??={};
     const incomes=mountInvestmentIncome({host,api,esc,navigation,getScope:()=>overview});
-    mountAnalyticsOverview({host,api,esc,catalog,navigation,state:overview,today:today?.(),
+    const wealth=catalog.snaptrade_enabled?mountWealth({host,api,esc,navigation,state:state.wealth??={},
+      getPeriod:()=>overview,today:today?.()}):null;
+    mountSnapTradeConnections({host,panel:connectionPanel,api,esc,navigation,today:today?.(),enabled:catalog.snaptrade_enabled});
+    mountAnalyticsOverview({host,api,esc,catalog,navigation,state:overview,today:today?.(),international:!!wealth,
+      onUnified:context=>{wealth?.show(context);selectTab('assets',true);},
       onPeriod:filters=>{for(const key of ['start','end','currency'])analyticsState[key]=filters[key];},
       onNavigate:context=>{flow.update(context,{load:selectedTab==='flow'});selectTab('flow',true)},
-      onAssets:context=>{domains.updateAssets(context);selectTab('assets',true);if(context.income)incomes.open();},
+      onAssets:context=>{wealth?.showLegacy();domains.updateAssets(context);selectTab('assets',true);if(context.income)incomes.open();},
       onCards:context=>{domains.updateCard(context);selectTab('cards',true);},
       onConnections:(id,diagnostic)=>{
         selectTab('connections',true);
