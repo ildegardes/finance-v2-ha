@@ -95,7 +95,7 @@ class FinancialParity(unittest.TestCase):
         self.write_card('account-CREDIT',lambda row:row.update(itemId='foreign-item-synthetic'))
         cards=self.view()['cards']
         self.assertEqual(self.totals(cards['metric']),{'BRL':180})
-        self.assertIn('ASSOCIATION_INCONSISTENT',{row['consolidation_reason'] for row in cards['items']})
+        self.assertIn('ACCOUNT_ITEM_MISMATCH',{row['consolidation_reason'] for row in cards['items']})
         self.case.write("UPDATE of_collection_checkpoints SET state='FAILED',error_code='ITEM_ID_DIFFERENT' WHERE resource='consents'")
         cards=self.view()['cards']
         self.assertEqual(cards['metric']['amounts'],{})
@@ -104,7 +104,7 @@ class FinancialParity(unittest.TestCase):
         self.case.write("""UPDATE of_resource_records SET payload_json=json_set(payload_json,'$.products',json('["ACCOUNTS"]'))
                            WHERE resource='consents' AND external_id='consent-039'""")
         self.assertEqual(self.view()['cards']['metric']['amounts'],{})
-        self.assertIn('CONSENT_UNVERIFIED',{row['consolidation_reason'] for row in self.view()['cards']['items']})
+        self.assertIn('CONSENT_NO_CARD_SCOPE',{row['consolidation_reason'] for row in self.view()['cards']['items']})
         current=self.fixture.settings.pluggy_connections[0].item_id
         self.write_card('account-CREDIT',lambda row:row.update(itemId=current))
         self.case.write("""UPDATE of_resource_records SET payload_json=json_set(payload_json,'$.products',json('["CREDIT_CARDS"]'))

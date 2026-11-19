@@ -1,5 +1,5 @@
 """Pluggy credit usage, scoped to a verified Item and its card accounts."""
-from collections import defaultdict
+from collections import Counter, defaultdict
 from decimal import Decimal
 import json
 import re
@@ -8,6 +8,8 @@ from .open_finance import OpenFinanceService
 from .open_finance_classification import normalize
 from .open_finance_insights import masked_card_text
 from .open_finance_query import civil
+from .open_finance_registry import load_keyring, managed_connection
+from .pluggy_credential_protection import CredentialProtectionError
 from .snaptrade_normalize import code
 
 
@@ -20,58 +22,146 @@ def _object(value):
     return value if isinstance(value,dict) else {}
 
 
+def _local_binding(db,settings,legacy,cid,row):
+    if not row:
+        return None,'LOCAL_ITEM_UNIDENTIFIED'
+    if row['source']=='MANAGED':
+        if not row['item_id']:
+            return None,'LOCAL_ITEM_UNIDENTIFIED'
+        try:
+            config=managed_connection(db,cid,row['revision'],load_keyring(settings.pluggy_keyring_path))
+        except (CredentialProtectionError,OSError):
+            return None,'MANAGED_BINDING_UNVERIFIED'
+    else:
+        config=legacy.get(cid)
+    if not config:
+        return None,'LOCAL_ITEM_UNIDENTIFIED'
+    if row['binding_hash']!=OpenFinanceService._binding(config):
+        return None,'LOCAL_BINDING_MISMATCH'
+    return config.item_id,None
+
+
+def _previous_error(db,cid,checkpoints,item_run):
+    latest=db.execute('SELECT id,error_code FROM of_sync_runs WHERE connection_id=? ORDER BY rowid DESC LIMIT 1',(cid,)).fetchone()
+    if not latest or latest['error_code'] not in SCOPE_ERRORS:
+        return None
+    error=latest['error_code']
+    if error in ('CONSENT_EXPIRED','CONSENT_NOT_ACTIVE'):
+        return error
+    if error=='CONNECTION_BINDING_CHANGED':
+        return 'LOCAL_BINDING_MISMATCH'
+    if error=='CONSENT_ASSOCIATION_INVALID':
+        return 'CONSENT_ASSOCIATION_UNVERIFIED'
+    if error in ('ACCOUNT_SCOPE_MISMATCH','ITEM_ID_DIFFERENT'):
+        failed=[row['resource'] for row in db.execute("""SELECT resource FROM of_collection_checkpoints WHERE connection_id=?
+            AND run_id=? AND state='FAILED'""",(cid,latest['id']))]
+        # A later resource can fail after all three card prerequisites have
+        # already completed successfully in that same, fenced import.
+        verified=all(resource in checkpoints and checkpoints[resource]['state']=='COMPLETE'
+                     and checkpoints[resource]['last_complete_run_id']==latest['id']
+                     for resource in ('item','consents','accounts'))
+        if verified and item_run==latest['id'] and failed and set(failed)<={'investments','investment_transactions','loans'}:
+            return None
+        return 'PRIOR_SCOPE_FAILURE'
+    return 'ITEM_ACCESS_UNVERIFIED'
+
+
+def _consent_state(db,cid,expected,audit,regulated,today):
+    if not audit:
+        return 'CONSENT_CHECKPOINT_MISSING'
+    if audit['error_code'] in ('ITEM_ID_DIFFERENT','ACCOUNT_SCOPE_MISMATCH'):
+        return 'CONSENT_ITEM_MISMATCH'
+    if audit['error_code'] in ('CONSENT_NOT_ACTIVE','CONSENT_EXPIRED'):
+        return audit['error_code']
+    if audit['state']!='COMPLETE':
+        return 'CONSENT_SCAN_UNVERIFIED'
+    failures=set()
+    validated=False
+    for row in db.execute("""SELECT payload_json FROM of_resource_records WHERE connection_id=? AND resource='consents'
+                         AND parent_id='' AND state='PRESENT' AND last_run_id=?""",(cid,audit['last_complete_run_id'])):
+        payload=_object(json.loads(row['payload_json']))
+        item=payload.get('itemId')
+        if not item:
+            failures.add('CONSENT_ASSOCIATION_UNVERIFIED')
+            continue
+        if item!=expected:
+            return 'CONSENT_ITEM_MISMATCH'
+        expiry=payload.get('expiresAt')
+        expiry_date=civil(expiry)
+        products=payload.get('products')
+        grants=payload.get('openFinancePermissionsGranted')
+        if payload.get('revokedAt') is not None:
+            failures.add('CONSENT_REVOKED')
+        elif expiry is not None and not expiry_date:
+            failures.add('CONSENT_METADATA_INCOMPLETE')
+        elif expiry_date and expiry_date<=today:
+            failures.add('CONSENT_EXPIRED')
+        elif not isinstance(products,list):
+            failures.add('CONSENT_METADATA_INCOMPLETE')
+        elif 'CREDIT_CARDS' not in products:
+            failures.add('CONSENT_NO_CARD_SCOPE')
+        elif regulated and not isinstance(grants,list):
+            failures.add('CONSENT_GRANTS_UNREPORTED')
+        elif regulated and 'CREDIT_CARDS_ALL' not in grants and not all(
+                code in grants for code in ('CREDIT_CARDS_LIST','CREDIT_CARDS_LIMITS')):
+            failures.add('CONSENT_NO_CARD_SCOPE')
+        else:
+            validated=True
+    if 'CONSENT_ASSOCIATION_UNVERIFIED' in failures:
+        return 'CONSENT_ASSOCIATION_UNVERIFIED'
+    if validated:
+        return None
+    if len(failures)==1:
+        return next(iter(failures))
+    return 'CONSENT_SCAN_UNVERIFIED'
+
+
 def _usage_scopes(db,settings,current,today):
     legacy={cfg.id:cfg for cfg in settings.pluggy_connections}
     scopes={}
     for cid in current:
-        binding=db.execute('''SELECT c.binding_hash,r.source,i.item_id FROM of_connections c
+        binding=db.execute("""SELECT c.binding_hash,r.source,r.revision,i.item_id FROM of_connections c
             LEFT JOIN of_connection_registry r ON r.connection_id=c.id
-            LEFT JOIN of_managed_pluggy_items i ON i.connection_id=c.id WHERE c.id=?''',(cid,)).fetchone()
-        configured=legacy.get(cid)
-        expected=(binding['item_id'] if binding and binding['source']=='MANAGED' else
-                  configured.item_id if configured and binding and
-                  binding['binding_hash']==OpenFinanceService._binding(configured) else None)
-        latest=db.execute('SELECT error_code FROM of_sync_runs WHERE connection_id=? ORDER BY rowid DESC LIMIT 1',(cid,)).fetchone()
-        evidence={row['resource']:row for row in db.execute('''SELECT resource,state,last_complete_run_id,error_code
-            FROM of_collection_checkpoints WHERE connection_id=? AND parent_id='' AND resource IN ('accounts','consents')''',(cid,))}
-        item=db.execute("""SELECT external_id,payload_json FROM of_resource_records
-            WHERE connection_id=? AND resource='item' AND parent_id='' AND state='PRESENT'""",(cid,)).fetchone()
-        metadata=json.loads(item['payload_json']) if item else {}
-        if not expected or not item or expected!=item['external_id'] or metadata.get('id')!=expected:
-            scopes[cid]=('ASSOCIATION_INCONSISTENT',None,False)
+            LEFT JOIN of_managed_pluggy_items i ON i.connection_id=c.id WHERE c.id=?""",(cid,)).fetchone()
+        expected,reason=_local_binding(db,settings,legacy,cid,binding)
+        if reason:
+            scopes[cid]=(reason,None,False)
             continue
+        evidence={row['resource']:row for row in db.execute("""SELECT resource,state,last_complete_run_id,error_code
+            FROM of_collection_checkpoints WHERE connection_id=? AND parent_id=''
+            AND resource IN ('item','accounts','consents')""",(cid,))}
+        items=db.execute("""SELECT external_id,payload_json,last_run_id FROM of_resource_records
+            WHERE connection_id=? AND resource='item' AND parent_id='' AND state='PRESENT' LIMIT 2""",(cid,)).fetchall()
+        if not items:
+            scopes[cid]=('ITEM_RECORD_MISSING',None,False)
+            continue
+        item=items[0]
+        metadata=_object(json.loads(item['payload_json']))
+        if len(items)!=1 or item['external_id']!=expected or metadata.get('id') not in (None,'',expected):
+            scopes[cid]=('ITEM_ASSOCIATION_MISMATCH',None,False)
+            continue
+        expiry=metadata.get('consentExpiresAt')
+        expiry_date=civil(expiry)
+        connector=_object(metadata.get('connector'))
+        regulated=connector.get('isOpenFinance') is True
         audit=evidence.get('consents')
-        if (latest and latest['error_code'] in ('ACCOUNT_SCOPE_MISMATCH','ITEM_ID_DIFFERENT','CONNECTION_BINDING_CHANGED')
-                or audit and audit['error_code'] in ('ACCOUNT_SCOPE_MISMATCH','ITEM_ID_DIFFERENT','CONSENT_ASSOCIATION_INVALID')):
-            scopes[cid]=('ASSOCIATION_INCONSISTENT',None,False)
-            continue
+        if not metadata.get('id') or not metadata.get('status') or expiry is not None and not expiry_date:
+            reason='ITEM_METADATA_INCOMPLETE'
+        elif expiry_date and expiry_date<=today:
+            reason='CONSENT_EXPIRED'
+        elif metadata['status'] not in ('UPDATED','OUTDATED'):
+            reason='ITEM_ACCESS_UNVERIFIED'
+        elif audit and audit['error_code'] in ('ITEM_ID_DIFFERENT','ACCOUNT_SCOPE_MISMATCH'):
+            reason='CONSENT_ITEM_MISMATCH'
+        else:
+            reason=_previous_error(db,cid,evidence,item['last_run_id']) or _consent_state(db,cid,expected,audit,regulated,today)
         collection=evidence.get('accounts')
-        closed=metadata.get('consentExpiresAt')
-        active=metadata.get('status') in ('UPDATED','OUTDATED') and (closed is None or (civil(closed) or '')>today)
-        regulated=_object(metadata.get('connector')).get('isOpenFinance') is True
-        scopes[cid]=('CONSENT_UNVERIFIED',None,regulated)
-        if (not active or latest and latest['error_code'] in SCOPE_ERRORS
-                or not audit or audit['state']!='COMPLETE'):
-            continue
-        validated=False
-        for row in db.execute("""SELECT payload_json FROM of_resource_records WHERE connection_id=? AND resource='consents'
-                         AND parent_id='' AND state='PRESENT' AND last_run_id=?""",(cid,audit['last_complete_run_id'])):
-            payload=json.loads(row['payload_json'])
-            expiry=payload.get('expiresAt')
-            if payload.get('itemId')!=expected:
-                scopes[cid]=('ASSOCIATION_INCONSISTENT',None,regulated)
-                validated=False
-                break
-            products=payload.get('products')
-            grants=payload.get('openFinancePermissionsGranted')
-            grants=set(grants) if isinstance(grants,list) else set()
-            product_valid=isinstance(products,list) and 'CREDIT_CARDS' in products
-            scope_valid=not regulated or {'CREDIT_CARDS_LIST','CREDIT_CARDS_LIMITS'}<=grants or 'CREDIT_CARDS_ALL' in grants
-            if product_valid and scope_valid and payload.get('revokedAt') is None and (expiry is None or (civil(expiry) or '')>today):
-                validated=True
-        if validated:
-            scopes[cid]=(None,(expected,collection['last_complete_run_id']) if collection and
-                         collection['state'] in ('COMPLETE','PARTIAL') else None,regulated)
+        # Preserved rows may still be displayed, but the current accounts
+        # collection has to validate this exact run before they can count.
+        account_run=collection['last_complete_run_id'] if collection and collection['state']=='COMPLETE' else None
+        if not reason and not account_run:
+            reason='ACCOUNT_COLLECTION_UNVERIFIED'
+        scopes[cid]=(reason,(expected,account_run) if not reason else None,regulated)
     return scopes
 
 
@@ -100,7 +190,8 @@ def _format(amount):
 
 
 def credit_usage(db,settings,accounts,current,views,values,parse_amount):
-    scopes=_usage_scopes(db,settings,current,values.today)
+    credit_connections={cid for (cid,_),row in accounts.items() if cid in current and row['data'].get('type')=='CREDIT'}
+    scopes=_usage_scopes(db,settings,credit_connections,values.today)
     cards=[]
     grouped=defaultdict(list)
     banks=defaultdict(set)
@@ -117,10 +208,14 @@ def credit_usage(db,settings,accounts,current,views,values,parse_amount):
         holder=credit.get('holderType')
         line,ambiguous=_line(credit,currency)
         reason,binding,regulated=scopes.get(cid,('HISTORICAL_CONNECTION',None,False))
-        if not reason and (data.get('id')!=account or not binding or data.get('itemId')!=binding[0]):
-            reason='ASSOCIATION_INCONSISTENT' if binding else 'ACCOUNT_COLLECTION_UNVERIFIED'
+        if not reason and (not data.get('id') or not data.get('itemId')):
+            reason='ACCOUNT_METADATA_INCOMPLETE'
+        if not reason and data['id']!=account:
+            reason='ACCOUNT_ID_MISMATCH'
+        if not reason and data['itemId']!=binding[0]:
+            reason='ACCOUNT_ITEM_MISMATCH'
         if not reason and row['last_run_id']!=binding[1]:
-            reason='ACCOUNT_COLLECTION_UNVERIFIED'
+            reason='ACCOUNT_PRESERVED'
         if not reason and state not in ('ACTIVE',None):
             reason='CARD_STATUS_UNVERIFIED'
         identity=line.get('identificationNumber')
@@ -217,5 +312,8 @@ def credit_usage(db,settings,accounts,current,views,values,parse_amount):
     comparable=not used['partial'] and not limits['partial'] and same_references and used['amounts'].keys()==limits['amounts'].keys()
     utilization={currency:_format(Decimal(amount)/Decimal(limits['amounts'][currency]))
                  for currency,amount in used['amounts'].items() if comparable and Decimal(limits['amounts'][currency])>0}
-    return {'items':cards,'active_count':sum(card['status']=='ACTIVE' for card in cards),'count':len(cards),
+    diagnostics=Counter((card['consolidation_reason'] or 'INCLUDED',card['limit_reason']) for card in cards)
+    return {'diagnostics':[{'usage':usage,'limit':limit,'count':count}
+                           for (usage,limit),count in sorted(diagnostics.items(),key=lambda entry:(entry[0][0],entry[0][1] or ''))],
+            'items':cards,'active_count':sum(card['status']=='ACTIVE' for card in cards),'count':len(cards),
             'basis':'CREDIT_USED','included_count':used['included'],'metric':used,'limit_metric':limits,'utilization_by_currency':utilization}

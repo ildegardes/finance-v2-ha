@@ -1,3 +1,9 @@
+## 0.1.40-open-finance.1
+
+- BRL e USD são arredondados para duas casas na apresentação. Cotações PTAX e quantidades mantêm a precisão da fonte.
+- Diagnóstico dos cartões diferencia falhas locais de vínculo, ausência de evidência de coleta e estado do consentimento.
+- Cobertura de cartões é recuperável nos cenários de associação comprovada. A causa dos bloqueios reais permanece pendente de homologação.
+
 ## 0.1.39-open-finance.1
 
 - Cartões usam o crédito utilizado documentado pela Pluggy. O resumo e a lista compartilham o cálculo, com limites verificáveis e motivos de exclusão.
