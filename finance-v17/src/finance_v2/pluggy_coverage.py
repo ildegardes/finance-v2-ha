@@ -13,7 +13,7 @@ from .open_finance_diagnostics import annotate, describe_resource, scope_categor
 
 RESOURCES = ('item', 'resources', 'consents', 'accounts', 'transactions', 'investments',
              'investment_transactions', 'loans', 'bills', 'statements')
-CONTRACT_SHA256 = '243EBD65E94DEE00E6D9B5E1F6697AC09873530CCF3DA20C3516076A963EA808'
+CONTRACT_SHA256 = '985404C7EC53EFE9F97DC9A8591C444D974BF14CF414F8BADEE4840E798F6419'
 
 
 def contracts():
@@ -92,17 +92,14 @@ def project(resource, row):
 
     if not isinstance(row, dict):
         raise ValueError('COVERAGE_INVALID_ROW')
-    if resource=='accounts':
-        # 'number' is still excluded. Only the documented last-four form is
-        # derived here, and a provider-supplied derived field is ignored.
-        row={key:value for key,value in row.items() if key!='cardLastFour'}
-        payload=walk(row,schema)
+    payload=walk(row,schema)
+    if resource=='accounts' and row.get('type')=='CREDIT':
+        # 'number' stays excluded from the provider contract. Only the
+        # documented last-four form is kept as local display metadata.
         number=row.get('number')
         match=re.fullmatch(r'[xX*• -]*([0-9]{4})',number.strip()) if isinstance(number,str) else None
-        if row.get('type')=='CREDIT' and match:
+        if match:
             payload['cardLastFour']=match[1]
-    else:
-        payload=walk(row,schema)
     encoded = json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(',', ':'), allow_nan=False)
     if len(encoded) > 250000:
         raise ValueError('COVERAGE_RECORD_LIMIT')
