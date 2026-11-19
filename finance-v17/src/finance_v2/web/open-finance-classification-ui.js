@@ -64,6 +64,44 @@ export function mountClassification({host,panel,api,esc,catalog,navigation,getSc
   const choices=(options)=>Object.entries(options).map(([key,label])=>opt(key,label)).join('');
   const post=(path,body)=>api(endpoint+path,{method:'POST',body});
   const report=(text,error=false)=>{status.innerHTML='<p role="'+(error?'alert':'status')+'">'+esc(text)+'</p>'};
+  if(catalog.snaptrade_enabled){
+    const review=document.createElement('details');
+    review.innerHTML='<summary>Atividades da corretora a revisar</summary><div aria-live="polite" data-broker-review></div>';
+    section.append(review);
+    const area=review.querySelector('[data-broker-review]');
+    const results={REVIEW:'A revisar',CAPITAL:'Operação de investimento',TRANSFER:'Transferência patrimonial',
+      CORPORATE_ACTION:'Evento corporativo',DIVIDEND:'Dividendo',INTEREST:'Juros',TAX:'Retenção ou tributo',
+      FEE:'Taxa',REINVESTMENT:'Reinvestimento'};
+    let samples=[],version=0;
+    const refresh=async()=>{
+      const current=++version,scope=getScope(),query=new URLSearchParams({provider:'SNAPTRADE',view:'activities',kind:'OWNER_REVIEW'});
+      for(const key of ['start','end'])if(scope[key])query.set(key,scope[key]);
+      try{
+        const data=await api('/open-finance/portfolio?'+query);
+        if(current!==version||!review.open||!host.isConnected)return;
+        samples=data.items;
+        area.innerHTML=samples.map((row,index)=>'<form class="of-presentation" data-broker-event="'+index+'">'+
+          '<p>'+esc(row.institution)+' · '+esc(row.label)+' · '+esc(row.provider_kind)+' · '+esc(row.description)+'</p>'+
+          '<label>Classificação<select name="kind">'+Object.entries(results).map(([key,label])=>
+            '<option value="'+key+'" '+(key===row.kind?'selected':'')+'>'+esc(label)+'</option>').join('')+'</select></label>'+
+          '<label><input type="checkbox" required> Confirmo a regra para este tipo e texto nesta conta</label>'+
+          '<button>Salvar regra SnapTrade</button></form>').join('')||'<p>Nenhuma atividade para revisar no período.</p>';
+      }catch(error){if(current===version)area.textContent=message(error);}
+    };
+    review.addEventListener('toggle',()=>{if(review.open)refresh();else version++;});
+    area.onsubmit=async event=>{
+      event.preventDefault();
+      const form=event.target,row=samples[Number(form.dataset.brokerEvent)],button=form.querySelector('button');
+      button.disabled=true;
+      try{
+        await api('/open-finance/portfolio/activity-rule',{method:'POST',
+          body:{account_id:row.account_id,activity_id:row.activity_id,kind:form.elements.kind.value}});
+        report('Regra SnapTrade salva.');
+        await refresh();
+      }catch(error){report(message(error),true);}
+      finally{button.disabled=false;}
+    };
+  }
   function getCatalog(){
     if(!catalogPromise)catalogPromise=api(endpoint+'catalog').catch(error=>{catalogPromise=null;throw error});
     return catalogPromise;

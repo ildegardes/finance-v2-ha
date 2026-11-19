@@ -72,11 +72,14 @@ def serve(server, settings, private_server=None):
     """Main-thread TERM/INT handler; no shutdown() deadlock inside a signal handler."""
     stop = threading.Event()
     previous = {}
+    from .snaptrade_sync import SnapTradeWorker
     workers = CoverageWorkers(settings)
+    international = SnapTradeWorker(settings)
     for signum in (signal.SIGTERM, signal.SIGINT):
         previous[signum] = signal.signal(signum, lambda *_: stop.set())
     try:
         workers.start()
+        international.start()
         with selectors.DefaultSelector() as listeners:
             for listener in (server, private_server):
                 if listener is not None:
@@ -87,6 +90,7 @@ def serve(server, settings, private_server=None):
                     if not stop.is_set():
                         ready.fileobj.handle_request()
     finally:
+        international.stop()
         stopped = workers.stop()
         for signum, handler in previous.items():
             signal.signal(signum, handler)

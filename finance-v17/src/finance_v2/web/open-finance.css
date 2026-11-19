@@ -199,3 +199,20 @@ button.of-column{position:relative;background:transparent;border-radius:.2rem;pa
 .of-portfolio-values strong{display:block}
 @media(max-width:780px){.of-kpi-group{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:340px){.of-kpi-group{grid-template-columns:1fr}}
+
+.of-bank-mark.schwab{background:#174d68;color:#fff}
+.of-wealth-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr));gap:.65rem}
+.of-wealth-grid dt{color:var(--muted);font-size:.83rem}
+.of-wealth-grid dd{margin:.2rem 0 0;font-weight:650}
+.of-wealth-currencies li{flex-wrap:wrap}
+.of-wealth-overview select,.of-wealth select{max-width:100%}
+.of-wealth details,.of-snaptrade-connections details{margin:.6rem 0}
+.of-snaptrade-connections .of-presentation label:has(input[type=checkbox]){display:flex;align-items:center}
+.of-snaptrade-connections input[type=checkbox]{width:auto}
+
+.of-wealth .of-wealth-advanced{grid-column:1/-1;margin:0}
+.of-wealth-advanced .of-overview-filters{margin-top:.6rem}
+.of-wealth-advanced label[hidden]{display:none}
+.of-wealth-advanced label:has(input[type=checkbox]){display:flex;align-items:center}
+.of-wealth-advanced input[type=checkbox]{width:auto}
+.of-wealth-legacy>summary{cursor:pointer;font-weight:650}

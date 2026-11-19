@@ -4,7 +4,7 @@ from .pluggy_credential_protection import CredentialProtectionError, ProtectedCr
 
 _PRIVATE_KEYS=frozenset(('itemid','item_id','clientid','client_id','clientsecret',
                         'client_secret','apikey','api_key','access_token','authorization',
-                        'binding_hash','ciphertext','nonce'))
+                        'binding_hash','ciphertext','nonce','consumer_key','snaptrade_consumer_key','snaptrade_client_id'))
 
 
 def public_payload(payload,settings,*,db=None):
@@ -16,7 +16,7 @@ def public_payload(payload,settings,*,db=None):
     for provider validation or persistence.
     """
     if not isinstance(payload,dict):return payload
-    values=set()
+    values={value for value in (settings.snaptrade_client_id,settings.snaptrade_consumer_key) if value}
     for config in settings.pluggy_connections:
         for key in ('client_id','client_secret','item_id'):
             value=getattr(config,key,'')

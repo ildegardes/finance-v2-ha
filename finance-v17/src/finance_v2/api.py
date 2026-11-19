@@ -124,12 +124,12 @@ class Application:
    route,params=self.route(method,path);identity=self.identity(environ,route)
    if route.operation.startswith('open_finance_'):
     if identity.role!='UI':raise HttpError(403,'FORBIDDEN','owner authorization required')
-    if route.operation.startswith('open_finance_registry_'):
+    if route.operation.startswith('open_finance_registry_') or route.operation=='open_finance_snaptrade_credentials':
      if (not self.private_registry_session(environ)
          or environ.get('HTTP_ORIGIN')!=self.settings.pluggy_admin_origin):
       raise HttpError(403,'PRIVATE_ADMIN_REQUIRED','private owner session required')
     if route.write and environ.get('finance_v2.cookie_auth') and environ.get('HTTP_X_CSRF_TOKEN')!=environ.get('finance_v2.csrf'):raise HttpError(403,'CSRF_INVALID','CSRF token is missing or invalid')
-    if route.operation.startswith('open_finance_registry_'):
+    if route.operation.startswith('open_finance_registry_') or route.operation=='open_finance_snaptrade_credentials':
      self.registry_rate_limit.admit(route.operation)
     if route.operation.startswith('open_finance_recovery_') and route.write and origin:
      expected_origin=environ.get('wsgi.url_scheme','http')+'://'+environ.get('HTTP_HOST','')
@@ -138,7 +138,7 @@ class Application:
     try:payload,status=open_finance_http.dispatch(self,route.operation,identity,body,query)
     except SyncError:raise
     except Exception:raise HttpError(503,'STORAGE_UNAVAILABLE','staging unavailable') from None
-    if route.operation=='open_finance_connections':
+    if route.operation in ('open_finance_connections','open_finance_snaptrade_status'):
      payload['registry_admin_available']=self.private_registry_session(environ)
     return self.respond(start_response,status,payload,rid,origin)
    assistant_operation=route.operation.startswith("assistant_")

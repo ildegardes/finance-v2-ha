@@ -1,4 +1,5 @@
 import {bankMark} from './open-finance-identity.js';
+import {overviewWealth,wealthMoney} from './open-finance-wealth.js';
 import {portfolioPanel} from './open-finance-portfolio.js';
 import {bridgePanel,cardPanel,incomePanel} from './open-finance-insights.js';
 import {createQueryGeneration} from './query-generation.js';
@@ -176,7 +177,7 @@ function positionRows(data,catalog,amount,esc){
   }).join('')+'</div>';
 }
 
-export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,today,onPeriod=()=>{},onNavigate=()=>{},onAssets=()=>{},onCards=()=>{},onConnections=()=>{}}) {
+export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,today,international=false,onUnified=()=>{},onPeriod=()=>{},onNavigate=()=>{},onAssets=()=>{},onCards=()=>{},onConnections=()=>{}}) {
   const panel=host.querySelector('#of-panel-overview');
   today ||= new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo'}).format(new Date());
   const [first,last]=periodRange('month',today);
@@ -210,7 +211,15 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
     const accounts=loaded.positions.accounts,investments=loaded.positions.investments,flow=loaded.flow.BANK;
     const money=value=>bankMoney(value,filters.currency);
     const amount=value=>value==null?'Indisponível':mode==='visible'?esc(money(value)):'<span aria-label="Valor oculto">••••••</span>';
-    const metric=(icon,title,value,detail)=>'<article class="of-metric of-kpi"><div><span class="of-kpi-icon '+icon+'"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="'+icons[icon]+'"></path></svg></span><h3><button type="button" class="of-link" data-metric="'+icon+'">'+title+'</button></h3></div><strong>'+amount(value)+'</strong><small>'+esc(detail)+'</small></article>';
+    const metric=(icon,title,value,detail,override)=>'<article class="of-metric of-kpi"><div><span class="of-kpi-icon '+icon+'"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="'+icons[icon]+'"></path></svg></span><h3><button type="button" class="of-link" data-metric="'+icon+'">'+title+'</button></h3></div><strong>'+(override??amount(value))+'</strong><small>'+esc(detail)+'</small></article>';
+    const currentWealth=loaded.wealth?.summary;
+    const wealthCurrency=state.wealthPresentation||'original';
+    const wealthValue=wealthCurrency==='original'?currentWealth?.original[filters.currency]?.positions:
+      currentWealth?.converted.positions;
+    const wealthMetric=wealthCurrency==='original'?wealthMoney(wealthValue,filters.currency,esc):
+      wealthMoney(wealthValue??currentWealth?.converted_subtotal.positions,wealthCurrency,esc);
+    const wealthDetail=wealthCurrency==='original'?'Posições em '+filters.currency:
+      wealthValue==null?'Subtotal em '+wealthCurrency+' · cobertura incompleta':'Convertido para '+wealthCurrency;
     const positionNote=position=>{
       const dates=(position.items||[]).map(item=>item.reference_date).filter(Boolean).sort();
       return dates.length?'Última referência '+dateBR(dates.at(-1)):countBR.format(position.known||0)+' posições informadas';
@@ -230,7 +239,8 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
     }).join('');
     result.innerHTML=(filters.history==='1'?'<p class="of-notice">Histórico completo · O fluxo inclui conexões arquivadas. As posições abaixo têm como referência somente conexões ativas.</p>':'')+
       '<div class="of-six-kpis"><section><h3>Posição financeira atual</h3><div class="of-metrics of-kpi-group">'+metric('accounts','Saldo em contas',accounts.value,positionNote(accounts))+
-      metric('investments','Investimentos',investments.value,positionNote(investments))+
+      metric('investments','Investimentos',investments.value,currentWealth?wealthDetail:positionNote(investments),
+        currentWealth?wealthMetric:undefined)+
       metric('cards','Cartões de crédito',loaded.cards?.consolidated??loaded.cards?.used,loaded.cards?.consolidated!=null?
         (loaded.cards.included_count+' de '+loaded.cards.count+' considerados'):(loaded.cards?.active_count||0)+' ativos informados')+
       '</div></section><section><h3>Resultados do período</h3><div class="of-metrics of-kpi-group">'+
@@ -249,6 +259,7 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
       (insights?.unresolved_scope?'<p>Há registros fora do recorte por falta de data, moeda ou situação comprovada.</p>':'')+
       (insights?'<button type="button" class="of-link" data-classification-pending>Ver '+countBR.format(insights.pending)+' movimentações pendentes de classificação</button>':'')+
       '</section>'+
+      (international?overviewWealth(loaded.wealth,esc,state.wealthPresentation||'original'):'')+
       portfolioPanel(loaded.portfolio_history,amount,mode,esc)+
       '<div class="of-overview-grid"><section class="of-summary-card"><div class="of-section-heading"><div><h3>Composição da carteira</h3></div><button type="button" class="of-link" data-open-assets>Ver investimentos</button></div>'+allocation(investments,mode,amount,esc)+'</section>'+incomePanel(insights,amount,mode,esc)+'</div>'+
       '<div class="of-overview-grid"><section class="of-summary-card"><h3>'+(showAdjusted?'Principais categorias de despesas':'Principais categorias de saída')+'</h3>'+categoryRanking(loaded,mode,amount,esc,showAdjusted)+'</section>'+cardPanel(loaded.cards,amount,mode,esc)+'</div>'+
@@ -316,9 +327,13 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
     if(active.some(item=>item.id===state.portfolioConnection))params.set('portfolio_connection',state.portfolioConnection);
     if(!filters.connection_id)params.delete('connection_id');
     try{
-      const response=await api('/open-finance/analytics?'+params,{queryScope:query});
+      const bank=api('/open-finance/analytics?'+params,{queryScope:query});
+      const wealthParams=new URLSearchParams({presentation:state.wealthPresentation||'original',page_size:'25'});
+      if(filters.connection_id)wealthParams.set('connection_id',filters.connection_id);
+      const wealth=international?api('/open-finance/portfolio?'+wealthParams,{queryScope:query}).catch(()=>null):null;
+      const [response,wealthData]=await Promise.all([bank,wealth]);
       if(!query.current()||!host.isConnected)return;
-      loaded=response;
+      loaded=international?{...response,wealth:wealthData}:response;
       paint();
     }catch(_){
       if(query.current()&&host.isConnected){
@@ -366,6 +381,7 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
   });
   result.onchange=event=>{
     if(event.target.matches('[data-portfolio-connection]')){state.portfolioConnection=event.target.value;load();return;}
+    if(event.target.matches('[data-wealth-presentation]')){state.wealthPresentation=event.target.value;load();return;}
     if(event.target.matches('[data-portfolio-window]')){state.portfolioWindow=event.target.value;load();return;}
     if(event.target.matches('[data-financial-flow]')){
       flowMode=event.target.value;state.perspective=flowMode;chartPage=0;paint();result.querySelector('[data-financial-flow]').focus();return;
@@ -390,6 +406,9 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
       onNavigate({...context,bucket:'pending',openClassification:true});
     }else if(button.dataset.insightBucket){
       onNavigate({...context,bucket:button.dataset.insightBucket,direction:button.dataset.insightDirection});
+    }else if(international&&button.matches('[data-open-unified-portfolio],[data-metric="investments"]')){
+      onUnified({view:'portfolio',presentation:state.wealthPresentation||'original',
+        ...(filters.connection_id?{connection_id:filters.connection_id}:{})});
     }else if(button.closest('.of-portfolio')&&button.matches('[data-open-assets]')){
       onAssets({connection_id:loaded.portfolio_history?.connection_id||'',currency:filters.currency,type:''});
     }else if(button.matches('[data-investment-class],[data-open-assets],[data-metric="investments"]')){

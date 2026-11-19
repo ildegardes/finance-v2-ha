@@ -137,8 +137,16 @@ class Settings:
     pluggy_admin_origin: str | None = None
     open_finance_sync_interval_hours: int = 24
     open_finance_auto_sync_allowed: bool | None = None
+    snaptrade_enabled: bool = False
+    snaptrade_client_id: str | None = field(default=None, repr=False)
+    snaptrade_consumer_key: str | None = field(default=None, repr=False)
 
     def __post_init__(self):
+        if type(self.snaptrade_enabled) is not bool:
+            raise ConfigurationError("invalid SnapTrade enable flag")
+        for secret in (self.snaptrade_client_id,self.snaptrade_consumer_key):
+            if secret is not None and (not isinstance(secret,str) or not re.fullmatch(r'[!-~]{1,256}',secret)):
+                raise ConfigurationError("invalid SnapTrade credential format")
         if type(self.open_finance_sync_interval_hours) is not int or self.open_finance_sync_interval_hours not in (1,2,4,6,12,24,48):
             raise ConfigurationError("invalid Open Finance auto-sync interval")
         if self.open_finance_auto_sync_allowed is not None and type(self.open_finance_auto_sync_allowed) is not bool:
@@ -185,6 +193,12 @@ class Settings:
         origin_evidence = os.environ.get("FINANCE_V2_OF_ORIGIN_EVIDENCE", "0")
         interval = 24
         auto_allowed = None
+        snaptrade_flag = os.environ.get('SNAPTRADE_ENABLED','0')
+        if snaptrade_flag not in ('0','1'):
+            raise ConfigurationError("invalid SnapTrade enable flag")
+        snaptrade_enabled = snaptrade_flag=='1'
+        snaptrade_client = os.environ.get('SNAPTRADE_CLIENT_ID') or None
+        snaptrade_consumer = os.environ.get('SNAPTRADE_CONSUMER_KEY') or None
         raw_keyring = os.environ.get("FINANCE_V2_PLUGGY_KEYRING_PATH")
         admin_origin = os.environ.get("FINANCE_V2_PLUGGY_ADMIN_ORIGIN") or None
         if path == Path("/data/finance_v2.sqlite3") and Path("/data/options.json").is_file():
@@ -196,6 +210,9 @@ class Settings:
                 if isinstance(interval,str) and interval in ('1','2','4','6','12','24','48'):
                     interval=int(interval)
                 auto_allowed = options.get('open_finance_auto_sync_enabled',False)
+                snaptrade_enabled = options.get('snaptrade_enabled',False)
+                snaptrade_client = options.get('snaptrade_client_id') or None
+                snaptrade_consumer = options.get('snaptrade_consumer_key') or None
             except (HaPluggyConfigurationError, AttributeError):
                 raise ConfigurationError("invalid Supervisor Pluggy options") from None
             if admin_origin is not None and (not isinstance(admin_origin, str) or not admin_origin.startswith("https://")):
@@ -225,4 +242,6 @@ class Settings:
             pluggy_admin_origin=admin_origin,
             open_finance_sync_interval_hours=interval,
             open_finance_auto_sync_allowed=auto_allowed,
+            snaptrade_enabled=snaptrade_enabled,snaptrade_client_id=snaptrade_client,
+            snaptrade_consumer_key=snaptrade_consumer,
         )

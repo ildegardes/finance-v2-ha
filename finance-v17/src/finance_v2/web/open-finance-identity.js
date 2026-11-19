@@ -3,13 +3,14 @@ const normalized=value=>String(value??'').normalize('NFD').replace(/\p{M}/gu,'')
 function bankType(value){
   const name=normalized(value);
   if(/^(itau(?:\s|$)|banco itau(?:\s|$))/.test(name))return 'itau';
+  if(/\bschwab\b/.test(name))return 'schwab';
   if(/^(santander(?:\s|$)|banco santander(?:\s|$))/.test(name))return 'santander';
   return 'generic';
 }
 
 export function bankMark(value,esc){
   const kind=bankType(value);
-  const label=kind==='itau'?'IT':kind==='santander'?'SA':String(value||'Instituição').trim().slice(0,2).toLocaleUpperCase('pt-BR');
+  const label=kind==='itau'?'IT':kind==='santander'?'SA':kind==='schwab'?'CS':String(value||'Instituição').trim().slice(0,2).toLocaleUpperCase('pt-BR');
   return '<span class="of-bank-mark '+kind+'" aria-hidden="true">'+esc(label)+'</span>';
 }
 
