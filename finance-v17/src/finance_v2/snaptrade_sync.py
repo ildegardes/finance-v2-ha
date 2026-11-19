@@ -17,7 +17,7 @@ from .open_finance_schedule import HOURS, _datetime, _iso
 from .pluggy_credential_protection import CredentialProtectionError, ProtectedCredential
 from .snaptrade_normalize import (
     account_record, activity, code, collection, connection_record, day, field_value, financial_text,
-    ident, invalid, key, position, timestamp,
+    ident, invalid, is_reit, key, position, timestamp,
 )
 from .snaptrade_read import ProviderFailure, SnapTradeReader
 
@@ -307,6 +307,8 @@ def _positions(db,aid,body,stamp,secrets):
     if not complete and not empty_cache:
         _checkpoint(db,aid,'positions','PARTIAL',stamp)
         return False,None
+    identified={row[0] for row in db.execute("SELECT instrument_id FROM st_positions WHERE account_id=? AND kind='reit'",(aid,))}
+    rows=[(*row[:3],'reit',*row[4:]) if row[0] in identified and row[3] in ('stock','other','preferred_stock') else row for row in rows]
     db.execute('DELETE FROM st_positions WHERE account_id=?',(aid,))
     db.executemany('INSERT INTO st_positions VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',[
         (aid,*row[:-1],json.dumps(row[-1]) if row[-1] is not None else None) for row in rows])
@@ -388,6 +390,11 @@ def _activities(service,db,token,reader,aid,remote,secrets,check):
                date=excluded.date,settled=excluded.settled,ticker=excluded.ticker,instrument_id=excluded.instrument_id,
                description=excluded.description,currency=excluded.currency,amount=excluded.amount,units=excluded.units,
                price=excluded.price,fee=excluded.fee,observed_at=excluded.observed_at''',[(aid,*row) for row in records])
+            reits={record[6] for row,record in zip(rows,records)
+                   if not row.get('option_symbol') and record[6] and is_reit(row.get('symbol'))}
+            if reits:
+                db.executemany("UPDATE st_positions SET kind='reit' WHERE account_id=? AND instrument_id=? AND kind IN ('stock','other','preferred_stock')",
+                               [(aid,instrument_id) for instrument_id in reits])
             offset+=len(records)
             complete=offset>=total
             _checkpoint(db,aid,'activities','AVAILABLE' if complete else 'PARTIAL',stamp)

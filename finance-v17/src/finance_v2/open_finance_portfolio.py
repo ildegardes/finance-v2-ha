@@ -53,13 +53,17 @@ def capture_snapshot(db, connection, run, parse_amount):
         VALUES (?,?,?,?,?,?,?) ON CONFLICT(run_id,connection_id,external_id) DO NOTHING""",positions)
 
 
+def window_start(today,window):
+    if window=='all':
+        return '0001-01-01'
+    civil_today=date.fromisoformat(today)
+    year,month=divmod(civil_today.year*12+civil_today.month-1-int(window),12)
+    return date(year,month+1,min(civil_today.day,monthrange(year,month+1)[1])).isoformat()
+
+
 def portfolio_history(db,current,currency,today,window,*,available=None,selection=None,labels=None,positions=None):
     today = str(today)
-    threshold = '0001-01-01'
-    if window!='all':
-        civil_today=date.fromisoformat(today)
-        year,month=divmod(civil_today.year*12+civil_today.month-1-int(window),12)
-        threshold=date(year,month+1,min(civil_today.day,monthrange(year,month+1)[1])).isoformat()
+    threshold = window_start(today,window)
     result = {'state':'FORMING','first_observed_at':None,'points':[],'change':None,'percent':None,'window':window}
     if available is not None:
         candidates = set(available)

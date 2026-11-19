@@ -17,7 +17,7 @@ from .open_finance_insights import banking_insights, card_insights, classificati
 from .open_finance_domain import _origin, _context_at_origin, _freshness
 
 PARAMS = {'start', 'end', 'connection_id', 'account_id', 'category', 'product',
-          'status', 'direction', 'currency', 'search', 'page', 'page_size', 'history', 'bill_id', 'nature', 'effective_category', 'origin', 'review', 'rule', 'bucket', 'group_by', 'group_order', 'center', 'effective_key', 'portfolio_window', 'portfolio_connection', 'investment', 'provent', 'sort', 'flow_component', 'card_economic'}
+          'status', 'direction', 'currency', 'search', 'page', 'page_size', 'history', 'bill_id', 'nature', 'effective_category', 'origin', 'review', 'rule', 'bucket', 'group_by', 'group_order', 'center', 'effective_key', 'presentation', 'portfolio_window', 'portfolio_connection', 'investment', 'provent', 'sort', 'flow_component', 'card_economic'}
 
 
 def _parameters(query):
@@ -52,7 +52,7 @@ def _parameters(query):
     choices = {'nature':NATURES,'origin':ORIGINS,'review':{'CONFIRMED','SUGGESTED','CONFLICT','UNCLASSIFIED'},
                'bucket':{'operating','capital','internal','settlement','pending'},
                'group_by':{'pattern','recurring','institution','account','direction','category'},
-               'group_order':{'count','date','magnitude'},'center':{'1'},'portfolio_window':{'1','3','6','12','all'},
+               'group_order':{'count','date','magnitude'},'center':{'1'},'presentation':{'BRL','USD','original'},'portfolio_window':{'1','3','6','12','all'},
                'sort':{'date_desc','date_asc','value_desc','value_asc','description_asc','description_desc'},
                'flow_component':{'operating','application','redemption','internal','card_payment','other','pending'},
                'card_economic':{'purchase','installment','recognized_purchase','credit','settlement'}}
@@ -189,8 +189,12 @@ def analytics(c, settings, query, today=None):
     with read_view(c) as deadline, localcontext() as ctx:
         ctx.prec = 80
         views = connection_views(c, settings)
-        if q.get('connection_id') and q['connection_id'] not in views:
-            raise SyncError('CONNECTION_NOT_FOUND', 404)
+        scope_id=q.get('connection_id')
+        if scope_id and scope_id not in views:
+            if not (q.get('presentation') and settings.snaptrade_enabled and c.execute(
+                'SELECT 1 FROM st_connections WHERE id=? AND archived=0 AND excluded=0 AND provider_state=?',
+                (scope_id,'AVAILABLE')).fetchone()):
+                raise SyncError('CONNECTION_NOT_FOUND', 404)
         eligible = {k: v for k, v in views.items() if v.enabled and not v.historical}
         selected = {k: v for k, v in (views if q['history'] == '1' else eligible).items()
                     if not q.get('connection_id') or q['connection_id'] == k}
@@ -200,9 +204,10 @@ def analytics(c, settings, query, today=None):
         rows = c.execute("""SELECT r.connection_id,r.resource,r.parent_id,r.external_id,r.payload_json,r.observed_at,r.last_run_id,
                    coalesce(s.sequence,0) AS first_sequence
             FROM of_resource_records r LEFT JOIN of_classification_import_order s ON s.run_id=r.first_run_id
-            WHERE r.connection_id IN (SELECT value FROM json_each(?))
-            AND r.state='PRESENT' AND r.resource IN ('accounts','transactions','investments') LIMIT 30001""",
-            (scope,)).fetchall()
+            WHERE r.state='PRESENT' AND (
+                (r.connection_id IN (SELECT value FROM json_each(?)) AND r.resource IN ('accounts','transactions','investments'))
+                OR (r.connection_id IN (SELECT value FROM json_each(?)) AND r.resource='investments')) LIMIT 30001""",
+            (scope,json.dumps(list(eligible)) if q.get('presentation') and q.get('connection_id') else '[]')).fetchall()
         if len(rows) > 30000 or time.monotonic() > deadline:
             raise SyncError('QUERY_BUDGET_EXCEEDED', 503)
         records = [{**dict(row), 'data': json.loads(row['payload_json'], parse_float=Decimal)} for row in rows]
@@ -271,7 +276,7 @@ def analytics(c, settings, query, today=None):
             if q.get('account_id') and q['account_id'] != r['parent_id']: continue
             currency = data.get('currencyCode')
             status = data.get('status')
-            if currency and currency != q['currency']: continue
+            if currency and currency != q['currency'] and 'presentation' not in q: continue
             if day is not None and (day < q.get('start', '0001-01-01') or day > q.get('end', '9999-12-31')): continue
             if q['status'] != 'ALL' and status in ('POSTED', 'PENDING') and status != q['status']: continue
             if not currency or day is None or (q['status'] != 'ALL' and status not in ('POSTED', 'PENDING')):
@@ -319,10 +324,13 @@ def analytics(c, settings, query, today=None):
             items.append({'connection_id': r['connection_id'], 'account_id': r['parent_id'], 'external_id': r['external_id'],
                 'institution': views[r['connection_id']].institution, 'account_name': masked_card_text(account['data'].get('name')) if product=='CREDIT' else account['data'].get('name'),
                 'date': day, 'description': description, 'description_original':data.get('descriptionRaw') or description, 'merchant': merchant, 'amount': format(amount, 'f') if amount is not None else None,
-                'currency': q['currency'], 'category': category, 'direction': classification, 'status': data.get('status'), 'product': product,
+                'currency': currency, 'category': category, 'direction': classification, 'status': data.get('status'), 'product': product,
                 'classification':decision,'classification_bucket':bucket,'original_category':original_category,
                 'effective_category':effective,
                 'economic_classification': 'NOT_ESTABLISHED', 'economic_recognition':recognition, 'flow_component':component, 'card_economic':activity, 'reconciliation': 'UNRECONCILED', 'bill_relation': relation})
+        dashboard_items=items if q.get('presentation') else None
+        if dashboard_items is not None:
+            items=[row for row in items if row['currency']==q['currency']]
         _sort_items(items,q.get('sort','date_desc'))
         flow = {p: {'incoming': Decimal(0), 'outgoing': Decimal(0), 'unavailable': 0} for p in ('BANK', 'CREDIT')}
         series = {}; categories = {}; economic_categories = {}; observed = {p: set() for p in flow}
@@ -468,7 +476,7 @@ def analytics(c, settings, query, today=None):
             raise SyncError('QUERY_BUDGET_EXCEEDED',503)
         cards = card_insights(accounts,current,views,q['currency'],_amount,today or str(SystemClock(settings.timezone).today()))
         history = None
-        if 'portfolio_window' in q:
+        if 'portfolio_window' in q and not q.get('presentation'):
             preferred = q.get('portfolio_connection')
             if preferred and preferred not in eligible:
                 raise SyncError('CONNECTION_NOT_FOUND',404)
@@ -488,7 +496,14 @@ def analytics(c, settings, query, today=None):
             if history.get('connection_id') and history.get('latest_position') is None:
                 history['latest_position'] = (history.get('latest_point') or {}).get('value')
         center = classification_center(items,q.get('group_by','pattern'),q.get('group_order','count')) if q.get('center') else None
-        return {'contract': 'OF-ANALYTICS/1', 'filters': {k: v for k, v in q.items() if not k.startswith('_')},
+        projection=None
+        if dashboard_items is not None:
+            from .open_finance_dashboard import dashboard
+            projection=dashboard(c,settings,q,str(today or SystemClock(settings.timezone).today()),views,current,
+                                 records,accounts,checkpoints,dashboard_items,_amount,flow['BANK']['coverage_state'])
+        if time.monotonic()>deadline:
+            raise SyncError('QUERY_BUDGET_EXCEEDED',503)
+        return {'contract': 'OF-ANALYTICS/1', **({'presentation_view':projection} if projection is not None else {}), 'filters': {k: v for k, v in q.items() if not k.startswith('_')},
             'positions': positions, 'flow': flow, 'institutions': list(institutions.values()),
             'insights': insights, 'cards': cards, 'classification_center': center,
             'economic_category_ranking':economic_ranking,'portfolio_history':history,

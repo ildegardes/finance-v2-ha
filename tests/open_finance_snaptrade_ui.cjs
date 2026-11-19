@@ -13,6 +13,12 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || path.join(process.env.
     page.on('pageerror',error=>errors.push(error.message));
     page.setDefaultTimeout(8500);
     await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+    // Exercise the previous overview response contract alongside the 0.1.38 browser suite.
+    await page.route('**/api/v2/open-finance/catalogs',async route=>{
+      const response=await route.fetch(),data=await response.json();
+      delete data.consolidated_overview;
+      await route.fulfill({response,json:data});
+    });
     if(dir)fs.mkdirSync(dir,{recursive:true});
     async function shot(name,component){
       if(!dir)return;

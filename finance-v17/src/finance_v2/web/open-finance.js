@@ -64,18 +64,29 @@ export function createOpenFinance({api,view,heading,esc,navigation=null,state={}
       form.requestSubmit();section.scrollIntoView({block:'start',behavior:'smooth'});
     });
     const overview=state.overview??={};
-    const incomes=mountInvestmentIncome({host,api,esc,navigation,getScope:()=>overview});
-    const wealth=catalog.snaptrade_enabled?mountWealth({host,api,esc,navigation,state:state.wealth??={},
-      getPeriod:()=>overview,today:today?.()}):null;
+    const consolidated=!!catalog.consolidated_overview;
+    const legacyIncome=!consolidated&&mountInvestmentIncome({host,api,esc,navigation,getScope:()=>overview});
+    const wealth=(consolidated||catalog.snaptrade_enabled)?mountWealth({host,api,esc,navigation,state:state.wealth??={},
+      getPeriod:()=>overview,today:today?.(),snaptrade:!!catalog.snaptrade_enabled}):null;
+    const incomes=legacyIncome||mountInvestmentIncome({host,api,esc,navigation,getScope:()=>overview,consolidated});
     mountSnapTradeConnections({host,panel:connectionPanel,api,esc,navigation,today:today?.(),enabled:catalog.snaptrade_enabled});
-    mountAnalyticsOverview({host,api,esc,catalog,navigation,state:overview,today:today?.(),international:!!wealth,
+    mountAnalyticsOverview({host,api,esc,catalog,navigation,state:overview,today:today?.(),international:!!wealth,consolidated,
       onUnified:context=>{wealth?.show(context);selectTab('assets',true);},
       onPeriod:filters=>{for(const key of ['start','end','currency'])analyticsState[key]=filters[key];},
       onNavigate:context=>{flow.update(context,{load:selectedTab==='flow'});selectTab('flow',true)},
-      onAssets:context=>{wealth?.showLegacy();domains.updateAssets(context);selectTab('assets',true);if(context.income)incomes.open();},
+      onAssets:context=>{
+        if(!consolidated||!context.income)wealth?.showLegacy();
+        domains.updateAssets(context);selectTab('assets',true);
+        if(context.income)incomes.open();
+      },
       onCards:context=>{domains.updateCard(context);selectTab('cards',true);},
-      onConnections:(id,diagnostic)=>{
+      onConnections:(id,diagnostic,broker)=>{
         selectTab('connections',true);
+        if(broker){
+          const target=connectionPanel.querySelector('.of-snaptrade-connections h2');
+          target?.setAttribute('tabindex','-1');target?.focus();target?.scrollIntoView({block:'start'});
+          return;
+        }
         if(diagnostic){
           const button=[...connectionPanel.querySelectorAll('[data-connection-diagnostic]')].find(b=>b.dataset.connectionDiagnostic===id);
           if(button)button.click();

@@ -304,6 +304,7 @@ def _dispatch_raw(app,operation,identity,body,query,request_id):
         if op=='catalogs':
             if query:raise SyncError('INVALID_QUERY',422)
             payload=catalogs(c,connection_views(c,app.settings).values())
+            payload['consolidated_overview']=True
             if app.settings.snaptrade_enabled:
                 payload['snaptrade_enabled']=True
             return payload,200
@@ -489,11 +490,11 @@ def openapi_paths():
             from .open_finance_analytics import PARAMS
             sizes={'type':'integer','enum':[25,50,100,250,500],'default':50}
             sort=enum('date_desc','date_asc','value_desc','value_asc','description_asc','description_desc')
-            parameters=[{'name':name,'in':'query','required':False,'schema':{'page_size':sizes,'sort':sort}.get(name,text)}
+            parameters=[{'name':name,'in':'query','required':False,'schema':{'page_size':sizes,'sort':sort,'presentation':enum('BRL','USD','original')}.get(name,text)}
                         for name in sorted(PARAMS)]
             schema={'type':'object','required':['contract','filters','positions','flow','series','categories','items','total','page','has_more','coverage'],
                     'properties':{'contract':{'type':'string','enum':['OF-ANALYTICS/1']},
-                    **{name:{'type':'object'} for name in ('filters','positions','flow')},
+                    **{name:{'type':'object'} for name in ('filters','positions','flow','presentation_view')},
                     **{name:{'type':'array','items':{'type':'object'}} for name in ('series','categories','items','coverage')},
                     'total':integer,'page':integer,'total_pages':integer,'has_more':{'type':'boolean'}}}
             statuses.append(404)

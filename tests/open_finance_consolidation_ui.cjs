@@ -1,0 +1,106 @@
+const assert=require('node:assert/strict');
+const path=require('node:path');
+const fs=require('node:fs');
+const {selectPrivacy}=require('./privacy-menu.cjs');
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE || path.join(process.env.USERPROFILE,'.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright'));
+
+(async()=>{
+  const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE||'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'});
+  try{
+    const origin=process.argv[2],page=await browser.newPage({viewport:{width:1440,height:950}});
+    page.setDefaultTimeout(10000);
+    const errors=[],calls=[];
+    page.on('pageerror',error=>{errors.push(error.message);console.error(error.stack);});
+    page.on('request',r=>calls.push(new URL(r.url()).pathname));
+    await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+    const shots=process.env.OF_CONSOLIDATION_SHOTS;
+    async function shot(name){
+      if(!shots)return;
+      fs.mkdirSync(shots,{recursive:true});
+      await page.evaluate(()=>window.scrollTo(0,0));
+      await page.screenshot({path:path.join(shots,name+'.png'),animations:'disabled',fullPage:true});
+    }
+    await page.goto(origin+'/app/unlock');
+    await page.locator('input[name=token]').fill('synthetic-owner-only');
+    await page.getByRole('button',{name:'Entrar'}).click();
+    await page.goto(origin+'/app/#open-finance');
+    const overview=page.locator('#of-panel-overview');
+    const tab=name=>page.getByRole('tab',{name});
+    const header=overview.getByRole('form',{name:'Filtros da visão geral'});
+    const select=header.getByLabel('Moeda de apresentação');
+    const metric=name=>overview.locator('.of-kpi').filter({has:page.getByRole('button',{name,exact:true})});
+    const awaitAmount=async(name,amount)=>{await metric(name).getByText(amount,{exact:false}).first().waitFor();};
+    try{await overview.locator('.of-six-kpis').waitFor();}catch(error){console.error(page.url(),await page.locator('body').innerText());throw error;}
+    await selectPrivacy(page,'visible');
+    await awaitAmount('Investimentos','267.000,00');
+    assert.equal(await select.inputValue(),'BRL');
+    assert.deepEqual(await overview.locator('.of-kpi-group').evaluateAll(groups=>groups.map(group=>group.children.length)),[3,3]);
+    await awaitAmount('Saldo em contas','3.000,00');
+    await awaitAmount('Cartões de crédito','150,00');
+    await awaitAmount('Receitas identificadas','112,00');
+    await awaitAmount('Despesas identificadas','80,00');
+    await awaitAmount('Rendimentos','92,00');
+    assert.equal(await overview.getByText('Distribuição geográfica e por moeda').count(),0);
+    const institutions=overview.locator('[data-current-positions]');
+    assert.equal(await institutions.locator('.of-position').count(),3);
+    const schwab=institutions.locator('article').filter({hasText:'Charles Schwab'});
+    await schwab.getByText('Caixa em corretora',{exact:true}).waitFor();
+    assert.match(await schwab.innerText(),/2\.500,00/);
+    assert.match(await schwab.innerText(),/USD\s*500,00/);
+    await overview.getByText('Stocks',{exact:true}).waitFor();
+    await overview.getByText('REITs',{exact:true}).waitFor();
+    await overview.getByText('ETFs',{exact:true}).waitFor();
+    await overview.getByText('Não classificado',{exact:true}).waitFor();
+    const forecast=overview.locator('.of-portfolio');
+    const series=forecast.getByLabel('Instituição da série');
+    assert.equal(await series.locator('option').first().innerText(),'Patrimônio consolidado');
+    await forecast.locator('.of-portfolio-plot').waitFor();
+    await shot('visao-geral-brl');
+    const queriesBefore=calls.filter(path=>path.endsWith('/analytics')).length;
+    await select.selectOption('USD');
+    await awaitAmount('Investimentos','53.400,00');
+    await awaitAmount('Cartões de crédito','37,50');
+    assert.equal(calls.filter(path=>path.endsWith('/analytics')).length-queriesBefore,1);
+    assert.equal(calls.filter(path=>path.endsWith('/portfolio')).length,0);
+    await series.selectOption({label:'Charles Schwab'});
+    await forecast.getByText('23.400,00',{exact:false}).first().waitFor();
+    await shot('visao-geral-usd');
+    await select.selectOption('original');
+    await awaitAmount('Investimentos','150.000,00');
+    await awaitAmount('Investimentos','23.400,00');
+    assert.equal(await metric('Investimentos').locator('strong>.of-money-line').count(),2);
+    await shot('visao-geral-originais');
+    await page.reload();
+    await awaitAmount('Investimentos','23.400,00');
+    assert.equal(await select.inputValue(),'original');
+    await select.selectOption('USD');
+    await awaitAmount('Investimentos','53.400,00');
+    await overview.getByRole('button',{name:'Ver rendimentos e proventos'}).click();
+    const income=page.locator('.of-investment-income');
+    await income.getByText('Impostos retidos no exterior',{exact:true}).first().waitFor();
+    await income.getByText('Rendimento líquido indisponível',{exact:false}).waitFor();
+    await tab('Visão geral').click();
+    await awaitAmount('Investimentos','53.400,00');
+    await schwab.getByRole('button',{name:'Movimentações'}).click();
+    await page.locator('.of-wealth [data-wealth-result]').getByText('Distribuição sintética',{exact:true}).waitFor();
+    await tab('Visão geral').click();
+    await awaitAmount('Investimentos','53.400,00');
+    await schwab.getByRole('button',{name:'Investimentos'}).click();
+    await page.locator('.of-wealth').getByText('País de negociação informado',{exact:true}).waitFor();
+    await tab('Visão geral').click();
+    await awaitAmount('Investimentos','53.400,00');
+    await selectPrivacy(page,'masked');
+    assert(!/53\.400,00|37,50/.test(await overview.innerHTML()));
+    await selectPrivacy(page,'full');
+    assert.equal(await overview.locator('.of-allocation-ring,.of-portfolio-plot,.of-ranking-track').count(),0);
+    assert(!/53\.400,00|37,50/.test(await overview.innerHTML()));
+    await selectPrivacy(page,'visible');
+    for(const width of [390,768,1440,1920]){
+      await page.setViewportSize({width,height:950});
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true,'width '+width);
+      if(width===390)await shot('visao-geral-mobile');
+    }
+    assert.deepEqual(errors,[]);
+    console.log('PASS: global currency, persistence, institution, investments, income, history, privacy and responsive overview');
+  }finally{await browser.close();}
+})().catch(error=>{console.error(error.stack);process.exitCode=1;});

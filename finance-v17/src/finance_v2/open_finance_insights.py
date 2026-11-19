@@ -218,7 +218,8 @@ def card_insights(accounts,current,views,currency,parse_amount,today):
     evidence = []
     for (cid,external),row in accounts.items():
         data = row['data']
-        if cid not in current or data.get('type')!='CREDIT' or data.get('currencyCode')!=currency:
+        card_currency=data.get('currencyCode')
+        if cid not in current or data.get('type')!='CREDIT' or (currency is not None and card_currency!=currency):
             continue
         credit = data.get('creditData') or {}
         status = credit.get('status')
@@ -227,12 +228,12 @@ def card_insights(accounts,current,views,currency,parse_amount,today):
         lines = credit.get('disaggregatedCreditLimits') or []
         total_lines = [line for line in lines if line.get('creditLineLimitType')=='LIMITE_CREDITO_TOTAL']
         individual = [line for line in total_lines if line.get('consolidationType')=='INDIVIDUAL'
-                      and line.get('usedAmountCurrencyCode')==line.get('limitAmountCurrencyCode')==currency
+                      and line.get('usedAmountCurrencyCode')==line.get('limitAmountCurrencyCode')==card_currency
                       and line.get('isLimitFlexible') is False]
         usable = individual[0] if len(individual)==1 and len(total_lines)==1 else {}
         used = parse_amount(usable.get('usedAmount'))
         limit = parse_amount(usable.get('limitAmount')) if usable else parse_amount(credit.get('creditLimit'))
-        available = parse_amount(usable.get('availableAmount')) if usable and usable.get('availableAmountCurrencyCode')==currency else parse_amount(credit.get('availableCreditLimit'))
+        available = parse_amount(usable.get('availableAmount')) if usable and usable.get('availableAmountCurrencyCode')==card_currency else parse_amount(credit.get('availableCreditLimit'))
         due = civil(credit.get('balanceDueDate'))
         collection = row.get('last_run_id')
         identity = usable.get('identificationNumber')
@@ -255,10 +256,12 @@ def card_insights(accounts,current,views,currency,parse_amount,today):
         evidence.append((normalize(views[cid].institution),cid,obligation,reference,basis,candidate) if confidence else None)
         cards.append({'connection_id':cid,'account_id':external,'institution':views[cid].institution,
                       'name':masked_card_text(data.get('marketingName') or data.get('name')) or 'Cartão sem nome',
-                      'brand':masked_card_text(credit.get('brand')), 'status':status,'holder':credit.get('holderType'),
+                      'brand':masked_card_text(credit.get('brand')), 'currency':card_currency, 'status':status,'holder':credit.get('holderType'),
                       'balance':_amount_text(parse_amount(data.get('balance'))),'used':_amount_text(used),
                       'limit':_amount_text(limit),'available':_amount_text(available),'utilization':_percent(used,limit),
                       'shared_or_unknown':not bool(usable), 'due':due, 'observed_at':row['observed_at'], 'reference_date':reference})
+    if currency is None:
+        return {'items':cards,'active_count':sum(card['status']=='ACTIVE' for card in cards),'count':len(cards)}
     known = [(index,item) for index,item in enumerate(evidence) if item and item[5] is not None]
     basis = 'USED_AMOUNT' if any(item[4]=='USED_AMOUNT' for _,item in known) else 'ACCOUNT_BALANCE'
     comparable = [(index,item) for index,item in known if item[4]==basis]
