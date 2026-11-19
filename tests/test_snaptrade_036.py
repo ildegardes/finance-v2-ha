@@ -70,11 +70,13 @@ class Broker:
                 result.append({'id':AUTH2,'brokerage':{'name':'Outra corretora','slug':'OTHER'},'type':'read','disabled':not self.second_active})
             return result
         if operation=='accounts':
-            result=[{'id':ACCOUNT,'brokerage_authorization':AUTH,'status':'open','name':'Corretora '+FULL_NUMBER,
-                     'number':FULL_NUMBER,'raw_type':'Individual','institution_account_id':'broker-external-1'}]
+            result=[{'id':ACCOUNT,'kind':'investment','is_paper':False,'connection_id':AUTH,'status':'open',
+                     'display_name':'Corretora '+FULL_NUMBER,'masked_account_number':'****5612',
+                     'raw_type':'Individual','institution_account_id':'broker-external-1'}]
             if self.second:
-                result.append({'id':ACCOUNT2,'brokerage_authorization':AUTH2,'status':'open','name':'Conta internacional 2','number':'4567'})
-            return result
+                result.append({'id':ACCOUNT2,'kind':'investment','is_paper':False,'connection_id':AUTH2,
+                               'status':'open','display_name':'Conta internacional 2','masked_account_number':'****4567'})
+            return {'results':result}
         if operation=='balances':
             return {'account_id':account,'data_freshness':{'as_of':self.reference},
                     'net_value':{'amount':'20500','currency':'USD'},
@@ -288,8 +290,7 @@ class SnapTradeTests(unittest.TestCase):
                 self.assertNotIn(SECRET,dump)
             wrong=CredentialProtector('synthetic',{'synthetic':os.urandom(32)})
             with patch('finance_v2.snaptrade_sync.load_keyring',return_value=wrong):
-                with self.assertRaisesRegex(SyncError,'SNAPTRADE_CREDENTIALS_LOCKED'):
-                    self.run_sync()
+                self.assertEqual(self.run_sync()['error_code'],'SNAPTRADE_CREDENTIALS_LOCKED')
             update_credentials(self.service,{'client_id':CLIENT,'consumer_key':'synthetic-invalid'})
             self.assertEqual(self.run_sync()['error_code'],'SNAPTRADE_AUTH')
 
@@ -305,7 +306,7 @@ class SnapTradeTests(unittest.TestCase):
             return transport(operation,**query)
         with patch.object(self.broker,'read',side_effect=limited):
             result=self.run_sync()
-            self.assertEqual(result,{'state':'PARTIAL','error_code':'SNAPTRADE_ACCOUNT_RATE_LIMIT'})
+            self.assertEqual((result['state'],result['error_code']),('PARTIAL','SNAPTRADE_ACCOUNT_RATE_LIMIT'))
             self.assertIn(('positions',ACCOUNT2,None),self.broker.visited)
             self.broker.visited.clear()
             self.assertEqual(self.run_sync()['state'],'PARTIAL')

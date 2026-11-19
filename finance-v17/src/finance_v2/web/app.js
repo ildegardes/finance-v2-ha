@@ -15,7 +15,29 @@ const flowMoney=(kind,value)=>financialAmount(kind,value,money);
 const labels={PENDING:'Pendente',OVERDUE:'Atrasada',PAID:'Paga',CANCELLED:'Cancelada',SUPERSEDED:'Substituída',ACTIVE:'Ativa',ENDED:'Encerrada',OPEN:'Aberta',CLOSED:'Fechada',RECEIVED:'Recebida',MANUAL:'Manual',AUTO_DEBIT:'Débito automático',PIX:'Pix',DEBIT:'Débito',CASH:'Dinheiro',BANK_SLIP:'Boleto',BANK_TRANSFER:'Transferência bancária',CREDIT_CARD:'Cartão de crédito',WEEKLY:'Semanal',BIWEEKLY:'Quinzenal',MONTHLY:'Mensal',BIMONTHLY:'Bimestral',QUARTERLY:'Trimestral',SEMIANNUAL:'Semestral',ANNUAL:'Anual',SAME_DAY:'Mesmo dia da ocorrência',INVOICE:'Conforme fatura do cartão'};
 const label=v=>labels[v]||v||'—',dateBR=v=>v?new Intl.DateTimeFormat('pt-BR',{timeZone:'UTC'}).format(new Date(v.length===10?v+'T12:00:00Z':v)):'—';
 function centsBR(v){const n=Number(String(v).trim().replace(/\./g,'').replace(',','.'));if(!Number.isFinite(n)||n<=0)throw new Error('Informe um valor positivo em reais.');return Math.round(n*100)}
-async function api(path,{method='GET',body,idempotent=false,signal}={},scope=null){const headers={Accept:'application/json'},key=idempotent?(typeof idempotent==='string'?idempotent:crypto.randomUUID()+crypto.randomUUID()):null;if(body!==undefined){headers['Content-Type']='application/json';headers['X-CSRF-Token']=context?.csrf_token||''}if(key)headers['Idempotency-Key']=key;const request=()=>fetch('/api/v2'+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),credentials:'same-origin',signal});let response;try{response=await request()}catch(e){if(!key)throw e;response=await request()}const data=await response.json();scope?.check();if(response.status===401){location.href='/app/unlock';throw new Error('Sessão expirada')}if(!response.ok)throw Object.assign(new Error(errorText(data.error)),{code:['/open-finance/coverage-sync','/open-finance/domain-sync'].includes(path)?(coverageFailureCode(data)||data.error?.code):data.error?.code});if(method!=='GET')pendingSuccess=true;return data}
+async function api(path,{method='GET',body,idempotent=false,signal}={},scope=null){
+ const headers={Accept:'application/json'},key=idempotent?(typeof idempotent==='string'?idempotent:crypto.randomUUID()+crypto.randomUUID()):null;
+ if(body!==undefined){headers['Content-Type']='application/json';headers['X-CSRF-Token']=context?.csrf_token||''}
+ if(key)headers['Idempotency-Key']=key;
+ const request=()=>fetch('/api/v2'+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),credentials:'same-origin',signal});
+ let response;
+ try{response=await request()}catch(e){if(!key)throw e;response=await request()}
+ scope?.check();
+ if(response.status===401){location.href='/app/unlock';throw new Error('Sessão expirada')}
+ let data;
+ try{data=await response.json()}catch(error){
+  scope?.check();
+  throw Object.assign(new Error('Não foi possível ler a resposta do servidor.'),{code:'HTTP_RESPONSE_UNAVAILABLE',status:response.status});
+ }
+ scope?.check();
+ if(!response.ok){
+  const code=['/open-finance/coverage-sync','/open-finance/domain-sync'].includes(path)
+    ?(coverageFailureCode(data)||data?.error?.code):data?.error?.code||data?.error_code;
+  throw Object.assign(new Error(errorText(data?.error)),{code,status:response.status,diagnostic:data?.diagnostic});
+ }
+ if(method!=='GET')pendingSuccess=true;
+ return data;
+}
 function busy(b,p){b.disabled=true;const t=b.textContent;b.textContent='Processando…';return p.finally(()=>{b.disabled=false;b.textContent=t})}function showError(e){if(isNavigationCancelled(e))return;view.querySelector('[data-navigation-loading]')?.remove();status.innerHTML=`<p class="attention">${esc(e.message||'Não foi possível concluir.')}</p>`;return status.firstElementChild}function renderHeading(t,s='',a=''){view.onclick=null;view.innerHTML=`<div class="page-header"><div><h1>${esc(t)}</h1>${s?`<p class="muted">${esc(s)}</p>`:''}</div><div class="actions">${a}</div></div>`;status.innerHTML=pendingSuccess?'<p class="status success">Operação concluída.</p>':'';pendingSuccess=false}
 const opts=(xs,n='Selecione')=>`<option value="">${n}</option>`+xs.filter(x=>x.active).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('');
 let selectedMonth;
