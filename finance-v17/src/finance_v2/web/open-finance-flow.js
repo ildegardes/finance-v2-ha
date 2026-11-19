@@ -87,38 +87,86 @@ export function mountAnalyticsFlow({host,api,esc,catalog,navigation,state,onRefr
     category.value=state.category||'';form.elements.group_by.value=state.group_by||'pattern';form.elements.group_order.value=state.group_order||'count';accounts();form.elements.account_id.value=state.account_id||'';}
   form.elements.history.onchange=()=>{connections();state.account_id='';accounts()};
   form.elements.connection_id.onchange=()=>{state.account_id='';accounts()};
-  function monetary(value){return value==null?'Indisponível':bankMoney(value,state.currency)}
-  function privateValue(value){return `<strong ${value==null?'':'data-private-financial'+(state.currency==='BRL'?'':' data-private-mask="neutral"')}>${esc(monetary(value))}</strong>`}
+  function privateValue(value,currency=state.currency){
+    if(value==null)return '<strong>Indisponível</strong>';
+    return `<strong data-private-financial ${currency==='BRL'?'':'data-private-mask="neutral"'}>${esc(bankMoney(value,currency))}</strong>`;
+  }
+  function renderRows(container,items,group){
+    const rows=document.createDocumentFragment(),rowTemplate=document.createElement('template'),grouped=new Map();
+    for(const [index,tx] of items.entries()){
+      const label=group==='date'?dateBR(tx.date):group==='institution'?institutionName(tx.institution):
+        group==='category'?categoryLabel(tx.effective_category||tx.category):'';
+      const key=group==='category'?(tx.effective_category||tx.category)?.key||label:label;
+      if(!grouped.has(key)){
+        const block=document.createElement('div');
+        if(label){
+          const heading=document.createElement('h3');
+          heading.className='of-flow-date';heading.textContent=label;block.append(heading);
+        }
+        grouped.set(key,block);rows.append(block);
+      }
+      rowTemplate.innerHTML=`<article class="of-flow-item"><div><strong>${esc(tx.description||'Descrição indisponível')}</strong><p>${bankMark(tx.institution,esc)}${esc(institutionName(tx.institution))} · ${esc(tx.account_name||'Conta')} · ${esc(categoryLabel(tx.effective_category||tx.category))}</p><small><time datetime="${esc(tx.date)}">${esc(dateBR(tx.date))}</time> · ${esc(tx.direction==='incoming'?'Entrada':tx.direction==='outgoing'?'Saída':'Direção não estabelecida')} · ${esc(statusLabel(tx.status))}</small></div><div>${privateValue(tx.amount,tx.currency)}<details><summary>Detalhes</summary><p>${esc(tx.product==='CREDIT'?'Cartão':'Conta bancária')} · ${esc(statusLabel(tx.reconciliation))}</p>${classificationDetail(tx,esc)}${recognitionDetail(tx)}</details>${tx.classification?`<button class="of-link of-class-edit" type="button" data-edit-transaction="${index}">Classificar movimentação</button>`:''}</div></article>`;
+      const article=rowTemplate.content.firstElementChild;
+      if(!article?.matches('article.of-flow-item'))throw new Error('MOVEMENTS_RENDER_FAILED');
+      const edit=article.querySelector('[data-edit-transaction]');
+      if(edit)edit.onclick=()=>classification.edit(tx);
+      grouped.get(key).append(article);
+    }
+    container.replaceChildren(rows);
+  }
+  function showError(container,message,code){
+    container.innerHTML=`<p role="alert" class="attention">${message} <small>${code}</small></p>
+      <button type="button" data-flow-retry>Tentar novamente</button>`;
+    container.querySelector('[data-flow-retry]').onclick=load;
+  }
   async function load(){
-    const query=queries.begin();classification.loading();result.setAttribute('aria-busy','true');result.innerHTML='<p role="status">Carregando movimentações…</p>';
+    const query=queries.begin();classification.loading();result.setAttribute('aria-busy','true');
+    result.innerHTML='<p role="status">Carregando movimentações…</p>';
     const {order,group}=presentation();
-    const params=new URLSearchParams({page:String(state.page),page_size:String(state.pageSize),sort:order});if(state.bill_id)params.set('bill_id',state.bill_id);if(state.history==='1')params.set('history','1');for(const n of names)if(state[n])params.set(n,state[n]);
+    const params=new URLSearchParams({page:String(state.page),page_size:String(state.pageSize),sort:order});
+    if(state.bill_id)params.set('bill_id',state.bill_id);
+    if(state.history==='1')params.set('history','1');
+    for(const n of names)if(state[n])params.set(n,state[n]);
     for(const key of drilldownKeys)if(state[key])params.set(key,state[key]);
-    if(classification.open()){params.set('center','1');params.set('group_by',state.group_by||'pattern');params.set('group_order',state.group_order||'count');}
-    try {const data=await api('/open-finance/analytics?'+params,{queryScope:query});if(!query.current()||!host.isConnected)return;
+    if(classification.open()){
+      params.set('center','1');params.set('group_by',state.group_by||'pattern');params.set('group_order',state.group_order||'count');
+    }
+    try {
+      const data=await api('/open-finance/analytics?'+params,{queryScope:query});
+      if(!query.current()||!host.isConnected)return;
+      const totals=data?.flow?.[state.product];
+      if(!totals||!Number.isSafeInteger(data.total)||data.total<0||!Array.isArray(data.items)){
+        showError(result,'A resposta das movimentações está incompleta.','MOVEMENTS_RESPONSE_INVALID');return;
+      }
       const pages=data.total_pages||Math.max(1,Math.ceil(data.total/state.pageSize));
       if(state.page>pages){state.page=pages;load();return;}
+      const known=(data.coverage||[]).some(c=>c.resource==='transactions'&&(c.state==='AVAILABLE'||c.state==='EMPTY'));
+      result.innerHTML=`<div class="of-flow-metrics"><article class="of-metric"><span>Entradas brutas</span>${privateValue(totals.reported?totals.reported.incoming:known?totals.incoming:null)}</article><article class="of-metric"><span>Saídas brutas</span>${privateValue(totals.reported?totals.reported.outgoing:known?totals.outgoing:null)}</article><article class="of-metric"><span>Movimentações encontradas</span><strong>${esc(data.total)}</strong></article></div>${paginationMarkup(data,pages,'superior')}<div data-flow-rows></div>${paginationMarkup(data,pages,'inferior')}<button type="button" class="quiet" data-flow-refresh>Atualizar consulta</button>`;
+      const container=result.querySelector('[data-flow-rows]');
+      try {
+        if(!data.items.length){
+          if(data.total){
+            showError(container,'A consulta encontrou movimentações, mas esta página não trouxe os registros.','MOVEMENTS_RESPONSE_INVALID');
+          }else{
+            container.innerHTML='<p class="empty">Nenhuma movimentação encontrada para os filtros.</p>';
+          }
+        }else{
+          renderRows(container,data.items,group);
+        }
+      }catch{
+        showError(container,'Não foi possível exibir os registros desta página.','MOVEMENTS_RENDER_FAILED');
+      }
       classification.present(data.classification_center);
-      const totals=data.flow[state.product],coverage=(data.coverage||[]).filter(c=>c.resource==='transactions'),known=coverage.some(c=>c.state==='AVAILABLE'||c.state==='EMPTY');
-      const rowMarkup=(tx,index)=>`<article class="of-flow-item"><div><strong>${esc(tx.description||'Descrição indisponível')}</strong><p>${bankMark(tx.institution,esc)}${esc(institutionName(tx.institution))} · ${esc(tx.account_name||'Conta')} · ${esc(categoryLabel(tx.effective_category||tx.category))}</p><small>${esc(tx.direction==='incoming'?'Entrada':tx.direction==='outgoing'?'Saída':'Direção não estabelecida')} · ${esc(statusLabel(tx.status))}</small></div><div>${privateValue(tx.amount)}<details><summary>Detalhes</summary><p>${esc(tx.product==='CREDIT'?'Cartão':'Conta bancária')} · ${esc(statusLabel(tx.reconciliation))}</p>${classificationDetail(tx,esc)}${recognitionDetail(tx)}</details>${tx.classification?`<button class="of-link of-class-edit" type="button" data-edit-transaction="${index}">Classificar movimentação</button>`:''}</div></article>`;
-      const grouped=new Map();
-      data.items.forEach((tx,index)=>{
-        const label=group==='date'?dateBR(tx.date):group==='institution'?institutionName(tx.institution):
-          group==='category'?categoryLabel(tx.effective_category||tx.category):'';
-        const key=group==='category'?(tx.effective_category||tx.category)?.key||label:label;
-        if(!grouped.has(key))grouped.set(key,{label,entries:[]});
-        grouped.get(key).entries.push(rowMarkup(tx,index));
-      });
-      const rows=[...grouped.values()].map(({label,entries})=>(label?'<h3 class="of-flow-date">'+esc(label)+'</h3>':'')+entries.join('')).join('');
-      result.innerHTML=`<div class="of-flow-metrics"><article class="of-metric"><span>Entradas brutas</span>${privateValue(totals.reported?totals.reported.incoming:known?totals.incoming:null)}</article><article class="of-metric"><span>Saídas brutas</span>${privateValue(totals.reported?totals.reported.outgoing:known?totals.outgoing:null)}</article><article class="of-metric"><span>Movimentações encontradas</span><strong>${esc(data.total)}</strong></article></div>${paginationMarkup(data,pages,'superior')}${rows||'<p class="empty">Nenhuma movimentação encontrada para os filtros.</p>'}${paginationMarkup(data,pages,'inferior')}<button type="button" class="quiet" data-flow-refresh>Atualizar consulta</button>`;
-      result.querySelectorAll('[data-edit-transaction]').forEach(button=>button.onclick=()=>classification.edit(data.items[Number(button.dataset.editTransaction)]));
       result.querySelectorAll('[data-flow-page]').forEach(button=>button.onclick=()=>go(Number(button.dataset.flowPage),pages));
       result.querySelectorAll('[data-page-form]').forEach(node=>node.onsubmit=event=>{
         event.preventDefault();go(Number(node.elements.page.value),pages);
       });
       result.querySelector('[data-flow-refresh]').onclick=onRefresh;
-    }catch(_){if(query.current()&&host.isConnected){result.innerHTML='<p role="alert" class="attention">Não foi possível consultar as movimentações.</p><button type="button" data-flow-retry>Tentar novamente</button>';result.querySelector('[data-flow-retry]').onclick=load}}
-    finally{if(query.current())result.removeAttribute('aria-busy')}
+    }catch{
+      if(query.current()&&host.isConnected)showError(result,'Não foi possível consultar as movimentações.','MOVEMENTS_QUERY_FAILED');
+    }finally{
+      if(query.current())result.removeAttribute('aria-busy');
+    }
   }
   function go(page,pages){
     if(Number.isInteger(page)&&page>=1&&page<=pages&&page!==state.page){state.page=page;load()}

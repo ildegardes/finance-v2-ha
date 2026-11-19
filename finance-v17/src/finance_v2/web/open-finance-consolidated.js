@@ -1,6 +1,6 @@
 import {bankMark} from './open-finance-identity.js';
 import {dateBR} from './privacy.js';
-import {countBR,institutionName,percentBR} from './open-finance-labels.js';
+import {countBR,institutionName} from './open-finance-labels.js';
 import {proventNames} from './open-finance-classification-ui.js';
 import {wealthMoney,wealthRate} from './open-finance-wealth.js';
 
@@ -117,48 +117,48 @@ export function cardDiagnostics(cards,esc){
     '<p role="status" data-card-copy-status></p></details>';
 }
 
+const cardPercent=new Intl.NumberFormat('pt-BR',{style:'percent',maximumFractionDigits:2});
+
+export function cardKpi(cards){
+  if(!cards.metric.included&&cards.preserved?.metric.included){
+    return {metric:cards.preserved.metric,note:'Saldo utilizado · última posição conhecida'+
+      (cards.preserved.metric.partial?' · cobertura parcial':'')};
+  }
+  return {metric:cards.metric,note:'Saldo utilizado · '+
+    (cards.metric.partial?'cobertura parcial':cards.included_count+' de '+cards.count+' considerados')};
+}
+
 export function cardUsage(cards,esc,mode,identity){
   if(!cards)return '';
-  const reasons={
-    LOCAL_ITEM_UNIDENTIFIED:'Item local não identificado',LOCAL_BINDING_MISMATCH:'Vínculo local incompatível',
-    MANAGED_BINDING_UNVERIFIED:'Vínculo gerenciado sem validação',ITEM_RECORD_MISSING:'Registro do Item ausente',
-    ITEM_ASSOCIATION_MISMATCH:'Item coletado difere do Item cadastrado',ITEM_METADATA_INCOMPLETE:'Metadados do Item incompletos',
-    ITEM_ACCESS_UNVERIFIED:'Acesso ao Item sem confirmação',PRIOR_SCOPE_FAILURE:'Falha de escopo ainda relevante',
-    CONSENT_ITEM_MISMATCH:'Consentimento associado a outro Item',CONSENT_ASSOCIATION_UNVERIFIED:'Associação do consentimento sem confirmação',
-    CONSENT_CHECKPOINT_MISSING:'Coleta do consentimento sem registro',CONSENT_SCAN_UNVERIFIED:'Consulta do consentimento sem confirmação',
-    CONSENT_EXPIRED:'Consentimento expirado',CONSENT_NOT_ACTIVE:'Consentimento inativo',CONSENT_REVOKED:'Consentimento revogado',
-    CONSENT_NO_CARD_SCOPE:'Permissão de cartões ausente',CONSENT_GRANTS_UNREPORTED:'Permissões do consentimento não informadas',
-    CONSENT_METADATA_INCOMPLETE:'Metadados do consentimento incompletos',
-    ACCOUNT_METADATA_INCOMPLETE:'Identidade da conta incompleta',ACCOUNT_ID_MISMATCH:'Identidade da conta divergente',
-    ACCOUNT_ITEM_MISMATCH:'Cartão associado a outro Item',ACCOUNT_PRESERVED:'Registro preservado de coleta anterior',
-    ACCOUNT_COLLECTION_UNVERIFIED:'Coleta atual do cartão sem confirmação',HISTORICAL_CONNECTION:'Conexão histórica',
-    AMOUNT_UNAVAILABLE:'Saldo utilizado não informado',CURRENCY_UNAVAILABLE:'Moeda não informada',
-    NEGATIVE_REPORTED:'Saldo credor informado',FUTURE_REFERENCE:'Referência futura',
-    CARD_STATUS_UNVERIFIED:'Estado do cartão sem confirmação',CONVERSION_UNAVAILABLE:'Conversão indisponível',
-    OBLIGATION_OVERLAP:'Possível obrigação repetida',
-    SHARED_SCOPE_UNVERIFIED:'Abrangência da linha compartilhada sem confirmação',
-    ALREADY_IN_SHARED_LINE:'Linha compartilhada já contabilizada',OBLIGATION_UNVERIFIED:'Titularidade ou escopo sem confirmação'};
   const list=cards.items.map((card,index)=>{
     const visual=identity(card,esc);
     return '<li><button type="button" class="of-card-compact" data-overview-card="'+index+'">'+visual.mark+
       '<span><strong>'+esc(visual.label)+'</strong><small>'+esc(institutionName(card.institution))+
       (visual.network?' · <span class="of-card-network">'+esc(visual.network)+'</span>':'')+
       (visual.tail&&mode!=='full'?' · •••• '+esc(visual.tail):'')+'</small>'+
-      (card.consolidation_reason?'<small>'+esc(reasons[card.consolidation_reason]||'Fora do subtotal')+'</small>':'')+
-      (!card.consolidation_reason&&card.limit_reason?'<small>Limite sem escopo ou valor comprovado</small>':'')+
-      '</span><span><strong>'+wealthMoney(card.used,card.currency,esc)+'</strong><small>Saldo utilizado</small></span></button></li>';
+      (card.position_state==='PRESERVED'?'<small>Última posição conhecida · '+esc(dateBR(card.reference_date||card.observed_at))+'</small>':'')+
+      '</span><span><strong>'+wealthMoney(card.used??card.preserved_used,card.currency,esc)+'</strong><small>Saldo utilizado</small>'+
+      '<small>Limite · '+wealthMoney(card.limit??card.reported_limit,card.currency,esc)+'</small>'+
+      (card.used==null&&card.preserved_used==null&&card.reported_balance!=null?
+        '<small>Saldo em aberto · '+wealthMoney(card.reported_balance,card.currency,esc)+'</small>':'')+'</span></button></li>';
   }).join('');
-  const utilization=mode==='visible'?Object.entries(cards.utilization_by_currency).map(([currency,value])=>{
-    const percent=Number(value);
-    return '<div class="of-card-utilization"><label>Utilização em '+esc(currency)+' '+esc(percentBR.format(percent))+
-      '<progress max="100" value="'+Math.min(100,Math.max(0,100*percent))+'"></progress></label></div>';
-  }).join(''):'';
+  const totals=(position,label)=>{
+    const utilization=mode==='visible'?Object.entries(position.utilization_by_currency).map(([currency,value])=>{
+      const percent=Number(value);
+      return '<div class="of-card-utilization"><label>Utilização em '+esc(currency)+' '+esc(cardPercent.format(percent))+
+        '<progress max="100" value="'+Math.min(100,Math.max(0,100*percent))+'"></progress></label></div>';
+    }).join(''):'';
+    return '<p>'+label+(position.metric.partial?' · cobertura parcial':'')+'</p><strong class="of-card-used-total">'+
+      metricValue(position.metric,esc)+'</strong><p>'+
+      (position.limit_metric.partial?'Subtotal de limites verificados':'Limite consolidado')+
+      ' <strong>'+metricValue(position.limit_metric,esc)+'</strong></p>'+utilization;
+  };
+  const preserved=cards.preserved,showPreserved=preserved&&(preserved.metric.included||preserved.limit_metric.included);
+  const showCurrent=!showPreserved||cards.metric.included||cards.limit_metric.included;
   return '<section class="of-summary-card of-card-insight"><div class="of-section-heading"><div><h3>Cartões de crédito</h3><p>'+
     countBR.format(cards.active_count)+' cartões ativos informados</p></div><button type="button" class="of-link" data-all-overview-cards>Ver todos</button></div>'+
-    '<p>Saldo utilizado'+(cards.metric.partial?' · cobertura parcial':'')+'</p><strong class="of-card-used-total">'+metricValue(cards.metric,esc)+'</strong>'+
-    '<p>'+(cards.limit_metric.partial?'Subtotal de limites verificados':'Limite consolidado')+
-    ' <strong>'+metricValue(cards.limit_metric,esc)+'</strong></p>'+utilization+
-    (mode==='visible'&&!utilization&&cards.count?'<p>Percentual indisponível para a cobertura atual.</p>':'')+
+    (showCurrent?totals(cards,'Saldo utilizado na posição atual'):'')+
+    (showPreserved?totals(preserved,'Saldo utilizado na última posição conhecida'):'')+
     (list?'<ul class="of-compact-cards">'+list+'</ul>':'<p>Nenhum cartão encontrado neste escopo.</p>')+
     cardDiagnostics(cards,esc)+'</section>';
 }
