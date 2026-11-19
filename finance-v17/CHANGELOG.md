@@ -1,3 +1,9 @@
+## 0.1.37-open-finance.1
+
+- Corrige a descoberta Personal com o envelope `results` e o vínculo `connection_id` do SDK SnapTrade.
+- Adiciona diagnóstico sanitizado da última tentativa, com correlação entre interface, resposta e log.
+- Recupera o diagnóstico pelo status autenticado quando o proxy substitui a resposta da coleta. O schema permanece em 16.
+
 ## 0.1.36-open-finance.1
 
 - SnapTrade Personal opcional e somente leitura para autorizações internacionais já conectadas, com cache e agendamento separado do Pluggy.

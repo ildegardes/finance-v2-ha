@@ -4,7 +4,9 @@ from contextlib import closing, contextmanager
 from datetime import date, timedelta
 from decimal import Decimal, localcontext
 import json
+import logging
 import re
+import sqlite3
 import threading
 import time
 from uuid import uuid4
@@ -13,13 +15,41 @@ from .open_finance import OpenFinanceService, SyncError
 from .open_finance_registry import load_keyring
 from .open_finance_schedule import HOURS, _datetime, _iso
 from .pluggy_credential_protection import CredentialProtectionError, ProtectedCredential
-from .snaptrade_normalize import activity, code, collection, day, decimal, ident, key, position, text, timestamp
+from .snaptrade_normalize import (
+    account_record, activity, code, collection, connection_record, day, field_value, financial_text,
+    ident, invalid, key, position, timestamp,
+)
 from .snaptrade_read import ProviderFailure, SnapTradeReader
 
 APP = 'snaptrade-personal'
 PAGE_SIZE = 1000
 PAGES_PER_CYCLE = 6
-BLOCKING = {'SNAPTRADE_RATE_LIMIT','SNAPTRADE_AUTH'}
+AUTH_FAILURES={'SNAPTRADE_AUTH','SNAPTRADE_SIGNATURE','SNAPTRADE_FORBIDDEN'}
+BLOCKING = {'SNAPTRADE_RATE_LIMIT','SNAPTRADE_AUTH','SNAPTRADE_SIGNATURE'}
+LOGGER=logging.getLogger(__name__)
+RESULT_EVENT='ATTEMPT_RESULT'
+
+
+def _attempt_detail(db,since):
+    row=db.execute("SELECT action,observed_at,target FROM st_events WHERE action IN (?, 'ATTEMPT_STARTED') ORDER BY id DESC LIMIT 1",
+                   (RESULT_EVENT,)).fetchone()
+    if not row or row['action']!=RESULT_EVENT or row['observed_at']!=since:
+        return None
+    try:
+        detail=json.loads(row['target'])
+    except (TypeError,ValueError):
+        return None
+    return detail if isinstance(detail,dict) else None
+
+
+@contextmanager
+def _stage(stage,resource):
+    try:
+        yield
+    except ProviderFailure as error:
+        raise error.at(stage,resource) from None
+    except (sqlite3.Error,SyncError):
+        raise ProviderFailure('SNAPTRADE_STORAGE',stage='PERSISTENCE',resource=resource.upper()) from None
 
 
 def credentials(db,settings):
@@ -139,12 +169,15 @@ def status(db,settings,epoch):
         for account in matched:
             account['coverage']=coverage.get(account['id'],[])
         rows.append({**dict(connection),'provider':'SNAPTRADE','accounts':matched})
+    running=bool(state['lease_token'] and state['lease_until']>epoch)
+    attempt=None if running else _attempt_detail(db,state['last_attempt'])
     return {'enabled':settings.snaptrade_enabled,'configured':ready,'auto_enabled':ready and bool(state['auto_enabled']),
             'interval_hours':state['interval_hours'],'revision':state['revision'],'options':list(HOURS),'connections':rows,
             'last_attempt':state['last_attempt'],'last_success':state['last_success'],'error_code':state['error_code'],
             'next_attempt':_epoch_iso(max(epoch,state['next_attempt'])) if ready and (
                 state['auto_enabled'] or state['error_code']=='SNAPTRADE_RATE_LIMIT') else None,
-            'running':bool(state['lease_token'] and state['lease_until']>epoch)}
+            'running':running,'last_result':'RUNNING' if running else (attempt or {}).get('state'),
+            'last_attempt_result':attempt}
 
 
 def _epoch_iso(epoch):
@@ -163,7 +196,7 @@ def _write(service,db,token,check):
         yield stamp
 
 
-def _claim(service,db,automatic):
+def _claim(service,db,automatic,request_id):
     epoch,stamp=service._time()
     with service._write(db):
         state = _check_mutation(db,epoch)
@@ -171,34 +204,43 @@ def _claim(service,db,automatic):
             return None
         if state['error_code']=='SNAPTRADE_RATE_LIMIT' and state['next_attempt']>epoch:
             raise SyncError('SNAPTRADE_RATE_LIMIT',429)
-        secrets=credentials(db,service.settings)
-        if not secrets:
+        if not credential_configured(db,service.settings):
             if automatic:
                 return None
             raise SyncError('SNAPTRADE_DISABLED',409)
         # This isolation applies even when a manual import races the background job.
         token=uuid4().hex
         db.execute('UPDATE st_state SET lease_token=?,lease_until=?,last_attempt=? WHERE singleton=1',(token,int(epoch)+240,stamp))
-        _event(db,stamp,'AUTO' if automatic else 'MANUAL','STARTED')
-    return token,secrets
+        _event(db,stamp,'ATTEMPT_STARTED','STARTED',request_id)
+    return token,stamp
 
 
 def _discovery(service,db,token,reader,secrets,check,ignore_pause=False):
-    connections=collection(reader.read('connections'),('id','brokerage','disabled'))
-    accounts=collection(reader.read('accounts'),('id','brokerage_authorization'))
-    normalized={}
-    for row in connections:
-        remote=ident(row['id'])
-        broker=row['brokerage']
-        if not isinstance(broker,dict) or type(row['disabled']) is not bool or remote in normalized:
-            raise ProviderFailure('SNAPTRADE_INVALID_DATA')
-        name=text(broker.get('name'),secrets) or 'Corretora'
-        brokerage=text(broker.get('slug'),secrets) or name
-        permission=row.get('type') if row.get('type') in ('read','trade') else None
-        normalized[remote]=(key('connection',remote),name,brokerage,permission,
-                            'REAUTH_REQUIRED' if row['disabled'] else 'AVAILABLE')
+    with _stage('DISCOVERY','connections'):
+        normalized={}
+        for row in collection(reader.read('connections')):
+            remote,record=connection_record(row,secrets)
+            if remote in normalized:
+                raise invalid('id','DUPLICATE_IDENTIFIER')
+            normalized[remote]=record
+    check()
+    with _stage('DISCOVERY','accounts'):
+        body=reader.read('accounts')
+        if not isinstance(body,dict):
+            raise invalid('results','UNEXPECTED_ENVELOPE',stage='STRUCTURE')
+        accounts=[]
+        seen=set()
+        for row in collection(field_value(body,'results',list,required=True,nullable=False),field='results'):
+            remote,authorization,record=account_record(row,secrets)
+            if remote in seen:
+                raise invalid('id','DUPLICATE_IDENTIFIER')
+            if authorization not in normalized:
+                raise ProviderFailure('SNAPTRADE_SCOPE_MISMATCH',stage='NORMALIZATION',
+                                      reason='UNMATCHED_CONNECTION',field='connection_id',remote_status=200)
+            seen.add(remote)
+            accounts.append((remote,normalized[authorization],record))
     pending=[]
-    with _write(service,db,token,check) as stamp:
+    with _stage('PERSISTENCE','discovery'), _write(service,db,token,check) as stamp:
         db.execute("UPDATE st_connections SET provider_state='NOT_SEEN'")
         db.execute("UPDATE st_accounts SET state='NOT_SEEN'")
         for local in normalized.values():
@@ -207,31 +249,18 @@ def _discovery(service,db,token,reader,secrets,check,ignore_pause=False):
                 brokerage=excluded.brokerage,permission=excluded.permission,provider_state=excluded.provider_state,
                 observed_at=excluded.observed_at''',(*local,stamp))
         policies={r['id']:r for r in db.execute('SELECT id,archived,paused FROM st_connections')}
-        seen=set()
-        for row in accounts:
-            remote,authorization=ident(row['id']),ident(row['brokerage_authorization'])
-            if authorization not in normalized or (authorization,remote) in seen:
-                raise ProviderFailure('SNAPTRADE_SCOPE_MISMATCH')
-            seen.add((authorization,remote))
-            cid,_,brokerage,_,provider_state=normalized[authorization]
+        for remote,connection,account in accounts:
+            cid,_,brokerage,_,provider_state=connection
+            label,kind,suffix,unique,state,updated=account
             aid=key('account',cid,remote)
-            state='AVAILABLE' if row.get('status') in (None,'open') and not row.get('is_paper') else 'INACTIVE'
-            suffix=row.get('number','')
-            match=re.search(r'([0-9]{4})\s*$',suffix) if isinstance(suffix,str) and not any(secret in suffix for secret in secrets) else None
-            unique=row.get('institution_account_id')
-            fingerprint=key('institution-account',brokerage.casefold(),unique) if isinstance(unique,str) and unique else None
-            info=row.get('sync_status') or {}
-            holding=info.get('holdings') or {} if isinstance(info,dict) else {}
-            updated=timestamp(holding.get('last_successful_sync')) if isinstance(holding,dict) else None
+            fingerprint=key('institution-account',brokerage.casefold(),unique) if unique else None
             db.execute('''INSERT INTO st_accounts(id,connection_id,label,kind,suffix,fingerprint,state,provider_updated_at,observed_at)
                 VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET label=excluded.label,kind=excluded.kind,suffix=excluded.suffix,
                 fingerprint=excluded.fingerprint,state=excluded.state,provider_updated_at=excluded.provider_updated_at,
-                observed_at=excluded.observed_at''',
-                (aid,cid,text(row.get('name'),secrets) or 'Conta de corretora',text(row.get('raw_type'),secrets),
-                 match[1] if match else None,fingerprint,state,updated,stamp))
+                observed_at=excluded.observed_at''',(aid,cid,label,kind,suffix,fingerprint,state,updated,stamp))
             if state=='AVAILABLE' and provider_state=='AVAILABLE' and not policies[cid]['archived'] and (
                     ignore_pause or not policies[cid]['paused']):
-                pending.append((aid,remote,cid,isinstance(holding,dict) and holding.get('holdings_unavailable') is True))
+                pending.append((aid,remote,cid))
     return pending
 
 
@@ -248,41 +277,41 @@ def _as_of(body):
 
 
 def _balances(db,aid,remote,body,stamp):
-    if ident(body.get('account_id'))!=remote:
-        raise ProviderFailure('SNAPTRADE_SCOPE_MISMATCH')
-    margin=body.get('margin') or {}
+    if ident(field_value(body,'account_id',str,required=True,nullable=False),'account_id')!=remote:
+        raise ProviderFailure('SNAPTRADE_SCOPE_MISMATCH',stage='NORMALIZATION',field='account_id',remote_status=200)
+    margin=field_value(body,'margin',dict) or {}
     values=defaultdict(dict)
-    for field,items in (('cash',body.get('cash')),('power',body.get('buying_power')),('margin',margin.get('loan_balances'))):
+    for field,items in (('cash',field_value(body,'cash',list,required=True,nullable=False)),('power',body.get('buying_power')),('margin',margin.get('loan_balances'))):
         if items is None:
             continue
         for row in collection(items,('currency','amount')):
             currency=code(row['currency'])
             if not currency or field in values[currency]:
-                raise ProviderFailure('SNAPTRADE_INVALID_DATA')
-            values[currency][field]=decimal(row['amount'])
+                raise invalid('currency','INVALID_OR_DUPLICATE_CURRENCY')
+            values[currency][field]=financial_text(row,'amount')
     db.execute('DELETE FROM st_balances WHERE account_id=?',(aid,))
     db.executemany('INSERT INTO st_balances VALUES(?,?,?,?,?,?,?)',
         [(aid,currency,row.get('cash'),row.get('power'),row.get('margin'),_as_of(body),stamp) for currency,row in values.items()])
-    net=body.get('net_value') or {}
+    net=field_value(body,'net_value',dict) or {}
     db.execute('UPDATE st_accounts SET net_value=?,net_currency=? WHERE id=?',
-               (decimal(net.get('amount')),code(net.get('currency')),aid))
+               (financial_text(net,'amount'),code(net.get('currency')),aid))
     _checkpoint(db,aid,'balances','AVAILABLE' if values else 'UNAVAILABLE',stamp)
 
 
 def _positions(db,aid,body,stamp,secrets):
-    rows=[position(row,_as_of(body),stamp,secrets) for row in collection(body.get('results'),('instrument',))]
+    rows=[position(row,_as_of(body),stamp,secrets) for row in collection(field_value(body,'results',list,required=True,nullable=False),('instrument',),field='results')]
     if len({row[0] for row in rows})!=len(rows):
-        raise ProviderFailure('SNAPTRADE_INVALID_DATA')
+        raise invalid('id','DUPLICATE_IDENTIFIER')
     complete=all((row[6] is not None and row[9] is not None) or row[14] for row in rows)
     empty_cache=not db.execute('SELECT 1 FROM st_positions WHERE account_id=? LIMIT 1',(aid,)).fetchone()
     if not complete and not empty_cache:
         _checkpoint(db,aid,'positions','PARTIAL',stamp)
-        return False
+        return False,None
     db.execute('DELETE FROM st_positions WHERE account_id=?',(aid,))
     db.executemany('INSERT INTO st_positions VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',[
         (aid,*row[:-1],json.dumps(row[-1]) if row[-1] is not None else None) for row in rows])
     _checkpoint(db,aid,'positions','AVAILABLE' if complete else 'PARTIAL',stamp)
-    return complete and _as_of(body)
+    return complete,_as_of(body)
 
 
 def _capture(db,aid,reference,stamp):
@@ -313,13 +342,21 @@ def _capture(db,aid,reference,stamp):
 def _read_page(reader,remote,start,end,offset,limit):
     data=reader.read('activities',account_id=remote,start_date=date.fromisoformat(start) if start else None,
                      end_date=date.fromisoformat(end),offset=offset,limit=limit)
-    if not isinstance(data,dict) or not isinstance(data.get('pagination'),dict):
-        raise ProviderFailure('SNAPTRADE_INVALID_DATA')
-    rows=collection(data.get('data'),('id','type','trade_date'))
-    count=data['pagination'].get('total')
+    if not isinstance(data,dict):
+        raise invalid('data','UNEXPECTED_ENVELOPE',stage='STRUCTURE')
+    pagination=field_value(data,'pagination',dict,required=True,nullable=False)
+    rows=collection(field_value(data,'data',list,required=True,nullable=False),('id','type','trade_date'),field='data')
+    for row in rows:
+        external=field_value(row,'id',str,required=True,nullable=False)
+        if not external or len(external)>256:
+            raise invalid('id','INVALID_IDENTIFIER')
+        account=field_value(row,'account',dict)
+        if account is not None and ident(field_value(account,'id',str,required=True,nullable=False))!=remote:
+            raise ProviderFailure('SNAPTRADE_SCOPE_MISMATCH',stage='NORMALIZATION',field='account',remote_status=200)
+    count=field_value(pagination,'total',int,required=True,nullable=False)
     if type(count) is not int or count<0 or count>10_000_000 or len(rows)>limit or (
         count>offset and not rows) or (rows and offset+len(rows)>count):
-        raise ProviderFailure('SNAPTRADE_INVALID_PAGINATION')
+        raise ProviderFailure('SNAPTRADE_INVALID_PAGINATION',stage='STRUCTURE',field='pagination',remote_status=200)
     return rows,count
 
 
@@ -341,11 +378,11 @@ def _activities(service,db,token,reader,aid,remote,secrets,check):
         rows,total=_read_page(reader,remote,start,end,offset,PAGE_SIZE)
         today=str(service.clock.today())
         if any(not day(row['trade_date']) or day(row['trade_date'])>today for row in rows):
-            raise ProviderFailure('SNAPTRADE_INVALID_DATA')
+            raise invalid('trade_date','INVALID_TIMESTAMP')
         with _write(service,db,token,check) as stamp:
             records=[activity(row,stamp,secrets) for row in rows]
             if len({record[0] for record in records})!=len(records):
-                raise ProviderFailure('SNAPTRADE_INVALID_PAGINATION')
+                raise ProviderFailure('SNAPTRADE_INVALID_PAGINATION',stage='STRUCTURE',field='pagination',remote_status=200)
             db.executemany('''INSERT INTO st_activities VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                ON CONFLICT(account_id,activity_id) DO UPDATE SET kind=excluded.kind,provider_kind=excluded.provider_kind,
                date=excluded.date,settled=excluded.settled,ticker=excluded.ticker,instrument_id=excluded.instrument_id,
@@ -363,89 +400,115 @@ def _activities(service,db,token,reader,aid,remote,secrets,check):
     return False
 
 
-def sync(service,*,automatic=False,discover=False,connection=None,reader_factory=SnapTradeReader,stop=None):
+def _import_resource(service,db,token,reader,aid,remote,resource,secrets,check,balances_ok):
+    with _stage('NORMALIZATION',resource):
+        if resource=='activities':
+            return _activities(service,db,token,reader,aid,remote,secrets,check)
+        body=reader.read(resource,account_id=remote)
+        if not isinstance(body,dict):
+            raise invalid(reason='UNEXPECTED_ENVELOPE',stage='STRUCTURE')
+        with _write(service,db,token,check) as stamp:
+            if resource=='balances':
+                _balances(db,aid,remote,body,stamp)
+                return True
+            complete,reference=_positions(db,aid,body,stamp,secrets)
+            if complete and reference and balances_ok:
+                _capture(db,aid,reference,stamp)
+            return complete
+
+
+def sync(service,*,automatic=False,discover=False,connection=None,reader_factory=SnapTradeReader,stop=None,request_id=None):
+    if not isinstance(request_id,str) or not re.fullmatch('[a-f0-9]{32}',request_id):
+        request_id=uuid4().hex
+    phase='DISCOVERY' if discover else 'SYNC'
     deadline=time.monotonic()+200
     def check():
         if (stop and stop.is_set()) or time.monotonic()>deadline:
-            raise ProviderFailure('SNAPTRADE_INTERRUPTED')
+            raise ProviderFailure('SNAPTRADE_INTERRUPTED',stage='CONTROL')
     with closing(service._db()) as db:
-        claimed=_claim(service,db,automatic)
+        claimed=_claim(service,db,automatic,request_id)
         if not claimed:
             return {'state':'NOT_DUE'}
-        token,secrets=claimed
+        token,started=claimed
         failure=None
         result='AVAILABLE'
         try:
-            reader=reader_factory(*secrets)
+            try:
+                secrets=credentials(db,service.settings)
+            except SyncError as error:
+                raise ProviderFailure(error.code,stage='CONFIGURATION',resource='CLIENT') from None
+            try:
+                reader=reader_factory(*secrets)
+            except ProviderFailure:
+                raise
+            except Exception:
+                raise ProviderFailure('SNAPTRADE_SDK_CALL',stage='SDK_INIT',resource='CLIENT') from None
             pending=_discovery(service,db,token,reader,secrets,check,ignore_pause=connection is not None and not automatic)
             if connection and not db.execute('SELECT 1 FROM st_connections WHERE id=?',(connection,)).fetchone():
-                raise ProviderFailure('SNAPTRADE_UNAVAILABLE')
-            for aid,remote,cid,holdings_unavailable in ([] if discover else pending):
+                raise ProviderFailure('SNAPTRADE_UNAVAILABLE',stage='CONTROL',resource='CONNECTIONS')
+            for aid,remote,cid in ([] if discover else pending):
                 if connection and cid!=connection:
                     continue
                 retry_at=db.execute('SELECT max(retry_after) FROM st_checkpoints WHERE account_id=?',(aid,)).fetchone()[0]
                 if retry_at and retry_at>service._time()[0]:
                     result='PARTIAL'
+                    failure=ProviderFailure('SNAPTRADE_ACCOUNT_RATE_LIMIT',stage='CONTROL',resource='ACCOUNTS')
                     continue
-                snapshot=None
                 balances_ok=False
                 for resource in ('balances','positions','activities'):
                     try:
                         check()
-                        if holdings_unavailable and resource in ('balances','positions'):
-                            raise ProviderFailure('SNAPTRADE_UNAVAILABLE')
-                        if resource=='activities':
-                            if not _activities(service,db,token,reader,aid,remote,secrets,check):
-                                result='PARTIAL'
-                            continue
-                        body=reader.read(resource,account_id=remote)
-                        if not isinstance(body,dict):
-                            raise ProviderFailure('SNAPTRADE_INVALID_DATA')
-                        with _write(service,db,token,check) as stamp:
-                            if resource=='positions':
-                                snapshot=_positions(db,aid,body,stamp,secrets)
-                                if snapshot and balances_ok:
-                                    _capture(db,aid,snapshot,stamp)
-                                if not snapshot:
-                                    result='PARTIAL'
-                            else:
-                                _balances(db,aid,remote,body,stamp)
-                                balances_ok=True
+                        complete=_import_resource(service,db,token,reader,aid,remote,resource,secrets,check,balances_ok)
+                        if resource=='balances':
+                            balances_ok=complete
+                        if not complete:
+                            result='PARTIAL'
                     except ProviderFailure as error:
-                        failure=error
-                        result='PARTIAL'
+                        failure=error.at('COLLECTION',resource)
                         if error.code in BLOCKING or error.code in ('SNAPTRADE_INTERRUPTED','SNAPTRADE_LEASE_LOST'):
                             raise
+                        result='PARTIAL'
                         account_rate=error.code=='SNAPTRADE_ACCOUNT_RATE_LIMIT'
-                        with _write(service,db,token,check) as stamp:
+                        with _stage('PERSISTENCE',resource), _write(service,db,token,check) as stamp:
                             retry_after=int(service._time()[0])+error.retry if account_rate else None
                             state='UNAVAILABLE' if error.code in ('SNAPTRADE_UNAVAILABLE','SNAPTRADE_FORBIDDEN') else 'FAILED'
                             _checkpoint(db,aid,resource,state,stamp,error.code,retry_after)
                         if account_rate:
                             break
         except ProviderFailure as error:
-            failure=error
-            result='PARTIAL' if error.code=='SNAPTRADE_RATE_LIMIT' or result=='PARTIAL' else 'FAILED'
+            failure=error.at('CONTROL','client')
+            result='PARTIAL' if result=='PARTIAL' else 'FAILED'
+        except (sqlite3.Error,SyncError):
+            failure=ProviderFailure('SNAPTRADE_STORAGE',stage='PERSISTENCE',resource='STATUS')
+            result='FAILED'
         except Exception:
-            failure=ProviderFailure('SNAPTRADE_IMPORT_FAILED')
+            failure=ProviderFailure('SNAPTRADE_IMPORT_FAILED',stage='INTERNAL',resource='CLIENT')
             result='FAILED'
         epoch,stamp=service._time()
-        with service._write(db):
-            current=db.execute('SELECT * FROM st_state WHERE singleton=1').fetchone()
-            if current['lease_token']==token and current['lease_until']>epoch:
+        attempt={'state':result,'phase':phase,'request_id':request_id,'attempted_at':started}
+        if failure:
+            attempt.update(failure.diagnostic())
+        try:
+            with service._write(db):
+                current=db.execute('SELECT * FROM st_state WHERE singleton=1').fetchone()
+                if current['lease_token']!=token:
+                    raise SyncError('SNAPTRADE_LEASE_LOST',409)
                 retry=failure.retry if failure and failure.code!='SNAPTRADE_ACCOUNT_RATE_LIMIT' else 0
-                delay=max(retry,86400 if failure and failure.code in ('SNAPTRADE_AUTH','SNAPTRADE_FORBIDDEN') else
+                delay=max(retry,86400 if failure and failure.code in AUTH_FAILURES else
                           300 if result!='AVAILABLE' else current['interval_hours']*3600)
                 successful=result=='AVAILABLE' and not discover
-                if discover and not failure:
-                    next_attempt=current['next_attempt']
-                else:
-                    next_attempt=int(epoch)+delay
+                next_attempt=current['next_attempt'] if discover and not failure else int(epoch)+delay
                 db.execute('''UPDATE st_state SET lease_token=NULL,lease_until=NULL,next_attempt=?,last_success=?,
-                       error_code=? WHERE singleton=1''',
-                       (next_attempt,stamp if successful else current['last_success'],failure.code if failure else None))
-                _event(db,stamp,'DISCOVERY' if discover else 'IMPORT',failure.code if failure else result,connection)
-        return {'state':result,'error_code':failure.code if failure else None}
+                           error_code=? WHERE singleton=1''',
+                           (next_attempt,stamp if successful else current['last_success'],failure.code if failure else None))
+                _event(db,started,RESULT_EVENT,result,json.dumps(attempt,separators=(',',':')))
+        except (sqlite3.Error,SyncError):
+            failure=ProviderFailure('SNAPTRADE_STORAGE',stage='PERSISTENCE',resource='STATUS')
+            result='FAILED'
+            attempt={'state':result,'phase':phase,'request_id':request_id,'attempted_at':started,**failure.diagnostic()}
+        if failure or result=='PARTIAL':
+            LOGGER.warning('SNAPTRADE_ATTEMPT %s',json.dumps(attempt,separators=(',',':')))
+        return {'state':result,'error_code':failure.code if failure else None,'diagnostic':attempt}
 
 
 class SnapTradeWorker:

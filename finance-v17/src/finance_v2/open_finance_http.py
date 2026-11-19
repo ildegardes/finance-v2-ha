@@ -110,7 +110,7 @@ def request(e, *, limit=1_000_000, query_limit=20):
     except (ValueError,UnicodeError,RecursionError):raise SyncError('INVALID_REQUEST',422) from None
 
 
-def dispatch(app,operation,identity,body,query):
+def dispatch(app,operation,identity,body,query,*,request_id=None):
     if operation.startswith('open_finance_registry_'):
         if identity.role != 'UI' or identity.client_id != 'UI:local' or not identity.csrf:
             raise SyncError('FORBIDDEN',403)
@@ -184,7 +184,7 @@ def dispatch(app,operation,identity,body,query):
             if set(body)!={'confirmation','explicit_confirmation','backup_confirmed'}:raise SyncError('INVALID_REQUEST',422)
             return recovery.execute(actor,body['confirmation'],body['explicit_confirmation'],body['backup_confirmed']),200
         raise SyncError('NOT_FOUND',404)
-    payload,status=_dispatch_raw(app,operation,identity,body,query)
+    payload,status=_dispatch_raw(app,operation,identity,body,query,request_id)
     from .open_finance_presentation import present_payload
     from .open_finance_output_privacy import public_payload
     with closing(app.db()) as c:
@@ -196,7 +196,7 @@ def _connection_id(value):
     return isinstance(value,str) and re.fullmatch(r'[a-z][a-z0-9-]{1,63}',value) is not None
 
 
-def _dispatch_raw(app,operation,identity,body,query):
+def _dispatch_raw(app,operation,identity,body,query,request_id):
     if identity.role!='UI' or identity.client_id!='UI:local':raise SyncError('FORBIDDEN',403)
     service=OpenFinanceService(app.settings,app.clock)
     op=operation.removeprefix('open_finance_')
@@ -244,8 +244,12 @@ def _dispatch_raw(app,operation,identity,body,query):
         if 'connection_id' in body and (not isinstance(connection,str) or not re.fullmatch('st-[0-9a-f]{64}',connection)):
             raise SyncError('INVALID_REQUEST',422)
         result=sync(service,discover=op=='snaptrade_discovery',connection=connection,
-                    reader_factory=getattr(app,'snaptrade_reader_factory',SnapTradeReader))
-        return result,502 if result['state']=='FAILED' else 200
+                    reader_factory=getattr(app,'snaptrade_reader_factory',SnapTradeReader),request_id=request_id)
+        if result['error_code']=='SNAPTRADE_RATE_LIMIT':
+            return result,429
+        if result['state']=='FAILED':
+            return result,503 if result['error_code']=='SNAPTRADE_STORAGE' else 502
+        return result,200
     if op in ('sync_preferences','sync_preferences_write'):
         if query or (op=='sync_preferences' and body):
             raise SyncError('INVALID_REQUEST',422)

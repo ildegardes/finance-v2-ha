@@ -6,23 +6,46 @@ import {countBR,classLabel} from './open-finance-labels.js';
 const countries={BR:'Brasil',US:'Estados Unidos',UNKNOWN:'Mercado não informado'};
 const resources={balances:'Saldos',positions:'Posições',activities:'Atividades'};
 const outcomes={AVAILABLE:'Disponível',PARTIAL:'Parcial',FAILED:'Falha na leitura',UNAVAILABLE:'Indisponível',
-  REAUTH_REQUIRED:'Reautenticação necessária na SnapTrade',NOT_SEEN:'Ausente na última descoberta'};
+  REAUTH_REQUIRED:'Reautenticação necessária na SnapTrade',UNKNOWN:'Estado da conexão não informado',NOT_SEEN:'Ausente na última descoberta'};
 const kindNames={stock:'Ações',etf:'ETF',mutualfund:'Fundos',adr:'ADR',bond:'Renda fixa',option:'Opção',
   preferred_stock:'Ações preferenciais',DIVIDEND:'Dividendo',INTEREST:'Juros',TAX:'Retenção ou tributo',
   FEE:'Taxa',CAPITAL:'Capital',REINVESTMENT:'Reinvestimento',TRANSFER:'Transferência',
   CORPORATE_ACTION:'Evento corporativo',REVIEW:'A revisar'};
-const statusNames={SNAPTRADE_AUTH:'Credencial rejeitada',SNAPTRADE_FORBIDDEN:'Permissão insuficiente',
-  SNAPTRADE_RATE_LIMIT:'Limite de chamadas. Aguarde o horário previsto.',SNAPTRADE_BUSY:'Coleta em andamento',
-  SNAPTRADE_ACCOUNT_RATE_LIMIT:'Uma conta atingiu o limite de chamadas.',
-  SNAPTRADE_TRANSPORT:'Falha de comunicação com a SnapTrade',SNAPTRADE_CREDENTIALS_LOCKED:'Chave local indisponível',
-  SNAPTRADE_INVALID_DATA:'Formato da resposta inválido',PTAX_UNAVAILABLE:'Banco Central indisponível',
-  SNAPTRADE_IMPORT_FAILED:'Falha na importação',SNAPTRADE_REMOTE:'Serviço temporariamente indisponível'};
+const statusNames={
+  SNAPTRADE_AUTH:'A SnapTrade recusou a autenticação. Confira as credenciais Personal na configuração do add-on.',
+  SNAPTRADE_SIGNATURE:'A SnapTrade recusou a assinatura. Confira se o Client ID e o Consumer Key pertencem à mesma chave Personal.',
+  SNAPTRADE_FORBIDDEN:'A SnapTrade recusou o acesso ao recurso. Confira as permissões e a conexão na SnapTrade.',
+  SNAPTRADE_RATE_LIMIT:'Limite de chamadas. Aguarde o horário indicado antes de tentar de novo.',
+  SNAPTRADE_ACCOUNT_RATE_LIMIT:'Uma conta atingiu o limite de chamadas. Consulte o horário no diagnóstico da conta.',
+  SNAPTRADE_BUSY:'Uma coleta está em andamento. Atualize o diagnóstico ao término.',
+  SNAPTRADE_TRANSPORT:'Falha de comunicação com a SnapTrade. Confira a conectividade do add-on e tente novamente.',
+  SNAPTRADE_CREDENTIALS_LOCKED:'A chave local de credenciais está indisponível. Confira a configuração da administração privada.',
+  SNAPTRADE_DISABLED:'Habilite a integração e preencha as credenciais Personal nas opções do add-on.',
+  SNAPTRADE_INVALID_DATA:'A SnapTrade devolveu dados fora do formato esperado. Consulte o campo no diagnóstico.',
+  SNAPTRADE_INVALID_JSON:'A resposta da SnapTrade não pôde ser lida como JSON. Consulte o diagnóstico e tente novamente.',
+  SNAPTRADE_INVALID_PAGINATION:'A página de atividades veio inconsistente. Atualize novamente para retomar a coleta.',
+  SNAPTRADE_SDK_CALL:'O cliente SnapTrade falhou antes de entregar os dados. Confira a versão do add-on e copie o diagnóstico.',
+  SNAPTRADE_SDK_RESPONSE:'O cliente SnapTrade devolveu uma resposta incompatível. Copie o diagnóstico para investigação.',
+  SNAPTRADE_SCOPE_MISMATCH:'A vinculação entre conta e conexão veio inconsistente. Confira as contas na SnapTrade e copie o diagnóstico.',
+  SNAPTRADE_STORAGE:'Falha ao salvar os dados locais. Verifique o armazenamento do add-on antes de tentar novamente.',
+  SNAPTRADE_RESPONSE_LIMIT:'A resposta da SnapTrade ultrapassou o limite de leitura. Copie o diagnóstico para investigação.',
+  SNAPTRADE_INTERRUPTED:'A coleta foi interrompida. Atualize novamente para retomar a leitura.',
+  SNAPTRADE_UNAVAILABLE:'O recurso está indisponível na SnapTrade. Confira a conexão e a cobertura da conta.',
+  SNAPTRADE_LEASE_LOST:'A execução perdeu o controle da coleta. Atualize o diagnóstico antes de tentar novamente.',
+  SNAPTRADE_OPERATION_DENIED:'O Finance bloqueou a operação. Copie o diagnóstico para investigação.',
+  SNAPTRADE_IMPORT_FAILED:'A coleta falhou no add-on. Copie o diagnóstico para investigação.',
+  SNAPTRADE_REMOTE:'A SnapTrade informou uma falha no serviço. Tente novamente mais tarde.',
+  PTAX_UNAVAILABLE:'O Banco Central está indisponível. Tente atualizar as cotações mais tarde.',
+  HTTP_RESPONSE_UNAVAILABLE:'A resposta da coleta não pôde ser lida. Atualize o diagnóstico para consultar o último resultado gravado.',
+  CSRF_INVALID:'A sessão precisa ser renovada. Recarregue a página e tente novamente.',
+  STORAGE_UNAVAILABLE:'O armazenamento do add-on está indisponível. Consulte o Supervisor.'
+};
 const presentOptions=[['original','Moedas originais'],['BRL','Converter para BRL'],['USD','Converter para USD']];
 const kinds=['stock','etf','mutualfund','bond','option','FIXED_INCOME','EQUITY','TREASURY'];
 const mode=()=>privacyMode();
 const labelKind=key=>kindNames[key]||classLabel(key);
 const formatDate=value=>value?dateBR(value):'Indisponível';
-const errorText=error=>statusNames[error?.code]||'A operação local não pôde ser concluída.';
+const errorText=error=>statusNames[error?.code]||'Não foi possível confirmar a operação. Atualize o diagnóstico antes de repetir.';
 
 export function wealthMoney(value,currency,esc){
   if(value==null)return 'Indisponível';
@@ -266,7 +289,32 @@ export function mountSnapTradeConnections({host,panel,api,esc,navigation,today,e
   panel.append(section);
   const body=section.querySelector('[data-snaptrade-result]'),feedback=section.querySelector('[data-snaptrade-feedback]');
   const queries=createQueryGeneration(navigation);
-  let data=null,busy=false;
+  let data=null,busy=false,lastReply=null,diagnosisOpen=false;
+  const diagnosisLabels={request_id:'Identificador da tentativa',phase:'Operação',state:'Resultado',attempted_at:'Data da tentativa',
+    stage:'Etapa',resource:'Recurso',reason:'Motivo',field:'Campo',remote_status:'HTTP da SnapTrade',error_code:'Código'};
+  function diagnosis(raw){
+    if(!raw||!(/^[a-f0-9]{32}$/).test(raw.request_id||''))return null;
+    const detail={request_id:raw.request_id};
+    for(const field of ['phase','state','stage','resource','reason','field','error_code']){
+      if(typeof raw[field]==='string'&&/^[a-zA-Z_][a-zA-Z_0-9]{0,63}$/.test(raw[field]))detail[field]=raw[field];
+    }
+    if(typeof raw.attempted_at==='string'&&/^\d{4}-\d{2}-\d{2}T[0-9:]+Z$/.test(raw.attempted_at))detail.attempted_at=raw.attempted_at;
+    if(Number.isInteger(raw.remote_status)&&raw.remote_status>=100&&raw.remote_status<=599)detail.remote_status=raw.remote_status;
+    return detail;
+  }
+  async function copyDiagnosis(){
+    const detail=diagnosis(lastReply||data?.last_attempt_result);
+    if(!detail)return;
+    const value=JSON.stringify(detail,null,2);
+    try{
+      await navigator.clipboard.writeText(value);
+      feedback.textContent='Diagnóstico copiado.';
+    }catch(_){
+      const output=body.querySelector('[data-snap-copy-text]');
+      if(output){output.hidden=false;output.value=value;output.focus();output.select();}
+      feedback.textContent='Diagnóstico selecionado. Use o atalho de copiar.';
+    }
+  }
   const fmt=value=>value?new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short'}).format(new Date(value)):'Indisponível';
   function paint(){
     if(!data)return;
@@ -289,12 +337,20 @@ export function mountSnapTradeConnections({host,panel,api,esc,navigation,today,e
       policy(row,'excluded','Excluir da consolidação')+
       '<button type="submit" class="quiet">Salvar política</button></form>'+
       '<button type="button" data-snap-sync="'+esc(row.id)+'" '+(row.archived||!data.configured?'disabled':'')+'>Atualizar esta conexão</button></article>').join('');
+    const diagnostic=diagnosis(lastReply||data.last_attempt_result);
+    const diagnosticBox=diagnostic?'<details data-snap-diagnosis '+(diagnosisOpen?'open':'')+'><summary>Diagnóstico técnico</summary>'+
+      '<dl class="of-wealth-grid">'+Object.entries(diagnostic).map(([key,value])=>'<div><dt>'+diagnosisLabels[key]+
+        '</dt><dd>'+esc(value)+'</dd></div>').join('')+'</dl>'+
+      '<button type="button" data-snap-copy>Copiar diagnóstico</button>'+
+      '<textarea data-snap-copy-text aria-label="Diagnóstico sanitizado" readonly hidden></textarea></details>':'';
     body.innerHTML='<p>'+(data.configured?'Credenciais configuradas.':'Informe as credenciais nas opções do add-on.')+'</p>'+
       (data.error_code?'<p class="attention">'+esc(statusNames[data.error_code]||'Última coleta incompleta')+'</p>':'')+
       '<dl class="of-wealth-grid"><div><dt>Última tentativa local</dt><dd>'+fmt(data.last_attempt)+'</dd></div>'+
       '<div><dt>Última coleta bem-sucedida</dt><dd>'+fmt(data.last_success)+'</dd></div>'+
       '<div><dt>Próxima coleta local</dt><dd>'+fmt(data.next_attempt)+'</dd></div></dl>'+
-      '<div class="actions"><button type="button" data-snap-discover '+(data.configured?'':'disabled')+'>Testar credenciais e descobrir contas</button>'+
+      '<p>Resultado da última tentativa '+esc(data.last_result==='RUNNING'?'Em andamento':outcomes[data.last_result]||'Indisponível')+'</p>'+
+      diagnosticBox+'<div class="actions"><button type="button" data-snap-retry class="quiet">Atualizar diagnóstico</button>'+
+      '<button type="button" data-snap-discover '+(data.configured?'':'disabled')+'>Testar credenciais e descobrir contas</button>'+
       '<button type="button" data-snap-sync="" '+(data.configured?'':'disabled')+'>Atualizar dados</button></div>'+
       '<form data-snap-preferences aria-label="Preferências SnapTrade" class="of-presentation">'+
       '<label><input type="checkbox" name="auto" '+(data.auto_enabled?'checked':'')+' '+(data.configured?'':'disabled')+'> Coleta automática</label>'+
@@ -309,24 +365,47 @@ export function mountSnapTradeConnections({host,panel,api,esc,navigation,today,e
         '<label>Consumer Key<input name="consumer_key" type="password" autocomplete="new-password" maxlength="256" required></label>'+
         '<button type="submit">Salvar credenciais protegidas</button></form></details>':'')+
       '<div class="of-connection-grid">'+rows+'</div>';
+    const details=body.querySelector('[data-snap-diagnosis]');
+    if(details)details.ontoggle=()=>{if(details.isConnected)diagnosisOpen=details.open;};
   }
   async function load(){
     const query=queries.begin();
     body.setAttribute('aria-busy','true');
     try{
       const next=await api('/open-finance/snaptrade',{queryScope:query});
-      if(query.current()&&host.isConnected){data=next;paint();}
-    }catch(_){if(query.current())body.innerHTML='<p role="alert">Diagnóstico SnapTrade indisponível.</p><button data-snap-retry>Tentar novamente</button>';}
+      if(query.current()&&host.isConnected){
+        data=next;
+        if(next.last_attempt_result?.request_id)lastReply=null;
+        paint();
+        return next;
+      }
+    }catch(_){if(query.current()&&!data)body.innerHTML='<p role="alert">Diagnóstico SnapTrade indisponível.</p><button data-snap-retry>Tentar novamente</button>';}
     finally{if(query.current())body.removeAttribute('aria-busy');}
   }
   async function submit(path,payload){
     if(busy)return;
     busy=true;feedback.textContent='Processando…';
+    const refresh=['snaptrade/discovery','snaptrade/sync'].includes(path);
+    const previous=data?.last_attempt_result?.request_id;
     try{
       const answer=await api('/open-finance/'+path,{method:'POST',body:payload});
-      if(!panel.hidden&&host.isConnected){await load();feedback.textContent=answer.state==='PARTIAL'?'Coleta parcial. Consulte o diagnóstico.':'Operação concluída.';}
-    }catch(error){if(host.isConnected){feedback.textContent=errorText(error);}}
-    finally{busy=false;}
+      if(!panel.hidden&&host.isConnected){
+        lastReply=diagnosis(answer.diagnostic);
+        await load();
+        feedback.textContent=answer.state==='PARTIAL'?(answer.error_code?errorText({code:answer.error_code}):
+          'Coleta parcial. Execute novamente para continuar a leitura.'):
+          answer.state==='AVAILABLE'&&refresh?'Leitura concluída.':'Operação concluída.';
+      }
+    }catch(error){
+      if(!panel.hidden&&host.isConnected){
+        const fromResponse=diagnosis(error.diagnostic);
+        const latest=refresh?await load():null;
+        const recovered=latest?.last_attempt_result?.request_id!==previous?diagnosis(latest?.last_attempt_result):null;
+        lastReply=fromResponse||recovered;
+        if(lastReply)paint();
+        feedback.textContent=errorText({code:lastReply?.error_code||error.code});
+      }
+    }finally{busy=false;}
   }
   body.onclick=event=>{
     const button=event.target.closest('button');
@@ -334,6 +413,7 @@ export function mountSnapTradeConnections({host,panel,api,esc,navigation,today,e
     if(button.hasAttribute('data-snap-discover'))submit('snaptrade/discovery',{});
     if(button.hasAttribute('data-snap-sync'))submit('snaptrade/sync',button.dataset.snapSync?{connection_id:button.dataset.snapSync}:{});
     if(button.hasAttribute('data-snap-retry'))load();
+    if(button.hasAttribute('data-snap-copy'))copyDiagnosis();
   };
   body.onsubmit=event=>{
     event.preventDefault();

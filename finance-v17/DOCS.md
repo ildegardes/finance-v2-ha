@@ -1,8 +1,14 @@
-# Finance V17 0.1.36-open-finance.1
+# Finance V17 0.1.37-open-finance.1
+
+A atualização mantém o schema 16. Faça o backup do add-on e instale a nova versão pelo Supervisor. Na aba **Configuração** do add-on, confira `snaptrade_enabled`, `snaptrade_client_id` e `snaptrade_consumer_key`. Em **Open Finance › Conexões › SnapTrade**, selecione **Testar credenciais e descobrir contas**. Depois da descoberta, execute **Atualizar dados** e confira a conta e as posições no Finance e na SnapTrade.
+
+Se houver erro, use **Atualizar diagnóstico**, abra **Diagnóstico técnico** e escolha **Copiar diagnóstico**. O texto contém a etapa, o recurso, a data e o identificador da tentativa. O diagnóstico fica disponível na sessão autenticada mesmo quando um intermediário substitui o corpo do HTTP 502. Se a descoberta só chegar ao intermediário, o Finance mantém o último resultado gravado. [Contrato e investigação](../docs/open-finance/SNAPTRADE_PERSONAL_037.md)
+
+## Referência da integração SnapTrade Personal
 
 ## Atualização e reversão
 
-Faça um backup recuperável do add-on com banco, opções e chave de credenciais quando utilizada. Atualize o catálogo pelo Supervisor do Home Assistant e instale a atualização do add-on Finance V17. Confira `migrations.current_version=16` em `/api/v2/health`. O slug permanece `finance_v17`. Para retornar à 0.1.35, guarde uma cópia separada dos dados atuais e restaure o backup anterior de schema 15 com suas opções e chave correspondentes.
+Faça um backup recuperável do add-on com banco, opções e chave de credenciais quando utilizada. Atualize o catálogo pelo Supervisor do Home Assistant e instale a atualização do add-on Finance V17. Confira `migrations.current_version=16` em `/api/v2/health`. O slug permanece `finance_v17`. Para retornar à 0.1.36, guarde uma cópia separada dos dados atuais e restaure o backup anterior de schema 16 com suas opções e chave correspondentes.
 
 ## SnapTrade Personal e Charles Schwab
 
