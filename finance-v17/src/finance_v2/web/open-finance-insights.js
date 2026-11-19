@@ -4,8 +4,9 @@ import {countBR,institutionName,statusLabel} from './open-finance-labels.js';
 import {proventNames} from './open-finance-classification-ui.js';
 import {createQueryGeneration} from './query-generation.js';
 
-const bridgeNames={operating:'Receitas e despesas identificadas',capital:'Movimentações de capital',internal:'Movimentações internas',
-  settlement:'Liquidações de obrigações',pending:'Em revisão ou com evidência insuficiente'};
+const bridgeNames={operating:'Receitas e despesas identificadas',internal:'Transferências entre contas próprias',
+  application:'Aplicações financeiras',redemption:'Resgates financeiros',card_payment:'Liquidações de cartão',
+  other:'Outras movimentações não econômicas',pending:'Em revisão ou com evidência insuficiente'};
 const volumeNames={applied:'Total aplicado',redeemed:'Total resgatado',capital_flow:'Fluxo líquido das aplicações',
   credited:'Rendimentos creditados',tax:'Tributos identificados',charge:'Encargos identificados'};
 const percent=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2});
@@ -13,6 +14,16 @@ const date=value=>value?dateBR(value):'Indisponível';
 
 export function bridgePanel(insights,amount,esc){
   if(!insights)return '';
+  if(insights.breakdown){
+    const rows=Object.entries(bridgeNames).map(([key,label])=>{
+      const records=insights.breakdown.filter(row=>row.component===key);
+      return records.map(row=>'<li><span>'+esc(key==='operating'?(row.direction==='incoming'?'Receitas identificadas':'Despesas identificadas'):label)+'</span>'+
+        '<button type="button" class="of-link" data-flow-component="'+key+'" data-insight-direction="'+esc(row.direction)+'">'+
+        (row.direction==='incoming'?'Entradas':row.direction==='outgoing'?'Saídas':'Direção não informada')+' · '+countBR.format(row.count)+' · '+amount(row.value)+'</button></li>').join('');
+    }).join('');
+    return '<details class="of-class-options"><summary>Como o fluxo bruto se decompõe</summary>'+
+      (rows?'<ul class="of-category-list">'+rows+'</ul>':'<p>Nenhuma movimentação bancária no período.</p>')+'</details>';
+  }
   const rows=Object.entries(bridgeNames).map(([key,label])=>{
     const item=insights.bridge[key];
     return '<li><span>'+esc(label)+'</span><div><button type="button" class="of-link" data-insight-bucket="'+key+'" data-insight-direction="incoming">Entradas '+amount(item?.incoming)+'</button>'+
@@ -24,17 +35,22 @@ export function bridgePanel(insights,amount,esc){
 
 export function cardPanel(cards,amount,mode,esc){
   if(!cards)return '';
+  const reasons={OBLIGATION_UNVERIFIED:'Obrigação independente não comprovada',OBLIGATION_OVERLAP:'Possível obrigação repetida',
+    AMOUNT_UNAVAILABLE:'Saldo ausente',DIFFERENT_BASIS:'Tipo de saldo diferente',REFERENCE_DATE_MISMATCH:'Data não comparável'};
   const list=cards.items.map((card,index)=>{
     const identity=cardIdentity(card,esc);
     const suffix=identity.tail&&mode!=='full'?' · •••• '+esc(identity.tail):'';
     return '<li><button type="button" class="of-card-compact" data-overview-card="'+index+'">'+identity.mark+
       '<span><strong>'+esc(identity.label)+'</strong><small>'+esc(institutionName(card.institution))+
-      (identity.network?' · '+esc(identity.network):'')+suffix+'</small></span><span><strong>'+amount(card.used??card.balance)+'</strong><small>'+
+      (identity.network?' · <span class="of-card-network">'+esc(identity.network)+'</span>':'')+suffix+'</small>'+
+      (card.consolidation_reason?'<small>'+esc(reasons[card.consolidation_reason]||'Fora do subtotal')+'</small>':'')+'</span><span><strong>'+amount(card.used??card.balance)+'</strong><small>'+
       (card.used!=null?'Utilizado':'Saldo informado')+'</small></span></button></li>';
   }).join('');
   return '<section class="of-summary-card of-card-insight"><div class="of-section-heading"><div><h3>Cartões de crédito</h3><p>'+
     esc(countBR.format(cards.active_count))+(cards.active_count===1?' cartão ativo informado':' cartões ativos informados')+'</p></div><button type="button" class="of-link" data-all-overview-cards>Ver todos</button></div>'+
-    (cards.used!=null?'<p>Saldo utilizado consolidado <strong>'+amount(cards.used)+'</strong></p>':'')+
+    (cards.consolidated!=null?'<p>'+(cards.basis==='ACCOUNT_BALANCE'?'Saldo informado':'Saldo utilizado')+
+      ' <strong>'+amount(cards.consolidated)+'</strong> · '+countBR.format(cards.included_count)+' de '+countBR.format(cards.count)+' considerados</p>':
+      cards.count?'<p>Consolidação não comprovada</p>':'')+
     (list?'<ul class="of-compact-cards">'+list+'</ul>':'<p>Nenhum cartão encontrado neste escopo.</p>')+'</section>';
 }
 

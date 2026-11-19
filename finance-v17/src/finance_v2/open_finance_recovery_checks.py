@@ -37,19 +37,19 @@ def _classification_schema(version):
         for migration in additions:
             model.executescript(migration.path.read_text(encoding='utf8'))
         return {tuple(row) for row in model.execute(
-            "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name LIKE 'of_classification_%' OR name LIKE 'of_portfolio_%'"
+            "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name LIKE 'of_classification_%' OR name LIKE 'of_portfolio_%' OR name IN ('of_sync_preferences','of_sync_preference_events')"
         )}
 
 
 def schema_check(c,expected,*,registry=False):
     version=c.execute('PRAGMA user_version').fetchone()[0]
-    require(version in ((12,13,14) if registry else (11,)),
+    require(version in ((12,13,14,15) if registry else (11,)),
             'UNSUPPORTED_REGISTRY_SCHEMA' if registry else 'SCHEMA_NOT_11')
     all_tables={r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     of_tables={n for n in all_tables if n.startswith('of_')}
     classification=_classification_schema(version) if version>=13 else set()
     installed={tuple(row) for row in c.execute(
-        "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name LIKE 'of_classification_%' OR name LIKE 'of_portfolio_%'"
+        "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name LIKE 'of_classification_%' OR name LIKE 'of_portfolio_%' OR name IN ('of_sync_preferences','of_sync_preference_events')"
     )}
     require(installed==classification,'UNEXPECTED_OPEN_FINANCE_SCHEMA')
     extra={name for kind,name,_,_ in classification if kind=='table'}

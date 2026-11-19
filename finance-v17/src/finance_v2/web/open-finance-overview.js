@@ -143,13 +143,18 @@ function allocation(investments,mode,amount,esc){
 function categoryRanking(data,mode,amount,esc,economic){
   if(mode==='full')return '<p class="of-chart-placeholder">Ranking oculto em privacidade total.</p>';
   const rows=[...((economic?data.economic_category_ranking:data.category_ranking?.BANK)||[])].sort((a,b)=>scaled(a.value)>scaled(b.value)?-1:scaled(a.value)<scaled(b.value)?1:0);
-  if(!rows.length)return '<p class="of-chart-placeholder">Nenhuma saída informada para os filtros selecionados.</p>';
+  if(!rows.length){
+    const note=economic&&data.insights?.pending?'Há movimentações pendentes de classificação.':
+      data.flow.BANK.coverage_state!=='COMPLETE'&&!data.flow.BANK.reported?.outgoing?'Cobertura insuficiente para determinar as despesas.':
+      !data.total?'Nenhuma movimentação no período.':economic?'Nenhuma despesa econômica identificada.':'Nenhuma saída bancária no período.';
+    return '<p class="of-chart-placeholder">'+note+'</p>';
+  }
   const total=rows.reduce((sum,row)=>sum+scaled(row.value),0n);
   return '<ul class="of-ranking">'+rows.map(row=>{
     const value=scaled(row.value);
     const label=esc(categoryLabel(row));
     const control=row.key==='other'?'<span>'+label+'</span>':'<button type="button" class="of-link" data-overview-category="'+esc(row.key)+'">'+label+'</button>';
-    const suggested=row.review?.includes('SUGGESTED')?'<small>Inclui sugestões</small>':'';
+    const suggested=row.review?.includes('SUGGESTED')?'<small>Inclui sugestões</small>':row.count?'<small>'+countBR.format(row.count)+' movimentos</small>':'';
     return '<li><div>'+control+suggested+'<strong>'+amount(row.value)+'</strong>'+(total>0n?'<small>'+esc(percentBR.format(fraction(value,total)))+'</small>':'')+'</div><span aria-hidden="true" class="of-ranking-track"><i style="width:'+(100*fraction(value,total))+'%"></i></span></li>';
   }).join('')+'</ul>';
 }
@@ -191,8 +196,8 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
   const people=form.elements.connection_id;
   const queries=createQueryGeneration(navigation);
   const fields=['start','end','currency'];
-  let filters,loaded=null,grouping,chartPage=0,flowMode=state.perspective||'adjusted';
-  const bucketFor=()=>flowMode==='adjusted'?'operating':'internal';
+  let filters,loaded=null,grouping,chartPage=0,flowMode=state.perspective==='gross'?'gross':'adjusted';
+  const bucketFor=()=>'operating';
   function chartData(){
     if(flowMode==='gross'||!loaded.insights)return loaded;
     return {flow:{BANK:{coverage_state:loaded.insights.coverage==='COMPLETE_BANK_SCOPE'?'COMPLETE':'PARTIAL'}},
@@ -210,11 +215,11 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
       const dates=(position.items||[]).map(item=>item.reference_date).filter(Boolean).sort();
       return dates.length?'Última referência '+dateBR(dates.at(-1)):countBR.format(position.known||0)+' posições informadas';
     };
-    const insights=loaded.insights,showAdjusted=insights&&flowMode==='adjusted',showInternal=insights&&flowMode==='internal';
-    const economicNote=insights?.coverage==='COMPLETE_BANK_SCOPE'?'Janela bancária coberta · cartões em análise separada':'Identificado · cobertura bancária parcial';
-    const flowTitle=showAdjusted?'Resultado econômico identificado':showInternal?'Movimentações internas':'Fluxo bancário líquido';
-    const net=showAdjusted?insights.known.net:showInternal?null:flow.net??flow.observed_net;
-    const netNote=showAdjusted?(economicNote) :showInternal?'Transferências e movimentações internas confirmadas':flow.net!=null?'Entradas menos saídas':net!=null?'Saldo dos movimentos conhecidos · cobertura parcial':'Resultado indisponível para a cobertura deste período';
+    const insights=loaded.insights,showAdjusted=insights&&flowMode==='adjusted';
+    const economicNote=insights?.coverage==='COMPLETE_BANK_SCOPE'?'Janela bancária coberta':'Subtotal identificado · cobertura bancária parcial';
+    const flowTitle=showAdjusted?'Resultado econômico identificado':'Fluxo bancário líquido';
+    const net=showAdjusted?insights.known.net:flow.net??flow.observed_net;
+    const netNote=showAdjusted?(economicNote) :flow.net!=null?'Entradas menos saídas':net!=null?'Saldo dos movimentos conhecidos · cobertura parcial':'Resultado indisponível para a cobertura deste período';
     const comparable=showAdjusted?insights.comparison:flow.comparison;
     const comparison=comparable?'<p class="of-comparison">Diferença frente a '+esc(dateBR(comparable.start))+' a '+esc(dateBR(comparable.end))+' · Entradas '+amount(comparable.incoming)+' · Saídas '+amount(comparable.outgoing)+' · Fluxo '+amount(comparable.net)+'</p>':'<p class="of-comparison">Comparação com período anterior indisponível.</p>';
     const coverage=loaded.coverage||[];
@@ -224,18 +229,23 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
       return '<li><strong>'+label+'</strong><span>'+esc(coverageLabel(kind==='transactions'?flow.coverage_state:loaded.positions[kind].coverage_state))+'</span>'+(points.some(point=>point.state==='FAILED'||point.state==='NOT_AVAILABLE'||point.state==='NOT_AUTHORIZED')?'<small>Há recursos com indisponibilidade neste escopo.</small>':'')+'</li>';
     }).join('');
     result.innerHTML=(filters.history==='1'?'<p class="of-notice">Histórico completo · O fluxo inclui conexões arquivadas. As posições abaixo têm como referência somente conexões ativas.</p>':'')+
-      '<div class="of-metrics of-six-kpis">'+metric('accounts','Saldo em contas',accounts.value,positionNote(accounts))+
+      '<div class="of-six-kpis"><section><h3>Posição financeira atual</h3><div class="of-metrics of-kpi-group">'+metric('accounts','Saldo em contas',accounts.value,positionNote(accounts))+
       metric('investments','Investimentos',investments.value,positionNote(investments))+
-      metric('cards','Cartões de crédito',loaded.cards?.used,(loaded.cards?.active_count||0)+' ativos informados')+
+      metric('cards','Cartões de crédito',loaded.cards?.consolidated??loaded.cards?.used,loaded.cards?.consolidated!=null?
+        (loaded.cards.included_count+' de '+loaded.cards.count+' considerados'):(loaded.cards?.active_count||0)+' ativos informados')+
+      '</div></section><section><h3>Resultados do período</h3><div class="of-metrics of-kpi-group">'+
       metric('incoming',showAdjusted?'Receitas identificadas':'Entradas bancárias',showAdjusted?insights.known.incoming:flow.reported?.incoming,showAdjusted?economicNote:coverageLabel(flow.coverage_state))+
       metric('outgoing',showAdjusted?'Despesas identificadas':'Saídas bancárias',showAdjusted?insights.known.outgoing:flow.reported?.outgoing,showAdjusted?economicNote:coverageLabel(flow.coverage_state))+
-      metric('income','Rendimentos',insights?.income.value,'Créditos de investimento identificados')+'</div>'+
+      metric('income','Rendimentos',insights?.income.value,'Créditos de investimento identificados')+'</div></section></div>'+
       '<section class="of-summary-card of-bank-flow"><div class="of-section-heading"><div><h3>'+flowTitle+'</h3>'+
-      (showInternal?'<p>Entradas '+amount(insights.bridge.internal.incoming)+' · Saídas '+amount(insights.bridge.internal.outgoing)+'</p>':'<strong class="of-net-value">'+amount(net)+'</strong>')+
-      '<p>'+netNote+'</p></div><div class="actions of-insight-selects">'+(insights?'<label>Visão do fluxo<select data-financial-flow aria-label="Visão do fluxo"><option value="adjusted">Econômica</option><option value="gross">Bancária</option><option value="internal">Movimentações internas</option></select></label>':'')+
+      '<strong class="of-net-value">'+amount(net)+'</strong>'+
+      '<p>'+netNote+'</p></div><div class="actions of-insight-selects">'+(insights?'<label>Visão do fluxo<select data-financial-flow aria-label="Visão do fluxo"><option value="adjusted">Econômica</option><option value="gross">Bancária</option></select></label>':'')+
       '<label>Agrupar por<select data-grouping aria-label="Agrupar por"><option value="day">Dia</option><option value="week">Semana</option><option value="month">Mês</option></select></label></div></div>'+
       '<div data-flow-chart>'+flowChart(chartData(),filters,grouping,chartPage,mode,money,esc)+'</div>'+
-      (showInternal?'':comparison)+bridgePanel(insights,amount,esc)+
+      comparison+bridgePanel(insights,amount,esc)+
+      (showAdjusted&&insights.card_activity?.purchases!=null?'<p><button type="button" class="of-link" data-card-expenses>Compras de cartão identificadas</button> '+amount(insights.card_activity.purchases)+' · '+countBR.format(insights.card_activity.installments)+' parcelas. Subtotal pelas datas lançadas no cartão.</p>':'')+
+      (showAdjusted&&insights.card_activity?.credits!=null?'<p><button type="button" class="of-link" data-card-credits>Estornos identificados no cartão</button> '+amount(insights.card_activity.credits)+'</p>':'')+
+      (showAdjusted&&insights.card_activity?.unresolved?'<p>'+countBR.format(insights.card_activity.unresolved)+' movimentos de cartão sem natureza econômica comprovada.</p>':'')+
       (insights?.unresolved_scope?'<p>Há registros fora do recorte por falta de data, moeda ou situação comprovada.</p>':'')+
       (insights?'<button type="button" class="of-link" data-classification-pending>Ver '+countBR.format(insights.pending)+' movimentações pendentes de classificação</button>':'')+
       '</section>'+
@@ -302,7 +312,8 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
     loaded=null;
     result.innerHTML='<p role="status" class="of-chart-placeholder">Carregando resumo bancário…</p>';
     result.setAttribute('aria-busy','true');
-    const params=new URLSearchParams({...filters,product:'BANK',status:'POSTED',portfolio_window:state.portfolioWindow||'6'});
+    const params=new URLSearchParams({...filters,product:'ALL',status:'POSTED',portfolio_window:state.portfolioWindow||'6'});
+    if(active.some(item=>item.id===state.portfolioConnection))params.set('portfolio_connection',state.portfolioConnection);
     if(!filters.connection_id)params.delete('connection_id');
     try{
       const response=await api('/open-finance/analytics?'+params,{queryScope:query});
@@ -354,6 +365,7 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
     else queries.cancel();
   });
   result.onchange=event=>{
+    if(event.target.matches('[data-portfolio-connection]')){state.portfolioConnection=event.target.value;load();return;}
     if(event.target.matches('[data-portfolio-window]')){state.portfolioWindow=event.target.value;load();return;}
     if(event.target.matches('[data-financial-flow]')){
       flowMode=event.target.value;state.perspective=flowMode;chartPage=0;paint();result.querySelector('[data-financial-flow]').focus();return;
@@ -378,12 +390,19 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
       onNavigate({...context,bucket:'pending',openClassification:true});
     }else if(button.dataset.insightBucket){
       onNavigate({...context,bucket:button.dataset.insightBucket,direction:button.dataset.insightDirection});
+    }else if(button.closest('.of-portfolio')&&button.matches('[data-open-assets]')){
+      onAssets({connection_id:loaded.portfolio_history?.connection_id||'',currency:filters.currency,type:''});
     }else if(button.matches('[data-investment-class],[data-open-assets],[data-metric="investments"]')){
       onAssets({connection_id:filters.connection_id,currency:filters.currency,type:button.dataset.investmentClass||''});
     }else if(button.dataset.institutionAssets){
       onAssets({connection_id:button.dataset.institutionAssets,currency:filters.currency,type:''});
     }else if(button.dataset.institutionConnection){
       onConnections(button.dataset.institutionConnection,true);
+    }else if(button.matches('[data-card-expenses],[data-card-credits]')){
+      onNavigate({...context,product:'CREDIT',direction:button.matches('[data-card-expenses]')?'outgoing':'incoming',
+        card_economic:button.matches('[data-card-expenses]')?'recognized_purchase':'credit'});
+    }else if(button.dataset.flowComponent){
+      onNavigate({...context,direction:button.dataset.insightDirection,flow_component:button.dataset.flowComponent});
     }else if(button.dataset.autoCategory){
       const key=button.dataset.autoCategory;
       const nature={applied:'APPLICATION',redeemed:'REDEMPTION',credited:'INVESTMENT_INCOME',tax:'TAX',charge:'CHARGE',pending:'REDEMPTION'}[key];

@@ -3,7 +3,7 @@ from hashlib import sha256
 from .open_finance_diagnostics import annotate, emit
 from contextlib import closing, nullcontext
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timezone
 from math import ceil
 import json
 import re
@@ -113,6 +113,16 @@ class OpenFinanceService:
                 if row['lease_until']>epoch:raise SyncError('SYNC_BUSY')
                 c.execute("UPDATE of_sync_runs SET state='INTERRUPTED',finished_at=?,error_code='LEASE_EXPIRED' "
                           "WHERE connection_id=? AND state='RUNNING'",(stamp,config.id))
+            if minimum_interval is None and actor=='AUTO:coverage':
+                from .open_finance_schedule import preferences,allowed,claim_delay
+                enabled,hours,_=preferences(c,self.settings)
+                if not enabled or not allowed(self.settings,config):
+                    raise SyncError('AUTO_SYNC_DISABLED',403)
+                code,delay=claim_delay(c,config.id,hours,datetime.fromtimestamp(epoch,timezone.utc))
+                if delay:
+                    error=SyncError(code)
+                    error.retry_after=delay
+                    raise error
             if minimum_interval and actor == 'AUTO:coverage':
                 previous=c.execute("SELECT state,finished_at FROM of_sync_runs WHERE connection_id=? AND actor='AUTO:coverage' ORDER BY rowid DESC LIMIT 1",(config.id,)).fetchone()
                 if previous and previous['finished_at'] and previous['state'] in ('SUCCEEDED','FAILED'):

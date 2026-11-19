@@ -67,6 +67,7 @@ OPERATIONS = (
     ('POST','classification/preview','classification_preview'),
     ('POST','classification/apply','classification_apply'),
     ('POST','classification/undo','classification_undo'),
+    ('GET','sync-preferences','sync_preferences'), ('POST','sync-preferences','sync_preferences_write'),
     ('GET','catalogs','catalogs'), ('GET','analytics','analytics'),
     ('GET','resources','resources'), ('GET','coverage','coverage'),
     ('POST','coverage-sync','coverage_sync'),
@@ -193,6 +194,16 @@ def _dispatch_raw(app,operation,identity,body,query):
     if identity.role!='UI' or identity.client_id!='UI:local':raise SyncError('FORBIDDEN',403)
     service=OpenFinanceService(app.settings,app.clock)
     op=operation.removeprefix('open_finance_')
+    if op in ('sync_preferences','sync_preferences_write'):
+        if query or (op=='sync_preferences' and body):
+            raise SyncError('INVALID_REQUEST',422)
+        from .open_finance_schedule import report,save,_datetime
+        if op.endswith('_write'):
+            if not identity.csrf:
+                raise SyncError('FORBIDDEN',403)
+            return save(service,body),200
+        with closing(app.db()) as c:
+            return report(c,app.settings,_datetime(service._time()[1])),200
     if op.startswith('classification_'):
         from .open_finance_classification_admin import dispatch
         return dispatch(app,op,identity,body,query)
@@ -357,7 +368,20 @@ def openapi_paths():
         spec={'operationId':'open_finance_'+op,'security':[{'bearerAuth':[]}],
               'x-owner-only':True,'x-external-capability':'not-available',
               'description':'UI owner bearer or existing UI session only. Cookie writes require X-CSRF-Token. No external/OAuth/scheduler access.'}
-        if method=='POST':
+        if op in ('sync_preferences','sync_preferences_write'):
+            from .open_finance_schedule import HOURS
+            spec['description']='Preferências locais de sincronização. Alteração exige sessão do proprietário e CSRF.'
+            boolean={'type':'boolean'}
+            interval={'type':'integer','enum':list(HOURS)}
+            if method=='POST':
+                spec['requestBody']={'required':True,'content':{'application/json':{'schema':obj({
+                      'enabled':boolean,'interval_hours':interval,'revision':integer})}}}
+                parameters=[{'name':'X-CSRF-Token','in':'header','required':True,'schema':text}]
+                statuses += [409,415]
+            schema=obj({'requested_enabled':boolean,'effective_enabled':boolean,'available':boolean,
+                        'interval_hours':interval,'revision':integer,'interval_options':{'type':'array','items':interval},
+                        'connections':{'type':'array','items':{'type':'object'}}})
+        elif method=='POST':
             properties={k:{'type':'string','format':'date'} for k in ('date_from','date_to')}
             if op=='sync':properties['connection_id']={'type':'string','pattern':'^[a-z][a-z0-9-]{1,63}$'}
             spec['requestBody']={'required':op=='sync','content':{'application/json':{'schema':{'type':'object','additionalProperties':False,
@@ -394,12 +418,15 @@ def openapi_paths():
             statuses += [404,409,415]
         elif op=='analytics':
             from .open_finance_analytics import PARAMS
-            parameters=[{'name':name,'in':'query','required':False,'schema':text} for name in sorted(PARAMS)]
+            sizes={'type':'integer','enum':[25,50,100,250,500],'default':50}
+            sort=enum('date_desc','date_asc','value_desc','value_asc','description_asc','description_desc')
+            parameters=[{'name':name,'in':'query','required':False,'schema':{'page_size':sizes,'sort':sort}.get(name,text)}
+                        for name in sorted(PARAMS)]
             schema={'type':'object','required':['contract','filters','positions','flow','series','categories','items','total','page','has_more','coverage'],
                     'properties':{'contract':{'type':'string','enum':['OF-ANALYTICS/1']},
                     **{name:{'type':'object'} for name in ('filters','positions','flow')},
                     **{name:{'type':'array','items':{'type':'object'}} for name in ('series','categories','items','coverage')},
-                    'total':integer,'page':integer,'has_more':{'type':'boolean'}}}
+                    'total':integer,'page':integer,'total_pages':integer,'has_more':{'type':'boolean'}}}
             statuses.append(404)
         elif op=='catalogs':
             schema=obj({k:{'type':'array','items':item} for k,item in
@@ -416,7 +443,7 @@ def openapi_paths():
         spec['parameters']=parameters
         spec['responses']={str(s):{'description':'Completed sync / diagnostic outcome' if s in {200,207,502} else 'Sanitized error',
             'content':{'application/json':{'schema':schema if s in {200,207,502} else {'$ref':'#/components/schemas/Error'}}}} for s in statuses}
-        result[PREFIX+path]={method.lower():spec}
+        result.setdefault(PREFIX+path,{})[method.lower()]=spec
     text_schema={'type':'string'}
     coverage_schema=obj({**{k:text for k in ('connection_id','resource','parent_id','run_id','state','observed_at')},
         **{k:integer for k in ('page_count','record_count','omitted_field_count')},'error_code':nullable})

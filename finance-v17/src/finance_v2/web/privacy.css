@@ -10,9 +10,10 @@ html[data-money-privacy="hidden"] [data-money-input]{color:transparent;caret-col
 
 .privacy-control{position:relative;display:inline-flex}
 .privacy-menu[hidden]{display:none}
-.privacy-menu{position:absolute;right:0;top:calc(100% + .45rem);z-index:20;width:min(18rem, calc(100vw - 1.55rem));padding:.35rem;background:#fff;color:#14352c;border:1px solid #c8ddd3;border-radius:.85rem;box-shadow:0 14px 36px #12352b26}
+.privacy-menu{position:absolute;right:0;top:calc(100% + .45rem);z-index:20;width:min(18.5rem, calc(100vw - 6.7rem));padding:.35rem;background:#fff;color:#14352c;border:1px solid #c8ddd3;border-radius:.85rem;box-shadow:0 14px 36px #12352b26}
 .privacy-menu button{display:flex;align-items:center;gap:.65rem;text-align:left;width:100%;padding:.6rem;background:#fff;color:#15382d;border:0;border-radius:.58rem}
 .privacy-menu button:hover,.privacy-menu [aria-checked=true]{background:#e9f4ee;color:#13453a}
+.privacy-menu [role=menuitemradio]:focus-visible{outline:2px solid #17634b;outline-offset:-2px}
 .privacy-menu strong,.privacy-menu small{display:block}
 .privacy-menu small{font-size:.78rem;color:#37584f}
 .privacy-menu svg{fill:none;stroke:currentColor;stroke-width:1.7;flex:none}

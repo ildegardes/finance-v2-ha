@@ -31,6 +31,12 @@ jobs:
         run: python -m unittest discover -s tests -p test_open_finance_classification.py
       - name: Effective categories, portfolio and schema 14
         run: python -m unittest discover -s tests -p test_open_finance_034.py
+      - name: Economic recognition, schedules, snapshots and global pagination
+        run: python -m unittest discover -s tests -p test_open_finance_035.py
+      - name: Automatic schedule and restart policy
+        run: python -m unittest discover -s tests/auto_sync -p test_release_policy.py
+      - name: Linux keyring and backup restoration
+        run: python -m unittest discover -s tests -p test_pluggy_keyring.py
       - name: Authentication
         run: python -m unittest discover -s tests -p test_d08_auth.py
       - name: Output privacy
@@ -82,6 +88,7 @@ jobs:
           node tests/open_finance_product_states_ui.cjs
           node tests/open_finance_privacy_attributes_ui.cjs
           node tests/open_finance_overview_ui.cjs
+          node tests/open_finance_flow_ui.cjs
       - name: Browser with WSGI and synthetic SQLite
         run: |
           python -m unittest discover -s tests -p test_open_finance_integrated_ui.py

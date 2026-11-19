@@ -7,19 +7,21 @@ import time
 from .open_finance import OpenFinanceService, SyncError
 from .open_finance_coverage import sync_full_automatic
 from .open_finance_registry import connection_views
+from .open_finance_schedule import allowed, preferences, claim_delay, _datetime
 from .pluggy_client import PluggyClient, PluggyError, transport
 
 LOGGER = logging.getLogger(__name__)
 
 
 class CoverageWorkers:
-    INTERVAL_SECONDS = 3600
+    INTERVAL_SECONDS = 86400
+    CONFIG_CHECK_SECONDS = 15
     RUN_BUDGET_SECONDS = 120
     SOCKET_TIMEOUT_SECONDS = 2
 
-    def __init__(self, settings, *, send=transport, now=time.monotonic):
+    def __init__(self, settings, *, send=transport, now=time.monotonic, clock=None):
         self.settings = settings
-        self.send, self.now = send, now
+        self.send, self.now, self.clock = send, now, clock
         self.stop_event = threading.Event()
         self.threads = []
         self._io_lock = threading.Lock()
@@ -28,9 +30,9 @@ class CoverageWorkers:
     def start(self):
         if self.threads or self.stop_event.is_set():
             raise RuntimeError('COVERAGE_WORKERS_ALREADY_STARTED_OR_STOPPED')
-        service = OpenFinanceService(self.settings)
+        service = OpenFinanceService(self.settings,self.clock)
         with closing(service._db()) as db:
-            planned = [view for view in connection_views(db, self.settings).values() if view.auto_sync_enabled]
+            planned = [view for view in connection_views(db, self.settings).values() if allowed(self.settings,view)]
         for config in planned:
             if config.enabled:
                 worker = threading.Thread(target=self._loop, args=(config,),
@@ -89,16 +91,24 @@ class CoverageWorkers:
                 raise PluggyError('TRANSPORT_FAILURE')
             return outcome['result']
 
-        service = OpenFinanceService(self.settings, client_factory=lambda connection:
+        service = OpenFinanceService(self.settings, self.clock, client_factory=lambda connection:
             PluggyClient(connection, send=bounded_send, max_attempts=1,
                 timeout=self.SOCKET_TIMEOUT_SECONDS))
         return sync_full_automatic(service, config.id, check=check,
-            minimum_interval=self.INTERVAL_SECONDS if respect_schedule else 0)
+            minimum_interval=None if respect_schedule else 0)
 
     def _loop(self, config):
         while not self.stop_event.is_set():
             delay=self.INTERVAL_SECONDS
             try:
+                service=OpenFinanceService(self.settings,self.clock)
+                with closing(service._db()) as db:
+                    enabled,hours,_=preferences(db,self.settings)
+                    _,remaining=claim_delay(db,config.id,hours,_datetime(service._time()[1]))
+                if not enabled or remaining:
+                    if self.stop_event.wait(min(self.CONFIG_CHECK_SECONDS,remaining or self.CONFIG_CHECK_SECONDS)):
+                        break
+                    continue
                 result = self._run_one(config, respect_schedule=True)
                 # Only a local slug and fixed outcome; never log provider bodies.
                 LOGGER.info('coverage %s %s', config.id, result['state'])
@@ -112,7 +122,7 @@ class CoverageWorkers:
                     code = ('CANCELLATION_FINALIZATION_DEFERRED' if isinstance(error, SyncError)
                         and error.code == 'CANCELLATION_FINALIZATION_DEFERRED' else 'ATTEMPT_FAILED')
                     LOGGER.warning('coverage %s %s', config.id, code)
-            if self.stop_event.wait(delay):
+            if self.stop_event.wait(min(delay,self.CONFIG_CHECK_SECONDS)):
                 break
 
     def stop(self):
