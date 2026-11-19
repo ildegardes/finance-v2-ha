@@ -1,3 +1,12 @@
+# 0.1.35-open-finance.1
+
+- Reconhece despesas bancárias com categoria e evidência compatíveis, preservando a revisão e a proveniência original.
+- Exibe compras identificadas do cartão separadamente, consolida saldos independentes e mostra a cobertura do subtotal.
+- Organiza os indicadores em dois grupos, detalha a reconciliação bancária e dá ao histórico patrimonial um filtro próprio.
+- Agenda a leitura automática do cache a cada 24 horas por padrão. A aba Conexões permite alterar as preferências.
+- Permite ordenar o conjunto de movimentações antes da paginação e consultar até 500 registros por página.
+- A migração aditiva 015 persiste e audita a preferência de sincronização, preservando o histórico patrimonial.
+
 # 0.1.34-open-finance.1
 
 - Categoria efetiva unificada entre ranking, movimentações e navegação contextual.

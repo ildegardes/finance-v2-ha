@@ -135,8 +135,14 @@ class Settings:
     open_finance_origin_evidence: bool = False
     pluggy_keyring_path: Path | None = field(default=None, repr=False)
     pluggy_admin_origin: str | None = None
+    open_finance_sync_interval_hours: int = 24
+    open_finance_auto_sync_allowed: bool | None = None
 
     def __post_init__(self):
+        if type(self.open_finance_sync_interval_hours) is not int or self.open_finance_sync_interval_hours not in (1,2,4,6,12,24,48):
+            raise ConfigurationError("invalid Open Finance auto-sync interval")
+        if self.open_finance_auto_sync_allowed is not None and type(self.open_finance_auto_sync_allowed) is not bool:
+            raise ConfigurationError("invalid Open Finance administrative policy")
         if self.pluggy_admin_origin is not None and not _valid_admin_origin(self.pluggy_admin_origin):
             raise ConfigurationError("Pluggy administration requires an explicit private origin")
         if type(self.open_finance_origin_evidence) is not bool:
@@ -177,12 +183,19 @@ class Settings:
         except PluggyConfigurationError:
             raise ConfigurationError("invalid Pluggy connection configuration") from None
         origin_evidence = os.environ.get("FINANCE_V2_OF_ORIGIN_EVIDENCE", "0")
+        interval = 24
+        auto_allowed = None
         raw_keyring = os.environ.get("FINANCE_V2_PLUGGY_KEYRING_PATH")
         admin_origin = os.environ.get("FINANCE_V2_PLUGGY_ADMIN_ORIGIN") or None
         if path == Path("/data/finance_v2.sqlite3") and Path("/data/options.json").is_file():
             from .ha_pluggy_options import HaPluggyConfigurationError, load_options
             try:
-                admin_origin = load_options("/data/options.json").get("pluggy_admin_origin") or None
+                options = load_options("/data/options.json")
+                admin_origin = options.get("pluggy_admin_origin") or None
+                interval = options.get('open_finance_auto_sync_interval_hours',24)
+                if isinstance(interval,str) and interval in ('1','2','4','6','12','24','48'):
+                    interval=int(interval)
+                auto_allowed = options.get('open_finance_auto_sync_enabled',False)
             except (HaPluggyConfigurationError, AttributeError):
                 raise ConfigurationError("invalid Supervisor Pluggy options") from None
             if admin_origin is not None and (not isinstance(admin_origin, str) or not admin_origin.startswith("https://")):
@@ -210,4 +223,6 @@ class Settings:
             open_finance_origin_evidence=origin_evidence == "1",
             pluggy_keyring_path=keyring,
             pluggy_admin_origin=admin_origin,
+            open_finance_sync_interval_hours=interval,
+            open_finance_auto_sync_allowed=auto_allowed,
         )

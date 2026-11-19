@@ -1,3 +1,4 @@
+import {mountSyncPreferences} from './open-finance-schedule.js';
 import {bankMark} from './open-finance-identity.js';
 import {mountInvestmentIncome} from './open-finance-insights.js';
 // Imported bank staging only. No provider calls or official financial writes.
@@ -52,6 +53,7 @@ export function createOpenFinance({api,view,heading,esc,navigation=null,state={}
     }});
     const connectionPanel=host.querySelector('#of-panel-connections');
     organizeConnectionSections(connectionPanel);
+    mountSyncPreferences({host,panel:connectionPanel,api,esc,navigation});
     mountConnectionCoverage({host,panel:connectionPanel,api,esc,navigation});
     connectionPanel.querySelectorAll('[data-connection-diagnostic]').forEach(button=>button.onclick=()=>{
       const section=connectionPanel.querySelector('.of-coverage'),form=section?.querySelector('form');

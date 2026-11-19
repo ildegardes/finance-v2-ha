@@ -1,3 +1,50 @@
+# Finance V17 0.1.35-open-finance.1
+
+## Atualização e reversão
+
+Faça um backup recuperável do add-on com as opções, o banco e a chave de credenciais quando utilizada. Recarregue o catálogo e instale a versão pelo Supervisor. A inicialização aplica a migration 015. O healthcheck em `/api/v2/health` deve informar `migrations.current_version=15`.
+
+Para retornar à 0.1.34, preserve uma cópia separada dos dados atuais e restaure o backup anterior de schema 14 junto com as respectivas opções e chave. Os snapshots anteriores continuam no banco. O slug é `finance_v17`.
+
+## Reconhecimento e perspectivas
+
+A condição de revisão continua disponível na Central de classificação. A projeção acrescenta `economic_recognition` com fonte, natureza e componente do fluxo. Uma classificação manual válida, regra personalizada confirmada ou regra nativa determinística pode fornecer evidência. Categorias reconhecidas do provedor, como Livrarias e Energia elétrica, exigem débito efetivado, moeda do escopo, valor e descrição compatível. Transferências genéricas, PIX sem finalidade, venda ambígua de ativos e resgates sem prova de principal ficam fora do subtotal econômico. O salário pode ser reconhecido por uma rubrica determinística.
+
+A visão Bancária mantém os totais brutos. O detalhamento explica entradas e saídas por natureza, com quantidades e acesso às movimentações. A visão Econômica informa os valores bancários identificados. Dados parciais mantêm os subtotais conhecidos. Uma direção sem evidência permanece indisponível enquanto a cobertura for insuficiente. O ranking usa o mesmo recorte do subtotal.
+
+Compras de cartão identificadas e estornos comprovados aparecem separadamente, pela data lançada no cartão. A identificação exige lançamento efetivado e evidência compatível. Uma parcela vale pelo lançamento individual daquela data. Contratos de parcelamento, faturas, limites e pagamentos bancários não geram novas despesas de cartão. A separação evita misturar a data bancária com a data da compra sem reconciliar a cobertura de ambos os produtos.
+
+O saldo de cartões usa obrigações de titular identificadas, da mesma moeda e data financeira comparável. Obrigações independentes podem somar entre instituições, com uma conexão por instituição no subtotal. Reportamos o tipo de saldo e quantos cartões entraram no cálculo. Em caso de valores de tipos diferentes, o saldo utilizado tem precedência. Limites e faturas são projeções próprias. Motivos de exclusão ficam no card. Zero informado continua zero.
+
+## Patrimônio e Movimentações
+
+O card patrimonial pode escolher uma conexão ativa independentemente do filtro geral. A seleção automática usa o único histórico elegível quando disponível. Uma posição conhecida pode aparecer durante a formação do histórico. A série usa referências financeiras comparáveis e registra as datas de coleta separadamente. Coletas equivalentes preservam a observação anterior. A variação patrimonial inclui movimentações de capital e mudanças de valor de mercado.
+
+A aba Movimentações oferece 25, 50, 100, 250 e 500 registros por página. A preferência inicial é 50 e fica no navegador. A ordenação ocorre no servidor sobre o recorte completo, com magnitude decimal e desempate por identidade. Cada consulta usa uma moeda. Grupos por instituição e categoria organizam a página já ordenada. A ordenação por valor ou descrição desativa o agrupamento por data. Privacidade total substitui a ordem financeira pela data enquanto estiver ativa.
+
+## Sincronização automática
+
+A frequência padrão de leitura local do cache é 24 horas. A interface permite 1, 2, 4, 6, 12, 24 ou 48 horas. A opção administrativa do Supervisor e a permissão de cada conexão são condições para a coleta automática. A preferência auditada na aplicação pode pausar a execução e tem precedência sobre o intervalo padrão do Supervisor. O estado previamente desativado continua desativado. O worker reavalia a preferência em até 15 segundos. A alteração vale para novos ciclos, preservando o lease da execução atual.
+
+Após reiniciar, a próxima coleta é reconstruída a partir do resultado e horário persistidos. Uma coleta manual completa também conta como reconciliação local válida. Falhas transitórias têm intervalo de recuperação de cinco minutos. Falhas de autenticação ou consentimento esperam até 24 horas, limitadas pelo intervalo de rotina. A coleta manual permanece disponível.
+
+A última atualização do Item vem de `lastUpdatedAt`. `nextAutoSyncAt` é uma previsão da Pluggy. A API pode omitir a previsão ou fornecer um horário já passado. Os horários da aplicação vêm dos registros locais de tentativa e sucesso. Os metadados documentados do Item não fornecem uma revisão imutável de todas as coleções. A coleta usa a reconciliação de cache existente e não solicita atualização bancária. [Item](https://docs.pluggy.ai/en/reference/items/items-retrieve) · [Transações](https://docs.pluggy.ai/en/docs/products/transactions)
+
+## Regressões do chaveiro
+
+A qualificação da 0.1.34 em Windows pulou quatro casos porque a proteção de arquivo depende de `O_NOFOLLOW`, permissões POSIX e identidade do usuário Linux. Os quatro fazem parte do CI Linux desta versão.
+
+| Teste | Relevância na distribuição | Condição de execução |
+| --- | --- | --- |
+| `test_opt_in_owner_permissions_and_idempotent_restarts` | Exige opção do proprietário e confirma permissões e reinicialização | Linux, permissão 0600 e sistema de arquivos POSIX |
+| `test_missing_key_with_encrypted_credentials_never_creates_replacement` | Protege contra substituição de uma chave perdida com credenciais existentes | Linux com suporte a `O_NOFOLLOW` |
+| `test_insecure_file_or_symlink_fails_closed` | Rejeita elo simbólico e permissões abertas | Linux, chmod e criação de links simbólicos |
+| `test_sqlite_snapshot_and_matching_private_key_restore_credentials` | Qualifica restauração de SQLite e chave compatíveis | Linux e chave sintética com permissões POSIX |
+
+---
+
+## Referência operacional da versão anterior
+
 # Finance V17 0.1.34-open-finance.1
 
 ## Atualização e reversão

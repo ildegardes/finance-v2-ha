@@ -13,6 +13,35 @@ CAPITAL = {'APPLICATION','CAPITAL_RETURN','BORROWING','DEBT_PRINCIPAL'}
 SETTLEMENT = {'CARD_PAYMENT','SETTLEMENT'}
 
 
+PROVIDER_EXPENSES = frozenset({
+    'educacao infantil', 'childcare', 'kindergarten', 'livrarias', 'bookstore', 'bookstores', 'energia eletrica', 'electricity',
+    'servicos', 'services', 'supermercados', 'groceries', 'restaurantes', 'restaurants',
+    'alimentacao', 'food', 'transportes', 'transporte publico', 'public transportation', 'farmacias',
+    'pharmacies', 'internet', 'telefonia', 'agua e esgoto',
+})
+AMBIGUOUS_DEBIT = re.compile(
+    r'\b(?:pix|ted|doc|transferencia|resgate|aplicacao|investimento|b3|fatura|estorno|amortizacao|emprestimo)\b'
+)
+PAYROLL = re.compile(r'(?:credito (?:de )?)?(?:salario|folha de pagamento)')
+
+def economic_evidence(decision, facts, original, translated, status, amount):
+    if status!='POSTED' or amount is None:
+        return {'bucket':'pending','source':'UNESTABLISHED','nature':'UNKNOWN'}
+    if decision['origin'] in ('MANUAL','CUSTOM','NATIVE') and decision['review']=='CONFIRMED':
+        bucket = classified_bucket({'classification':decision,'direction':facts.direction})
+        return {'bucket':bucket,'source':decision['origin'],'nature':decision['nature']}
+    if decision['origin']=='PROVIDER' and decision['review']=='UNCLASSIFIED':
+        category = next((normalize(label) for label in (original,translated)
+                         if isinstance(label,str) and normalize(label) in PROVIDER_EXPENSES),None)
+        if (facts.direction=='outgoing' and category and not AMBIGUOUS_DEBIT.search(facts.normalized)
+                and str(facts.operation or '').upper() not in ('PIX','TED','DOC','TRANSFER','CREDIT_CARD_PAYMENT')):
+            return {'bucket':'operating','source':'PROVIDER_CATEGORY','nature':'EXPENSE','evidence':category}
+    if (decision['origin'] in ('PROVIDER','UNCLASSIFIED') and facts.product=='BANK'
+            and facts.direction=='incoming' and PAYROLL.fullmatch(facts.normalized)):
+        return {'bucket':'operating','source':'DETERMINISTIC_PAYROLL','nature':'SALARY'}
+    return {'bucket':'pending','source':'UNESTABLISHED','nature':'UNKNOWN'}
+
+
 def classified_bucket(item):
     decision = item['classification']
     nature, direction = decision['nature'], item['direction']
@@ -85,14 +114,29 @@ def banking_insights(items, bank):
     by_asset = {}
     income_rows = []
     pending = 0
+    breakdown = defaultdict(lambda: {'value':None,'count':0})
+    card_amounts = {'purchases':None,'credits':None,'unresolved':0,'installments':0}
     automatic_pending = defaultdict(lambda:None)
     for row in items:
-        if row['product']!='BANK':
-            continue
         tag = row['classification']
         direction = row['direction']
         amount = abs(Decimal(row['amount'])) if row['amount'] is not None and direction!='unknown' else None
         bucket = row['classification_bucket']
+        if row['product']=='CREDIT':
+            kind = row.get('card_economic')
+            if kind in ('purchase','installment') and amount is not None:
+                card_amounts['purchases'] = (card_amounts['purchases'] or Decimal(0))+amount
+                card_amounts['installments'] += kind=='installment'
+            elif kind=='credit' and amount is not None:
+                card_amounts['credits'] = (card_amounts['credits'] or Decimal(0))+amount
+            elif kind!='settlement':
+                card_amounts['unresolved']+=1
+            continue
+        component = row.get('flow_component') or bucket
+        detail = breakdown[(component,direction)]
+        detail['count']+=1
+        if amount is not None:
+            detail['value'] = (detail['value'] or Decimal(0))+amount
         if amount is None:
             pending+=1
             continue
@@ -139,6 +183,9 @@ def banking_insights(items, bank):
     return {
         'coverage':'COMPLETE_BANK_SCOPE' if complete else 'PARTIAL',
         'pending':pending, 'unresolved_scope':bank.get('unresolved_scope',0), 'known':_totals({'incoming':incoming,'outgoing':outgoing,'net':result}),
+        'breakdown':[{'component':component,'direction':direction,'value':_amount_text(group['value']),'count':group['count']}
+                     for (component,direction),group in sorted(breakdown.items())],
+        'card_activity':{**card_amounts, **_totals({key:card_amounts[key] for key in ('purchases','credits')})},
         'bridge':{name:_totals({direction:buckets[name][direction] for direction in ('incoming','outgoing')})
                   for name in ('operating','capital','internal','settlement','pending')},
         'series':[{'date':day,'bucket':bucket,'direction':direction,'value':_amount_text(value)}
@@ -168,7 +215,7 @@ def masked_card_text(value):
 
 def card_insights(accounts,current,views,currency,parse_amount,today):
     cards = []
-    obligation_keys = []
+    evidence = []
     for (cid,external),row in accounts.items():
         data = row['data']
         if cid not in current or data.get('type')!='CREDIT' or data.get('currencyCode')!=currency:
@@ -189,22 +236,63 @@ def card_insights(accounts,current,views,currency,parse_amount,today):
         due = civil(credit.get('balanceDueDate'))
         collection = row.get('last_run_id')
         identity = usable.get('identificationNumber')
-        explicit = usable and isinstance(identity,str) and bool(identity.strip()) and credit.get('holderType')=='MAIN'
-        obligation_keys.append((cid,identity,collection) if explicit and collection else None)
+        line_identity = identity.strip() if usable and isinstance(identity,str) and identity.strip() else None
+        account_number = data.get('number')
+        balance_identity = account_number.strip() if isinstance(account_number,str) and re.fullmatch(
+            r'[a-zA-Z0-9][a-zA-Z0-9.-]{7,79}',account_number.strip()) else None
+        observed = civil(row['observed_at'])
+        reference = civil(data.get('date')) or civil(data.get('updatedAt')) or observed
+        balance = parse_amount(data.get('balance'))
+        basis = 'USED_AMOUNT' if used is not None else 'ACCOUNT_BALANCE'
+        candidate = used if used is not None else balance
+        obligation = ('line',line_identity) if used is not None and line_identity else (
+            ('account',balance_identity) if used is None and balance_identity else ('line',line_identity) if line_identity else None)
+        confidence = (credit.get('holderType')=='MAIN' and obligation and collection and reference
+                      and observed and reference <= today)
+        if candidate is not None and candidate<0:
+            candidate=None
+        # Identifiers are compared locally and never sent in the projection.
+        evidence.append((normalize(views[cid].institution),cid,obligation,reference,basis,candidate) if confidence else None)
         cards.append({'connection_id':cid,'account_id':external,'institution':views[cid].institution,
                       'name':masked_card_text(data.get('marketingName') or data.get('name')) or 'Cartão sem nome',
                       'brand':masked_card_text(credit.get('brand')), 'status':status,'holder':credit.get('holderType'),
                       'balance':_amount_text(parse_amount(data.get('balance'))),'used':_amount_text(used),
                       'limit':_amount_text(limit),'available':_amount_text(available),'utilization':_percent(used,limit),
-                      'shared_or_unknown':not bool(usable), 'due':due, 'observed_at':row['observed_at']})
-    used = cards[0]['used'] if len(cards)==1 else None
-    # Unique reported individual obligations in one collection scope support
-    # used-balance aggregation. Credit limits have a separate shared-line policy.
-    if len(cards)>1 and all(obligation_keys) and all(card['used'] is not None for card in cards):
-        contexts = {(cid,run) for cid,_,run in obligation_keys}
-        if len(contexts)==1 and len({identity for _,identity,_ in obligation_keys})==len(cards):
-            used = format(sum((Decimal(card['used']) for card in cards),Decimal(0)),'f')
+                      'shared_or_unknown':not bool(usable), 'due':due, 'observed_at':row['observed_at'], 'reference_date':reference})
+    known = [(index,item) for index,item in enumerate(evidence) if item and item[5] is not None]
+    basis = 'USED_AMOUNT' if any(item[4]=='USED_AMOUNT' for _,item in known) else 'ACCOUNT_BALANCE'
+    comparable = [(index,item) for index,item in known if item[4]==basis]
+    most_recent = max((item[3] for _,item in comparable),default=None)
+    repeated = Counter((item[0],item[2]) for item in evidence if item)
+    connections_by_bank = defaultdict(set)
+    for _,item in comparable:
+        connections_by_bank[item[0]].add(item[1])
+    included = []
+    for index,card in enumerate(cards):
+        item = evidence[index]
+        reason = None
+        if not item:
+            reason = 'OBLIGATION_UNVERIFIED'
+        elif repeated[item[0],item[2]]>1 or len(connections_by_bank[item[0]])>1:
+            reason = 'OBLIGATION_OVERLAP'
+        elif item[5] is None:
+            reason = 'AMOUNT_UNAVAILABLE'
+        elif item[4]!=basis:
+            reason = 'DIFFERENT_BASIS'
+        elif item[3]!=most_recent:
+            reason = 'REFERENCE_DATE_MISMATCH'
+        if len(cards)==1 and card['used'] is not None and Decimal(card['used'])>=0:
+            candidate = Decimal(card['used'])
+            reason = None
+        else:
+            candidate = item[5] if item else None
+        card['consolidation_reason'] = reason
+        if not reason:
+            included.append(candidate)
+    consolidation = sum(included,Decimal(0)) if included else None
+    used = _amount_text(consolidation) if basis=='USED_AMOUNT' or (len(cards)==1 and cards[0]['used'] is not None) else None
     next_due = min((card['due'] for card in cards if card['due'] and card['due']>=today),default=None)
     return {'items':cards,'active_count':sum(card['status']=='ACTIVE' for card in cards),
-            'count':len(cards),'used':used,'limit':None,'utilization':None,'next_reported_due':next_due,
+            'count':len(cards),'used':used,'consolidated':_amount_text(consolidation),'basis':basis if consolidation is not None else None,
+            'included_count':len(included),'limit':None,'utilization':None,'next_reported_due':next_due,
             'limit_state':'NOT_ESTABLISHED','bills_state':'NOT_ESTABLISHED'}

@@ -8,7 +8,9 @@ const investments=new Map([
 ]);
 const categories=new Map([
   ['INVESTMENTS','Investimentos'],['INVESTMENT','Investimentos'],['SAME PERSON TRANSFER','Transferência entre contas próprias'],['KINDERGARTEN','Educação infantil'],
-  ['BOOKSTORE','Livrarias'],['SERVICES','Serviços'],['ELECTRICITY','Energia elétrica'],
+  ['BOOKSTORE','Livrarias'],['BOOKSTORES','Livrarias'],['LIVRARIAS','Livrarias'],['SERVICES','Serviços'],
+  ['CHILDCARE','Educação infantil'],['ELECTRICITY','Energia elétrica'],['SUPERMERCADOS','Supermercados'],
+  ['RESTAURANTES','Restaurantes'],['INTERNET','Internet'],['TELEFONIA','Telefonia'],
   ['FOOD','Alimentação'],['RESTAURANTS','Restaurantes'],['GROCERIES','Supermercado'],
   ['SHOPPING','Compras'],['TRANSPORTATION','Transporte'],['HEALTH','Saúde'],['PHARMACY','Farmácia'],
   ['EDUCATION','Educação'],['ENTERTAINMENT','Entretenimento'],['HOUSING','Moradia'],

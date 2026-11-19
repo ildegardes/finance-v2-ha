@@ -20,9 +20,11 @@ def capture_snapshot(db, connection, run, parse_amount):
         WHERE connection_id=? AND resource='item' AND state='PRESENT' AND last_run_id=? LIMIT 1""",
         (connection,run)).fetchone()
     if item:
-        status = json.loads(item['payload_json']).get('statusDetail') or {}
+        data = json.loads(item['payload_json'])
+        status = data.get('statusDetail') or {}
         detail = status.get('investments') or {}
-        if detail.get('isUpdated') is False:
+        if (data.get('status')=='OUTDATED' or data.get('executionStatus') in ('PARTIAL_SUCCESS','ERROR')
+                or detail.get('isUpdated') is False):
             return
     records = db.execute("""SELECT external_id,payload_json,observed_at FROM of_resource_records
         WHERE connection_id=? AND resource='investments' AND parent_id='' AND state='PRESENT' AND last_run_id=?""",
@@ -37,11 +39,21 @@ def capture_snapshot(db, connection, run, parse_amount):
             return
         positions.append((run,connection,record['external_id'],currency,format(value,'f'),
                           civil(data.get('date')),record['observed_at']))
+    previous = db.execute('''SELECT p.run_id FROM of_portfolio_snapshots p
+        JOIN of_sync_runs r ON r.id=p.run_id WHERE p.connection_id=? AND r.state='SUCCEEDED'
+        ORDER BY r.rowid DESC LIMIT 1''',(connection,)).fetchone()
+    if previous:
+        already = {tuple(row) for row in db.execute('''SELECT external_id,currency,value,reference_date
+            FROM of_portfolio_snapshots WHERE run_id=? AND connection_id=?''',(previous['run_id'],connection))}
+        if {(external,currency,Decimal(value),reference)
+            for external,currency,value,reference in already} == {
+            (external,currency,Decimal(value),reference) for _,_,external,currency,value,reference,_ in positions}:
+            return
     db.executemany("""INSERT INTO of_portfolio_snapshots(run_id,connection_id,external_id,currency,value,reference_date,observed_at)
         VALUES (?,?,?,?,?,?,?) ON CONFLICT(run_id,connection_id,external_id) DO NOTHING""",positions)
 
 
-def portfolio_history(db,current,currency,today,window):
+def portfolio_history(db,current,currency,today,window,*,available=None,selection=None,labels=None,positions=None):
     today = str(today)
     threshold = '0001-01-01'
     if window!='all':
@@ -49,11 +61,25 @@ def portfolio_history(db,current,currency,today,window):
         year,month=divmod(civil_today.year*12+civil_today.month-1-int(window),12)
         threshold=date(year,month+1,min(civil_today.day,monthrange(year,month+1)[1])).isoformat()
     result = {'state':'FORMING','first_observed_at':None,'points':[],'change':None,'percent':None,'window':window}
-    if len(current)!=1:
-        if current:
-            result['state']='SELECT_CONNECTION'
-        return result
-    connection = next(iter(current))
+    if available is not None:
+        candidates = set(available)
+        observed = {row[0] for row in db.execute('''SELECT DISTINCT connection_id FROM of_portfolio_snapshots
+            WHERE currency=? AND connection_id IN (SELECT value FROM json_each(?))''',(currency,json.dumps(list(candidates))))}
+        eligible = observed | (set(positions or {}) & candidates)
+        result['connections'] = [{'id':key,'label':labels[key],'eligible':key in eligible} for key in sorted(candidates)]
+        connection = selection if selection in candidates else (next(iter(current)) if len(current)==1 else
+                     next(iter(eligible)) if len(eligible)==1 else None)
+        result['connection_id'] = connection
+        if not connection:
+            result['state']='SELECT_CONNECTION' if len(eligible)>1 else 'FORMING'
+            return result
+        result['latest_position'] = (positions or {}).get(connection)
+    else:
+        if len(current)!=1:
+            if current:
+                result['state']='SELECT_CONNECTION'
+            return result
+        connection = next(iter(current))
     result['first_observed_at'] = db.execute("""SELECT min(observed_at) FROM of_portfolio_snapshots
         WHERE connection_id=? AND currency=?""",(connection,currency)).fetchone()[0]
     rows = db.execute("""SELECT p.* FROM of_portfolio_snapshots p JOIN of_sync_runs r
@@ -78,6 +104,10 @@ def portfolio_history(db,current,currency,today,window):
         amount = sum((Decimal(row['value']) for row in observations),Decimal(0))
         points[day] = {'date':day,'value':format(amount,'f')}
     result['points'] = [points[key] for key in sorted(points)]
+    result['last_observed_at'] = db.execute('''SELECT max(observed_at) FROM of_portfolio_snapshots
+        WHERE connection_id=? AND currency=?''',(connection,currency)).fetchone()[0]
+    if result['points']:
+        result['latest_point'] = result['points'][-1]
     if len(points)>1:
         first,last = (Decimal(point['value']) for point in (result['points'][0],result['points'][-1]))
         delta = last-first

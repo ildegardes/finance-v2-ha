@@ -112,19 +112,20 @@ class Overview34Tests(unittest.TestCase):
                     'limitAmount':1000,'usedAmount':100*index,'identificationNumber':str(index),
                     'isLimitFlexible':False}]}}}
         def read():
-            return card_insights(accounts,{'bank-test'},views,'BRL',_amount,'2026-10-01')
+            return card_insights(accounts,{'bank-test'},views,'BRL',_amount,'2026-11-01')
         snap=read()
         self.assertEqual(snap['used'],'600')
         self.assertIsNone(snap['limit'])
         accounts['bank-test','card-1']['data']['creditData']['disaggregatedCreditLimits'][0]['identificationNumber']='0'
-        self.assertIsNone(read()['used'])
+        self.assertEqual(read()['used'],'500')
+        self.assertEqual(read()['included_count'],2)
         self.assertEqual(read()['items'][0]['used'],'0')
 
     def test_migration13_to14_preserves_classification_and_original_tables(self):
         # A schema 13 file seeded by the previous migration ledger and synthetic objects.
         with tempfile.TemporaryDirectory() as temp:
             path=Path(temp)/'legacy.sqlite3'
-            with patch.object(migrations,'MIGRATIONS',migrations.MIGRATIONS[:-1]):
+            with patch.object(migrations,'MIGRATIONS',migrations.MIGRATIONS[:13]):
                 self.assertEqual(migrations.migrate(path),list(range(1,14)))
             with closing(connect(path)) as db:
                 db.execute("INSERT INTO categories(name,normalized_name,active) VALUES ('Categoria original','categoria original',1)")
@@ -133,8 +134,9 @@ class Overview34Tests(unittest.TestCase):
                     ('synthetic',1,0,'2026-01-01T00:00:00Z','UI:local','{}')""")
                 db.commit()
                 prior={statement for statement in db.iterdump() if '_finance_v2_schema_migrations' not in statement}
-            self.assertEqual(migrations.migrate(path),[14])
-            self.assertEqual(migrations.migrate(path),[])
+            with patch.object(migrations,'MIGRATIONS',migrations.MIGRATIONS[:14]):
+                self.assertEqual(migrations.migrate(path),[14])
+                self.assertEqual(migrations.migrate(path),[])
             with closing(connect(path)) as db:
                 self.assertTrue(prior.issubset(set(db.iterdump())))
                 self.assertEqual(db.execute('PRAGMA integrity_check').fetchone()[0],'ok')

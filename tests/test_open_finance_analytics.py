@@ -33,7 +33,7 @@ class AnalyticsTests(fixtures.CoverageTests):
                 c.execute("INSERT INTO of_resource_records(connection_id,resource,parent_id,external_id,payload_json,payload_hash,state,first_run_id,last_run_id,observed_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
                           (row['connection_id'], row['resource'], row['parent_id'], 't'+str(i), json.dumps(data), row['payload_hash'], 'PRESENT', row['first_run_id'], row['last_run_id'], row['observed_at']))
             c.commit()
-            result = analytics(c, self.settings, {'start':['2026-10-01'], 'end':['2026-10-31']})
+            result = analytics(c, self.settings, {'start':['2026-10-01'], 'end':['2026-10-31'],'page_size':['25']})
             self.assertEqual(result['total'], 31)
             self.assertEqual(Decimal(result['flow']['BANK']['outgoing']), Decimal('10.30'))
             self.assertEqual(len(result['items']), 25)

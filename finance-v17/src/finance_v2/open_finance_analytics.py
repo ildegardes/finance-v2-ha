@@ -13,11 +13,11 @@ from .open_finance_registry import connection_views
 from .domain.clock import SystemClock
 from .open_finance_portfolio import portfolio_history
 from .open_finance_classification import AUTOMATIC, Classifier, Facts, NATURES, ORIGINS, normalize
-from .open_finance_insights import banking_insights, card_insights, classification_center, classified_bucket, masked_card_text
+from .open_finance_insights import banking_insights, card_insights, classification_center, economic_evidence, masked_card_text
 from .open_finance_domain import _origin, _context_at_origin, _freshness
 
 PARAMS = {'start', 'end', 'connection_id', 'account_id', 'category', 'product',
-          'status', 'direction', 'currency', 'search', 'page', 'page_size', 'history', 'bill_id', 'nature', 'effective_category', 'origin', 'review', 'rule', 'bucket', 'group_by', 'group_order', 'center', 'effective_key', 'portfolio_window', 'investment', 'provent'}
+          'status', 'direction', 'currency', 'search', 'page', 'page_size', 'history', 'bill_id', 'nature', 'effective_category', 'origin', 'review', 'rule', 'bucket', 'group_by', 'group_order', 'center', 'effective_key', 'portfolio_window', 'portfolio_connection', 'investment', 'provent', 'sort', 'flow_component', 'card_economic'}
 
 
 def _parameters(query):
@@ -39,20 +39,23 @@ def _parameters(query):
     q.setdefault('currency', 'BRL')
     if not re.fullmatch(r'[A-Z]{3}', q['currency']):
         raise SyncError('INVALID_QUERY', 422)
-    for key, default in (('page', '1'), ('page_size', '25')):
+    for key, default in (('page', '1'), ('page_size', '50')):
         value = q.get(key, default)
         if not re.fullmatch(r'[1-9][0-9]{0,8}', value):
             raise SyncError('INVALID_PAGINATION', 422)
         q[key] = int(value)
-    if q['page_size'] not in (25, 50, 100):
+    if q['page_size'] not in (25, 50, 100, 250, 500):
         raise SyncError('INVALID_PAGINATION', 422)
-    for key in ('connection_id', 'account_id', 'category', 'search', 'bill_id'):
+    for key in ('connection_id', 'account_id', 'category', 'search', 'bill_id', 'portfolio_connection'):
         if key in q and (len(q[key]) > 256 or any(ord(ch) < 32 for ch in q[key])):
             raise SyncError('INVALID_QUERY', 422)
     choices = {'nature':NATURES,'origin':ORIGINS,'review':{'CONFIRMED','SUGGESTED','CONFLICT','UNCLASSIFIED'},
                'bucket':{'operating','capital','internal','settlement','pending'},
                'group_by':{'pattern','recurring','institution','account','direction','category'},
-               'group_order':{'count','date','magnitude'},'center':{'1'},'portfolio_window':{'3','6','12','all'}}
+               'group_order':{'count','date','magnitude'},'center':{'1'},'portfolio_window':{'1','3','6','12','all'},
+               'sort':{'date_desc','date_asc','value_desc','value_asc','description_asc','description_desc'},
+               'flow_component':{'operating','application','redemption','internal','card_payment','other','pending'},
+               'card_economic':{'purchase','installment','recognized_purchase','credit','settlement'}}
     if any(key in q and q[key] not in allowed for key,allowed in choices.items()):
         raise SyncError('INVALID_QUERY',422)
     for key in ('effective_category','rule','effective_key','investment','provent'):
@@ -116,7 +119,7 @@ def _coverage_state(checkpoint, known, missing):
 
 
 def _unfiltered(q):
-    return (not any(q.get(key) for key in ('search', 'bill_id', 'category', 'account_id', 'nature', 'effective_category', 'origin', 'review', 'rule', 'bucket', 'effective_key', 'investment', 'provent')) and q['direction'] == 'all')
+    return (not any(q.get(key) for key in ('search', 'bill_id', 'category', 'account_id', 'nature', 'effective_category', 'origin', 'review', 'rule', 'bucket', 'effective_key', 'investment', 'provent', 'flow_component', 'card_economic')) and q['direction'] == 'all')
 
 
 def _comparison(records, accounts, q, product, start, end, observed=None):
@@ -144,6 +147,41 @@ def _comparison(records, accounts, q, product, start, end, observed=None):
         if observed is not None:
             observed.append((row,day,direction,amount))
     return totals
+
+
+def _flow_component(bucket,nature):
+    if bucket in ('operating','internal'):
+        return bucket
+    if bucket=='pending':
+        return 'redemption' if nature=='REDEMPTION' else 'pending'
+    return {'APPLICATION':'application','REDEMPTION':'redemption','CARD_PAYMENT':'card_payment'}.get(nature,'other')
+
+
+def _card_activity(bucket,nature,direction,amount,metadata,decision,status):
+    if status!='POSTED' or amount is None:
+        return None
+    if bucket=='settlement' or nature=='CARD_PAYMENT':
+        return 'settlement'
+    if direction=='incoming' and amount<0 and decision['nature']=='REVERSAL' and decision['review']=='CONFIRMED':
+        return 'credit'
+    if direction!='outgoing' or amount<0 or bucket!='operating':
+        return None
+    if not isinstance(metadata,dict) and decision['origin'] not in ('MANUAL','CUSTOM'):
+        return None
+    installments = metadata.get('totalInstallments') if isinstance(metadata,dict) else None
+    return 'installment' if type(installments) is int and installments>1 else 'purchase'
+
+
+def _sort_items(items,order):
+    items.sort(key=lambda row:(row['date'],row['connection_id'],row['account_id'],row['external_id']),
+               reverse=order!='date_asc')
+    field, direction = order.rsplit('_',1)
+    if field=='description':
+        items.sort(key=lambda row: normalize(row['description']),reverse=direction=='desc')
+    elif field=='value':
+        sign = -1 if direction=='desc' else 1
+        items.sort(key=lambda row:(row['amount'] is None,
+                   sign*abs(Decimal(row['amount'])) if row['amount'] is not None else Decimal(0)))
 
 
 def analytics(c, settings, query, today=None):
@@ -256,15 +294,26 @@ def analytics(c, settings, query, today=None):
             relation = {'state': link['state'], 'target_parent_id': link['target_parent_id'], 'target_external_id': link['target_external_id']} if link else {'state': 'NOT_ESTABLISHED'}
             if q.get('bill_id') and (not link or link['state'] != 'MATCHED' or link['target_external_id'] != q['bill_id'] or link['target_parent_id'] != r['parent_id']):
                 continue
-            decision = classifier.classify(Facts.from_row(r,views[r['connection_id']].institution,product,original_category['key']),original_category['key'])
-            bucket = classified_bucket({'classification':decision,'direction':classification}) if amount is not None else 'pending'
+            facts = Facts.from_row(r,views[r['connection_id']].institution,product,original_category['key'])
+            decision = classifier.classify(facts,original_category['key'])
+            recognition = economic_evidence(decision,facts,original_category.get('name'),translation,status,amount)
+            bucket = recognition['bucket']
+            nature = recognition['nature']
+            component = _flow_component(bucket,nature)
+            credit_metadata = data.get('creditCardMetadata')
+            activity = _card_activity(bucket,nature,classification,amount,credit_metadata,decision,status) if product=='CREDIT' else None
+            if q.get('card_economic')=='recognized_purchase':
+                if activity not in ('purchase','installment'):
+                    continue
+            elif q.get('card_economic') and q['card_economic']!=activity:
+                continue
             effective = effective_category(decision,category)
             if q.get('effective_key') and amount is None:
                 continue
             selectors = {'nature':decision['nature'],'effective_category':effective['name'],
                          'effective_key':effective['key'],'investment':decision.get('investment'),
                          'provent':decision.get('provent','other') if decision['nature']=='INVESTMENT_INCOME' else None,
-                         'origin':decision['origin'],'review':decision['review'],'rule':decision.get('rule_id'),'bucket':bucket}
+                         'origin':decision['origin'],'review':decision['review'],'rule':decision.get('rule_id'),'bucket':bucket,'flow_component':component}
             if any(key in q and q[key]!=value for key,value in selectors.items()):
                 continue
             items.append({'connection_id': r['connection_id'], 'account_id': r['parent_id'], 'external_id': r['external_id'],
@@ -273,8 +322,8 @@ def analytics(c, settings, query, today=None):
                 'currency': q['currency'], 'category': category, 'direction': classification, 'status': data.get('status'), 'product': product,
                 'classification':decision,'classification_bucket':bucket,'original_category':original_category,
                 'effective_category':effective,
-                'economic_classification': 'NOT_ESTABLISHED', 'reconciliation': 'UNRECONCILED', 'bill_relation': relation})
-        items.sort(key=lambda x: (x['date'], x['connection_id'], x['account_id'], x['external_id']), reverse=True)
+                'economic_classification': 'NOT_ESTABLISHED', 'economic_recognition':recognition, 'flow_component':component, 'card_economic':activity, 'reconciliation': 'UNRECONCILED', 'bill_relation': relation})
+        _sort_items(items,q.get('sort','date_desc'))
         flow = {p: {'incoming': Decimal(0), 'outgoing': Decimal(0), 'unavailable': 0} for p in ('BANK', 'CREDIT')}
         series = {}; categories = {}; economic_categories = {}; observed = {p: set() for p in flow}
         for item in items:
@@ -288,15 +337,16 @@ def analytics(c, settings, query, today=None):
                 category = item['effective_category']
                 for totals in (categories,economic_categories) if item['classification_bucket']=='operating' else (categories,):
                     key = (product,category['key'])
-                    group = totals.setdefault(key,[category,Decimal(0),set()])
+                    group = totals.setdefault(key,[category,Decimal(0),set(),0])
                     group[1] += amount
                     group[2].add(item['classification']['review'])
+                    group[3] += 1
         for total in flow.values():
             for name in ('incoming', 'outgoing'): total[name] = format(total[name], 'f')
-        category_rows = [{**category, 'product': p, 'value': format(v, 'f'), 'review': sorted(review)}
-                         for (p, _), (category, v, review) in categories.items()]
-        economic_ranking = sorted(({**category,'product':p,'value':format(v,'f'),'review':sorted(review)}
-                                  for (p,_),(category,v,review) in economic_categories.items() if p=='BANK'),
+        category_rows = [{**category, 'product': p, 'value': format(v, 'f'), 'review': sorted(review),'count':count}
+                         for (p, _), (category, v, review,count) in categories.items()]
+        economic_ranking = sorted(({**category,'product':p,'value':format(v,'f'),'review':sorted(review),'count':count}
+                                  for (p,_),(category,v,review,count) in economic_categories.items() if p=='BANK'),
                                  key=lambda row:(-Decimal(row['value']),row['key']))
         ranking = {}
         for product in ('BANK', 'CREDIT'):
@@ -386,6 +436,7 @@ def analytics(c, settings, query, today=None):
             flow[product]['basis'] = 'DECLARED_GROSS_MOVEMENTS'
             flow[product]['classification_completeness'] = 'NOT_ESTABLISHED' if any(item['product'] == product for item in items) else 'NO_DATA'
 
+        pages = max(1,(len(items)+q['page_size']-1)//q['page_size'])
         start = (q['page'] - 1) * q['page_size']
         if time.monotonic()>deadline:
             raise SyncError('QUERY_BUDGET_EXCEEDED',503)
@@ -400,9 +451,12 @@ def analytics(c, settings, query, today=None):
             for row,day,direction,amount in observations:
                 cid=row['connection_id']
                 category=_category(row['data'],cid)
-                decision=classifier.classify(Facts.from_row(row,views[cid].institution,'BANK',category['key']),category['key'])
+                facts=Facts.from_row(row,views[cid].institution,'BANK',category['key'])
+                decision=classifier.classify(facts,category['key'])
+                recognition=economic_evidence(decision,facts,category['name'],
+                    translations.get((cid,row['data'].get('categoryId'))),row['data'].get('status'),amount)
                 historical.append({'product':'BANK','date':day,'direction':direction,'amount':format(amount,'f'),
-                    'classification':decision,'classification_bucket':classified_bucket({'classification':decision,'direction':direction}),
+                    'classification':decision,'classification_bucket':recognition['bucket'],
                     'connection_id':cid,'institution':views[cid].institution})
             before=banking_insights(historical,{'coverage_state':'COMPLETE'})
             if before['coverage']=='COMPLETE_BANK_SCOPE':
@@ -413,7 +467,26 @@ def analytics(c, settings, query, today=None):
         if time.monotonic()>deadline:
             raise SyncError('QUERY_BUDGET_EXCEEDED',503)
         cards = card_insights(accounts,current,views,q['currency'],_amount,today or str(SystemClock(settings.timezone).today()))
-        history = portfolio_history(c,current,q['currency'],today or SystemClock(settings.timezone).today(),q.get('portfolio_window','6')) if 'portfolio_window' in q else None
+        history = None
+        if 'portfolio_window' in q:
+            preferred = q.get('portfolio_connection')
+            if preferred and preferred not in eligible:
+                raise SyncError('CONNECTION_NOT_FOUND',404)
+            portfolio_positions = {cid:inst['investments']['value'] for cid,inst in institutions.items()
+                                   if inst['current'] and inst['investments']['value'] is not None}
+            if preferred and preferred not in current:
+                scoped_positions = c.execute('''SELECT payload_json FROM of_resource_records
+                    WHERE connection_id=? AND resource='investments' AND state='PRESENT' LIMIT 30001''',(preferred,)).fetchall()
+                if len(scoped_positions)>30000 or time.monotonic()>deadline:
+                    raise SyncError('QUERY_BUDGET_EXCEEDED',503)
+                values = [_amount(data.get('balance')) for row in scoped_positions
+                          if (data:=json.loads(row['payload_json'],parse_float=Decimal)).get('currencyCode')==q['currency']]
+                if any(value is not None for value in values):
+                    portfolio_positions[preferred] = format(sum((value for value in values if value is not None),Decimal(0)),'f')
+            history = portfolio_history(c,current,q['currency'],today or SystemClock(settings.timezone).today(),q['portfolio_window'],
+                available=eligible,selection=preferred,labels={key:view.institution for key,view in eligible.items()},positions=portfolio_positions)
+            if history.get('connection_id') and history.get('latest_position') is None:
+                history['latest_position'] = (history.get('latest_point') or {}).get('value')
         center = classification_center(items,q.get('group_by','pattern'),q.get('group_order','count')) if q.get('center') else None
         return {'contract': 'OF-ANALYTICS/1', 'filters': {k: v for k, v in q.items() if not k.startswith('_')},
             'positions': positions, 'flow': flow, 'institutions': list(institutions.values()),
@@ -421,5 +494,5 @@ def analytics(c, settings, query, today=None):
             'economic_category_ranking':economic_ranking,'portfolio_history':history,
             'series': [{'date': d, 'product': p, 'direction': dr, 'value': format(v, 'f')} for (d, p, dr), v in sorted(series.items())],
             'categories': sorted(category_rows, key=lambda r: Decimal(r['value']), reverse=True), 'category_ranking': ranking,
-            'items': items[start:start + q['page_size']], 'total': len(items), 'page': q['page'],
+            'items': items[start:start + q['page_size']], 'total': len(items), 'page': q['page'], 'total_pages':pages,
             'has_more': start + q['page_size'] < len(items), 'coverage': coverage}

@@ -53,6 +53,10 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || path.join(process.env.
     await shot('aplic-aut-mais-visao-geral',automatic);
     await automatic.getByText('Aplic Aut Mais').click();
     await overview.locator('.of-portfolio-plot').waitFor();
+    assert.deepEqual(await overview.locator('.of-kpi-group').evaluateAll(groups=>groups.map(group=>group.children.length)),[3,3]);
+    assert.equal(await overview.locator('[data-portfolio-connection]').inputValue(),'bank-test');
+    assert.equal(await overview.locator('.of-card-compact').count(),4);
+    assert.match(await overview.locator('.of-card-insight').innerText(),/4 de 4 considerados/);
     await shot('investimentos-com-historico',overview.locator('.of-portfolio'));
     await shot('visao-geral');
     await overview.getByText('Qualidade dos dados',{exact:true}).click();
@@ -80,13 +84,26 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || path.join(process.env.
     assert.equal(await privacy.getAttribute('aria-expanded'),'false');
     assert.equal(await privacy.evaluate(element=>document.activeElement===element),true);
     await shot('cartoes',overview.locator('.of-card-insight'));
+    if(dir){
+      await page.route('**/api/v2/open-finance/analytics?*',async route=>{
+        const response=await route.fetch(), payload=await response.json();
+        payload.cards.included_count=3;
+        payload.cards.consolidated='379.50';
+        payload.cards.items[3]={...payload.cards.items[3],balance:null,used:null,consolidation_reason:'AMOUNT_UNAVAILABLE'};
+        await route.fulfill({response,json:payload});
+      },{times:1});
+      await overview.getByRole('button',{name:'Aplicar',exact:true}).click();
+      await overview.locator('.of-card-insight').getByText(/3 de 4 considerados/).waitFor();
+      await shot('cartoes-subtotal',overview.locator('.of-card-insight'));
+      await overview.getByRole('button',{name:'Aplicar',exact:true}).click();
+      await overview.locator('.of-card-insight').getByText(/4 de 4 considerados/).waitFor();
+    }
     await shot('rendimentos',overview.locator('.of-income-insight'));
     await overview.getByLabel('Visão do fluxo').selectOption('adjusted');
     await overview.getByRole('heading',{name:'Resultado econômico identificado'}).waitFor();
     await overview.getByText('Como o fluxo bruto se decompõe').click();
     await shot('fluxo-ajustado',overview.locator('.of-bank-flow'));
-    await overview.getByLabel('Visão do fluxo').selectOption('internal');
-    await overview.getByRole('heading',{name:'Movimentações internas',exact:true}).waitFor();
+    assert.deepEqual(await overview.getByLabel('Visão do fluxo').locator('option').allTextContents(),['Econômica','Bancária']);
     await overview.getByLabel('Visão do fluxo').selectOption('gross');
     await shot('fluxo-bruto',overview.locator('.of-bank-flow'));
     const card=overview.locator('.of-card-compact').first();
@@ -173,6 +190,61 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || path.join(process.env.
     await page.locator('.summary-grid').waitFor();
     assert.equal(await page.locator('.finance-chart,.donut-chart').count(),0);
     assert.doesNotMatch(await page.locator('#view').ariaSnapshot(),/R\$\s*\d/);
+    await page.goto(origin+'/app/#open-finance');
+    await overview.locator('.of-six-kpis').waitFor();
+    await selectPrivacy(page,'visible');
+    await page.getByRole('tab',{name:'Movimentações'}).click();
+    await page.setViewportSize({width:1440,height:940});
+    await flow.getByRole('button',{name:'Limpar filtros'}).click();
+    await flow.locator('input[name=currency]').fill('BRL');
+    await flow.locator('input[name=start]').fill('2026-10-01');
+    await flow.locator('input[name=end]').fill('2026-10-31');
+    await flow.locator('input[name=search]').fill('movimento de evidência');
+    await flow.getByRole('button',{name:'Aplicar filtros'}).click();
+    await flow.getByText(/de 119 movimentações/).first().waitFor();
+    const pageSize=flow.getByLabel('Registros por página'),order=flow.getByLabel('Ordenação'),group=flow.getByLabel('Agrupamento');
+    for(const size of [25,50,100,250,500]){
+      await pageSize.selectOption(String(size));
+      const pagination=flow.getByRole('navigation',{name:'Paginação superior'});
+      await pagination.getByText(new RegExp('1–'+Math.min(size,119)+' de 119')).waitFor();
+      assert.equal(await flow.locator('.of-flow-item').count(),Math.min(size,119));
+      await shot('paginacao-'+size,flow.locator('.of-presentation'));
+      if(size===100){
+        await pagination.getByRole('button',{name:'Próxima'}).click();
+        await flow.getByText(/101–119 de 119/).first().waitFor();
+        await flow.getByRole('navigation',{name:'Paginação inferior'}).getByRole('button',{name:'Primeira'}).click();
+        await flow.getByText(/1–100 de 119/).first().waitFor();
+      }
+    }
+    await pageSize.selectOption('25');
+    await order.selectOption('value_desc');
+    await flow.locator('.of-flow-item').first().getByText('Movimento de evidência 119',{exact:true}).waitFor();
+    assert.equal(await group.inputValue(),'none');
+    await shot('movimentacoes-ordenacao-valor',flow.locator('.of-presentation'));
+    await selectPrivacy(page,'full');
+    assert.equal(await order.inputValue(),'date_desc');
+    assert.equal(await order.locator('option[value=value_desc]').evaluate(option=>option.disabled),true);
+    await flow.locator('.of-flow-item').first().waitFor();
+    assert.doesNotMatch(await flow.ariaSnapshot(),/R\\$\\s*\\d/);
+    await selectPrivacy(page,'masked');
+    assert.equal(await order.inputValue(),'value_desc');
+    await order.selectOption('date_asc');
+    await group.selectOption('category');
+    await flow.locator('.of-flow-date').filter({hasText:'Livrarias'}).waitFor();
+    await shot('movimentacoes-filtros',flow.locator('form[aria-label="Filtros de movimentações"]'));
+    await shot('movimentacoes-ordenacao-data',flow.locator('.of-presentation'));
+    await page.getByRole('tab',{name:'Conexões'}).click();
+    const sync=page.locator('.of-sync-preferences');
+    await sync.getByLabel('Intervalo').waitFor();
+    assert.equal(await sync.getByLabel('Intervalo').inputValue(),'24');
+    await sync.getByLabel('Intervalo').selectOption('6');
+    await sync.getByRole('button',{name:'Salvar configuração'}).click();
+    await sync.getByText('Configuração salva.').waitFor();
+    await shot('configuracao-sincronizacao',sync);
+    await page.reload();
+    await page.getByRole('tab',{name:'Conexões'}).click();
+    await sync.getByLabel('Intervalo').waitFor();
+    assert.equal(await sync.getByLabel('Intervalo').inputValue(),'6');
     assert.deepEqual(errors,[]);
     process.stdout.write('PASS: classification, audit, retrospective, cards, income, privacy and four viewports\n');
   }finally{await browser.close();}

@@ -20,7 +20,7 @@ class ReleasePolicyTests(DatabaseCase):
             with self.assertRaises(SyncError) as error:
                 self.worker()._run_one(self.config.pluggy_connections[0],respect_schedule=True)
             self.assertEqual(error.exception.code,'AUTO_SYNC_RECENT')
-            self.assertTrue(1 <= error.exception.retry_after <= 3600)
+            self.assertTrue(1 <= error.exception.retry_after <= 86400)
         self.assertEqual(len(self.providers.banks['itau'].visited),calls)
         with closing(connect(self.path)) as c:self.assertEqual(c.execute('SELECT count(*) FROM of_sync_runs').fetchone()[0],1)
     def test_failure_backoff_does_not_block_explicit_manual_collection(self):
