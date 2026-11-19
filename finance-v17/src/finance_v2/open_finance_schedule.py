@@ -20,6 +20,22 @@ def allowed(settings, connection):
     return settings.open_finance_auto_sync_allowed is not False and connection.enabled and connection.auto_sync_enabled
 
 
+def policy_reason(settings,connection,enabled):
+    if connection.historical or connection.lifecycle=='ARCHIVED':
+        return 'ARCHIVED'
+    if connection.lifecycle=='DRAFT':
+        return 'NOT_ACTIVATED'
+    if not connection.enabled:
+        return 'CONNECTION_DISABLED'
+    if settings.open_finance_auto_sync_allowed is False:
+        return 'SUPERVISOR_DISABLED'
+    if not enabled:
+        return 'GLOBAL_PREFERENCE_DISABLED'
+    if not connection.auto_sync_enabled:
+        return 'CONNECTION_AUTO_DISABLED'
+    return None
+
+
 def _datetime(value):
     if not isinstance(value,str) or len(value)>50:
         return None
@@ -58,21 +74,33 @@ def claim_delay(db,connection,interval,now):
             max(0,ceil((next_at-now).total_seconds())))
 
 
+def legacy_binding_mismatches(db,settings):
+    from .open_finance import OpenFinanceService
+    bindings={row['id']:row['binding_hash'] for row in db.execute(
+        "SELECT c.id,c.binding_hash FROM of_connections c LEFT JOIN of_connection_registry r ON r.connection_id=c.id "
+        "WHERE r.source IS NULL OR r.source='LEGACY'")}
+    return {cfg.id for cfg in settings.pluggy_connections if cfg.id in bindings and
+            bindings[cfg.id]!=OpenFinanceService._binding(cfg)}
+
+
 def report(db,settings,now):
     enabled,interval,revision = preferences(db,settings)
     views = connection_views(db,settings)
-    permission = any(allowed(settings,view) for view in views.values())
+    mismatched=legacy_binding_mismatches(db,settings)
+    permission = any(allowed(settings,view) and view.id not in mismatched for view in views.values())
     rows = []
     for view in views.values():
-        if not view.enabled or view.historical:
-            continue
-        effective = enabled and allowed(settings,view)
+        reason=policy_reason(settings,view,enabled)
+        if not reason and view.id in mismatched:
+            reason='CONNECTION_BINDING_CHANGED'
+        effective=reason is None
         latest,success,next_at = run_state(db,view.id,interval,now)
         item = db.execute("""SELECT payload_json, observed_at FROM of_resource_records
             WHERE resource='item' AND connection_id=? AND state='PRESENT' LIMIT 1""",(view.id,)).fetchone()
         data = json.loads(item['payload_json']) if item else {}
         provider_next = _datetime(data.get('nextAutoSyncAt'))
-        rows.append({'connection_id':view.id,'institution':view.institution,'effective':effective,
+        rows.append({'connection_id':view.id,'institution':view.institution,'effective':effective,'reason':reason,
+            'action_required':latest['error_code'] if latest and latest['error_code'] in ACTION_REQUIRED else None,
             'last_pluggy_update':_iso(_datetime(data.get('lastUpdatedAt'))),
             'metadata_observed_at':item['observed_at'] if item else None,
             'next_pluggy_update':_iso(provider_next) if provider_next and provider_next>now else None,
@@ -80,7 +108,7 @@ def report(db,settings,now):
             'next_attempt':_iso(max(now,next_at)) if effective and (not latest or latest['state']!='RUNNING') else None,
             'state':latest['state'] if latest else 'NOT_RUN',
             'last_error':latest['error_code'] if latest else None})
-    return {'requested_enabled':enabled,'effective_enabled':enabled and permission,'available':permission,
+    return {'requested_enabled':enabled,'effective_enabled':any(row['effective'] for row in rows),'available':permission,
             'interval_hours':interval,'revision':revision,'interval_options':list(HOURS),'connections':rows}
 
 

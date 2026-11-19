@@ -2,7 +2,7 @@ const key=value=>String(value??'').normalize('NFKC').trim().toUpperCase().replac
 
 const investments=new Map([
   ['EQUITY','Renda variável'],['FIXED INCOME','Renda fixa'],['MUTUAL FUND','Fundos de investimento'],
-  ['FUND','Fundos de investimento'],['STOCK','Ações'],['ETF','ETF'],['CDB','CDB'],['LCI','LCI'],
+  ['FUND','Fundos de investimento'],['OTHER','Outros investimentos'],['SECURITY','Previdência'],['STOCK','Ações'],['ETF','ETF'],['CDB','CDB'],['LCI','LCI'],
   ['LCA','LCA'],['TREASURY','Títulos do Tesouro'],['PENSION','Previdência'],['CRYPTO','Criptoativos'],
   ['COE','COE'],['SAVINGS','Poupança'],['DEBENTURE','Debêntures'],['FII','Fundos imobiliários'],
 ]);
@@ -37,6 +37,12 @@ const types=new Map([
 export const statusLabel=(value,fallback='Situação não informada')=>states.get(key(value))??(key(value)?'Situação não identificada':fallback);
 export const runStateLabel=value=>key(value)==='FAILED'?'Falhou':statusLabel(value);
 export const coverageLabel=value=>states.get(key(value))??'Cobertura não estabelecida';
+const internationalClasses={FIXED_INCOME:'Renda fixa',STOCK:'Stocks',REIT:'REITs',ETF:'ETFs',
+  FUND:'Fundos de investimento',FII:'FIIs',OTHER:'Outros instrumentos',UNKNOWN:'Não classificado'};
+
+export const investmentClassLabel=value=>String(value).startsWith('PLUGGY:')?
+  classLabel(value.slice(7)):internationalClasses[value]||classLabel(value);
+
 export const classLabel=value=>investments.get(key(value))??(key(value)&&key(value)!=='NÃO INFORMADA'?'Classe não identificada':'Classe não informada');
 export const typeLabel=value=>types.get(key(value))??(key(value)?'Tipo não identificado':'Tipo não informado');
 export function categoryLabel(category){

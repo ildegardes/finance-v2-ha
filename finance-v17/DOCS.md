@@ -1,4 +1,12 @@
-# Finance V17 0.1.38-open-finance.1
+# Finance V17 0.1.39-open-finance.1
+
+A versão mantém o schema 16. A Visão geral usa crédito utilizado nos indicadores e na lista de cartões. Faturas e pagamentos ficam nas telas específicas. As posições por instituição mostram primeiro a moeda original. A linha seguinte informa o equivalente na moeda selecionada, quando houver referência e cotação PTAX elegíveis.
+
+O cache PTAX preenche automaticamente datas financeiras que faltam. A atualização manual continua disponível em **Open Finance › Conexões › SnapTrade › Cotações PTAX**. Em **Conexões**, confira o motivo e a ação sugerida quando a coleta automática estiver desativada. Para uma conexão gerenciada, o proprietário pode ajustar a política individual em **Instituições Financeiras**, pelo acesso privado.
+
+Os critérios e as verificações estão em [Paridade Pluggy e consolidação](../docs/open-finance/PARIDADE_039.md).
+
+## Finance V17 0.1.38-open-finance.1
 
 Faça um backup e atualize pelo Supervisor. A versão usa o schema 16. Abra **Open Finance › Visão geral** e escolha a moeda no cabeçalho. O navegador guarda essa preferência. BRL é a seleção inicial. A aba Investimentos mantém os valores originais e a distribuição por mercado.
 

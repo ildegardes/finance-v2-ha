@@ -23,8 +23,11 @@ export function cardIdentity(card,esc){
     if(/\bvisa\b/.test(brand||name)&&/\binfinite\b/.test(name)){product='infinite';label='Unlimited Visa Infinite';}
     if(/\b(?:mastercard|mc)\b/.test(brand||name)&&/\bblack\b/.test(name)){product='black';label='Unlimited Mastercard Black';}
   }
-  const network=/\bvisa\b/.test(brand||name)?'Visa':/\b(?:mastercard|mc)\b/.test(brand||name)?'Mastercard':'';
+  const network=/\bvisa\b/.test(brand||name)?'Visa':/\b(?:mastercard|mc)\b/.test(brand||name)?'Mastercard':
+    brand==='elo'?'Elo':brand==='amex'||brand==='american express'?'American Express':brand==='hipercard'?'Hipercard':'';
+  const explicitTail=/^\d{4}$/.test(card.tail||'')?card.tail:null;
+  if(explicitTail)label=label.replace(new RegExp('(?:[ •*xX-]+)'+explicitTail+'$'),'');
   const tail=/[•*]{2,}\s*(\d{4})(?!\d)/.exec(card.name||'')?.[1];
-  return {label:label.replace(/\s*[•*]{2,}\s*\d{4}(?!\d)/,'').trim(),tail,network,
+  return {label:label.replace(/\s*[•*]{2,}\s*\d{4}(?!\d)/,'').trim(),tail:explicitTail||tail,network,
     mark:'<span class="of-card-mark '+product+'" aria-hidden="true"><i></i></span>'};
 }

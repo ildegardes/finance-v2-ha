@@ -1,3 +1,9 @@
+## 0.1.39-open-finance.1
+
+- Cartões usam o crédito utilizado documentado pela Pluggy. O resumo e a lista compartilham o cálculo, com limites verificáveis e motivos de exclusão.
+- A carteira preserva as categorias Pluggy e exibe valores originais em destaque. O cache PTAX busca automaticamente as datas financeiras das posições, dos movimentos e dos snapshots.
+- A coleta automática informa a política efetiva e permite ao proprietário configurar cada conexão gerenciada. A navegação usa ícones distintos.
+
 ## 0.1.38-open-finance.1
 
 - Define a moeda de apresentação no cabeçalho e consolida Pluggy e SnapTrade nos seis indicadores.

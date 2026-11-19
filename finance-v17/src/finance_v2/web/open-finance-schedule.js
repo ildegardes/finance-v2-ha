@@ -2,6 +2,16 @@ import {createQueryGeneration} from './query-generation.js';
 import {openFinanceError} from './open-finance-errors.js';
 import {institutionName,runStateLabel} from './open-finance-labels.js';
 
+const policyMessages={
+  ARCHIVED:'Conexão arquivada. Consulte seu histórico nas Instituições Financeiras.',
+  NOT_ACTIVATED:'Valide e ative a conexão nas Instituições Financeiras.',
+  CONNECTION_DISABLED:'Conexão suspensa. Para retomar, valide e reative nas Instituições Financeiras.',
+  SUPERVISOR_DISABLED:'Habilite a coleta automática nas opções do add-on.',
+  GLOBAL_PREFERENCE_DISABLED:'Habilite a preferência global de coleta nesta tela.',
+  CONNECTION_AUTO_DISABLED:'Habilite a coleta automática da conexão nas Instituições Financeiras ou nas opções do add-on.',
+  CONNECTION_BINDING_CHANGED:'Confira o vínculo do Item e as credenciais antes de coletar.',
+};
+
 export function mountSyncPreferences({host,panel,api,esc,navigation}){
   const section=document.createElement('section');
   section.className='panel of-sync-preferences';
@@ -15,11 +25,13 @@ export function mountSyncPreferences({host,panel,api,esc,navigation}){
       [['Atualização do Item na Pluggy',instant(row.last_pluggy_update)],['Próxima atualização prevista na Pluggy',instant(row.next_pluggy_update)],
        ['Última sincronização local bem-sucedida',instant(row.last_success)],['Última tentativa local',instant(row.last_attempt)],
        ['Próxima coleta local prevista',row.effective?instant(row.next_attempt):'Desativada'],
+       ...(row.reason?[['Motivo e ação',policyMessages[row.reason]||'Confira a política da conexão.']]:[]),
+       ...(row.action_required?[['Ação na conexão','Confira o consentimento e valide o Item antes de repetir a coleta.']]:[]),
        ['Estado da última tentativa',row.state==='NOT_RUN'?'Sem tentativas':runStateLabel(row.state)],
        ['Falha mais recente',row.last_error?openFinanceError(row.last_error):'Sem falha na última tentativa']]
       .map(([label,value])=>'<div><dt>'+label+'</dt><dd>'+esc(value)+'</dd></div>').join('')+'</dl></li>').join('');
     target.innerHTML='<form class="of-presentation" aria-label="Preferências de sincronização">'+
-      '<label><input type="checkbox" name="enabled" '+(data.effective_enabled?'checked':'')+' '+(data.available?'':'disabled')+'> Habilitar coleta automática</label>'+
+      '<label><input type="checkbox" name="enabled" '+(data.requested_enabled?'checked':'')+' '+(data.available?'':'disabled')+'> Habilitar coleta automática</label>'+
       '<label>Intervalo<select name="hours">'+data.interval_options.map(hours=>'<option value="'+hours+'" '+(hours===data.interval_hours?'selected':'')+'>'+hours+(hours===1?' hora':' horas')+'</option>').join('')+'</select></label>'+
       '<button type="submit" '+(data.available?'':'disabled')+'>Salvar configuração</button></form>'+
       '<p>'+(data.available?'A configuração vale para as próximas coletas locais, sem reiniciar.':'A política do Supervisor ou da conexão impede a coleta automática.')+' A coleta manual continua disponível.</p>'+

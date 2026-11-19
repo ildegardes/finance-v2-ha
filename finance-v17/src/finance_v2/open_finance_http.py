@@ -50,6 +50,7 @@ OPERATIONS = (
     ('POST','registry/archive/inspect','registry_archive_inspect'),
     ('POST','registry/archive','registry_archive'),
     ('POST','registry/disable','registry_disable'),
+    ('POST','registry/auto-sync','registry_auto_sync'),
     ('POST','registry/rename','registry_rename'),
     ('POST','registry/rotate-credentials','registry_rotate_credentials'),
     ('POST','registry/delete/inspect','registry_delete_inspect'),
@@ -135,6 +136,10 @@ def dispatch(app,operation,identity,body,query,*,request_id=None):
                 raise SyncError('INVALID_REQUEST',422)
             return admin.rename(body['connection_id'], actor=identity.client_id,
                                 revision=body['revision'], label=body['label']),200
+        if operation == 'open_finance_registry_auto_sync':
+            if set(body)!={'connection_id','revision','confirmed','enabled'} or not _connection_id(body['connection_id']):
+                raise SyncError('INVALID_REQUEST',422)
+            return admin.set_auto_sync(actor=identity.client_id,**body),200
         if operation == 'open_finance_registry_rotate_credentials':
             if set(body) != {'connection_id','revision','confirmed','client_id','client_secret'} or not _connection_id(body['connection_id']):
                 raise SyncError('INVALID_REQUEST',422)
@@ -400,6 +405,8 @@ def openapi_paths():
                     fields['confirmation']=enum('EXCLUIR DEFINITIVAMENTE')
                 elif op not in {'registry_archive_inspect','registry_delete_inspect','registry_details','registry_connector_catalog'}:
                     fields['confirmed']={'type':'boolean','const':True}
+                if op=='registry_auto_sync':
+                    fields['enabled']={'type':'boolean'}
                 if op=='registry_rotate_credentials':
                     fields.update({name:{'type':'string','minLength':1,'maxLength':512,'writeOnly':True}
                                    for name in ('client_id','client_secret')})

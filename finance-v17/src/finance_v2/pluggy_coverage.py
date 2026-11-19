@@ -92,7 +92,14 @@ def project(resource, row):
 
     if not isinstance(row, dict):
         raise ValueError('COVERAGE_INVALID_ROW')
-    payload = walk(row, schema)
+    payload=walk(row,schema)
+    if resource=='accounts' and row.get('type')=='CREDIT':
+        # 'number' stays excluded from the provider contract. Only the
+        # documented last-four form is kept as local display metadata.
+        number=row.get('number')
+        match=re.fullmatch(r'[xX*• -]*([0-9]{4})',number.strip()) if isinstance(number,str) else None
+        if match:
+            payload['cardLastFour']=match[1]
     encoded = json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(',', ':'), allow_nan=False)
     if len(encoded) > 250000:
         raise ValueError('COVERAGE_RECORD_LIMIT')

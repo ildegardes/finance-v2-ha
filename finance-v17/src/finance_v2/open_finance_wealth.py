@@ -11,6 +11,7 @@ from .open_finance_query import read_view
 from .open_finance_registry import connection_views
 from .open_finance_classification import normalize
 from .portfolio_fx import FX
+from .portfolio_values import DashboardValues, asset_class, investment_projection, observation
 from .snaptrade_normalize import code, day, decimal, text
 
 MAX_ROWS=30000
@@ -95,13 +96,17 @@ def _pluggy(db,settings,include_history,*,records=None,views=None):
 
 def _snaptrade(db,include_history,settings,activities=False):
     accounts={}
-    for row in _execute(db,'''SELECT a.id,a.label,a.connection_id,a.state,a.suffix,c.institution,c.provider_state,
+    for row in _execute(db,'''SELECT a.id,a.label,a.connection_id,a.state,a.suffix,c.institution,c.brokerage,c.provider_state,
             c.archived,c.excluded,c.paused,a.net_value,a.net_currency FROM st_accounts a
             JOIN st_connections c ON a.connection_id=c.id ORDER BY c.institution,a.id'''):
         current=bool(settings.snaptrade_enabled and not row['archived'] and not row['excluded']
                      and row['provider_state']=='AVAILABLE' and row['state']=='AVAILABLE')
         if current or include_history:
-            accounts[row['id']]={**dict(row),'account_id':row['id'],'provider':'SNAPTRADE','state':'AVAILABLE' if current else 'ARCHIVED'}
+            item=dict(row)
+            if row['brokerage'].casefold() in ('schwab','charles-schwab','charles schwab'):
+                item['institution']='Charles Schwab'
+            item.pop('brokerage',None)
+            accounts[row['id']]={**item,'account_id':row['id'],'provider':'SNAPTRADE','state':'AVAILABLE' if current else 'ARCHIVED'}
     if not accounts:
         return [],[],[],False
     # Fail closed for overlapping broker authorization sets. An owner may
@@ -131,14 +136,12 @@ def _scope(row,q):
                                                    ('label','ticker','institution','description','provider_kind')))
 
 
-def _summary(rows,balances,accounts,target,fx,today,overlap,scope,quality):
+def _summary(db,rows,balances,accounts,target,fx,today,overlap,scope,quality):
     totals=defaultdict(lambda: {'positions':None,'cash':None,'count':0})
     composition={key:defaultdict(lambda: defaultdict(Decimal)) for key in ('country','kind','provider','institution')}
     references=set()
     missing=0
-    converted={'positions':Decimal(0),'cash':Decimal(0)}
-    converted_count={'positions':0,'cash':0}
-    fx_refs={}
+    values=DashboardValues(db,target,today,fx=fx)
     for name,source,field in (('positions',rows,'market_value'),('cash',balances,'cash')):
         for row in source:
             currency=row.get('currency')
@@ -157,26 +160,24 @@ def _summary(rows,balances,accounts,target,fx,today,overlap,scope,quality):
             references.add(reference)
             if reference is None and target=='original':
                 missing+=1
-            if target!='original':
-                value,quote=fx.convert(original,currency,target,reference)
-                if value is None or reference is None:
-                    missing+=1
-                else:
-                    converted[name]+=value
-                    converted_count[name]+=1
-                    if quote:
-                        fx_refs[quote['date']]=quote
     warning=overlap and not scope.get('connection_id') and not scope.get('account_id')
+    investment,classes=investment_projection(rows,values,overlap=warning,partial=bool(quality),classes=True)
+    cash=values.total([observation(row,'cash') for row in balances],overlap=warning,partial=bool(quality),position=True)
+    metrics={'positions':investment,'cash':cash}
     date_comparable=len(references)<=1 and None not in references
-    stale=any(reference and (date.fromisoformat(today)-date.fromisoformat(reference)).days>7 for reference in references)
+    stale=any(metric['stale'] for metric in metrics.values())
+    missing+=sum(metric['missing_reasons'].get('RATE_UNAVAILABLE',0)+metric['missing_reasons'].get('REFERENCE_UNAVAILABLE',0)
+                 for metric in metrics.values())
     incomplete=warning or missing or not date_comparable or stale or quality
+    subtotal={name:metric['amounts'].get(target) if target!='original' and not warning else None
+              for name,metric in metrics.items()}
     parts={key:{name:{currency:_format(value) for currency,value in sorted(group.items())}
                 for name,group in sorted(values.items())} for key,values in composition.items()}
     return {'original':{k:{**v,'positions':_format(v['positions']),'cash':_format(v['cash'])} for k,v in sorted(totals.items())},
             'regions':parts.pop('country'),'composition':parts,
-            'presentation':target,'converted':{k:_format(v) if converted_count[k] and not incomplete else None for k,v in converted.items()},
-            'converted_subtotal':{k:_format(v) if converted_count[k] and not warning else None for k,v in converted.items()},
-            'quote_dates':list(fx_refs.values()),'overlap':bool(warning),'missing':missing,'stale':stale,
+            'presentation':target,'converted':{k:v if not incomplete else None for k,v in subtotal.items()},
+            'converted_subtotal':subtotal,'investment_metric':investment,'allocation':classes,
+            'quote_dates':list(values.quotes.values()),'overlap':bool(warning),'missing':missing,'stale':stale,
             'date_comparable':date_comparable,'partial_resources':bool(quality),'account_count':len(accounts)}
 
 
@@ -374,11 +375,14 @@ def report(db,settings,query,today):
             WHERE state IN ('FAILED','UNAVAILABLE','PARTIAL') AND resource IN ('balances','positions')
               AND account_id IN (SELECT value FROM json_each(?))''',
             (json.dumps([row['id'] for row in accounts if row['provider']=='SNAPTRADE']),)).fetchone()[0]
-        summary=_summary(rows,matched_balances,accounts,q.get('presentation','original'),fx,today,overlap,q,missing_resources)
+        summary=_summary(db,rows,matched_balances,accounts,q.get('presentation','original'),fx,today,overlap,q,missing_resources)
         target=q.get('presentation','original')
         for row in rows:
-            value,quote=fx.convert(row['market_value'],row['currency'],target,day(row['reference_at'])) if target!='original' else (None,None)
+            reference=day(row['reference_at'])
+            value,quote=fx.convert(row['market_value'],row['currency'],target,reference) if (
+                target!='original' and (not reference or reference<=today)) else (None,None)
             row['presented_value'],row['fx']=_format(value),quote
+            row['asset_class']=asset_class(row)
             row['lots']=json.loads(row.pop('lots_json')) if row.get('lots_json') else None
             row.pop('lots_json',None)
         rows.sort(key=lambda row:(normalize(row.get('ticker') or row['label'] or ''),row['account_id'],row['instrument_id']))

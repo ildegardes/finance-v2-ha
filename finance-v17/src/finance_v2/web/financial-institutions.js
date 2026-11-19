@@ -212,6 +212,16 @@ export async function showFinancialInstitutions({api, view, heading, navigation}
     });
   }
 
+  function setAutomatic(row) {
+    const enabled=!row.auto_sync_enabled;
+    if (!window.confirm(enabled?'Habilitar a coleta automática deste Item?':'Pausar a coleta automática deste Item?')) return;
+    run(async () => {
+      await api('/open-finance/registry/auto-sync',{method:'POST',body:{
+        connection_id:row.id,revision:row.revision,enabled,confirmed:true}});
+      await load(enabled?'Coleta automática habilitada para este Item.':'Coleta automática pausada para este Item.');
+    });
+  }
+
   async function load(message = '') {
     const payload = await api('/open-finance/connections');
     if (!current()) return;
@@ -252,6 +262,9 @@ export async function showFinancialInstitutions({api, view, heading, navigation}
         if (row.source === 'MANAGED') actions.append(button('Trocar credenciais', () => openRotate(row)));
         actions.append(button('Arquivar', () => inspectArchive(row)));
         if (lifecycle === 'ACTIVE') {
+          if (row.source === 'MANAGED') actions.append(button(
+            row.auto_sync_enabled?'Pausar coleta automática':'Habilitar coleta automática',
+            () => setAutomatic(row)));
           actions.append(button('Desativar', () => change(row, 'disable',
             'Suspender as coletas desta conexão e manter seus dados e histórico?', 'Conexão desativada.')));
         }

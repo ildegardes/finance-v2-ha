@@ -1,13 +1,13 @@
 import {bankMark,cardIdentity} from './open-finance-identity.js';
 import {overviewWealth,wealthMoney} from './open-finance-wealth.js';
-import {classes as classNames,presentationPreference,savePresentation,presentationControl,metricValue,metricNote,
-  institutionPositions,portfolioQuality,unifiedIncomeMarkup,cardBills} from './open-finance-consolidated.js';
+import {presentationPreference,savePresentation,presentationControl,metricValue,metricNote,
+  institutionPositions,portfolioQuality,unifiedIncomeMarkup,cardUsage} from './open-finance-consolidated.js';
 import {portfolioPanel} from './open-finance-portfolio.js';
 import {automaticPanel,bridgePanel,cardPanel,incomePanel} from './open-finance-insights.js';
 import {createQueryGeneration} from './query-generation.js';
 import {bankMoney,dateBR,privacyMode} from './privacy.js';
 import {activeConnections,connectionLabel} from './open-finance-status.js';
-import {categoryLabel,classLabel,countBR,coverageLabel,institutionName,percentBR} from './open-finance-labels.js';
+import {categoryLabel,classLabel,investmentClassLabel,countBR,coverageLabel,institutionName,percentBR} from './open-finance-labels.js';
 
 const dayMs=86400000;
 const iso=date=>date.toISOString().slice(0,10);
@@ -137,7 +137,7 @@ function allocation(investments,mode,amount,esc,unified=false){
   const chart=proportional?'<div class="of-allocation-ring" style="--segments:conic-gradient('+bands.join(',')+')"><div><small>Total representado</small><strong>'+amount(decimal(total))+'</strong></div></div>':'';
   const legend=classes.map((item,index)=>{
     const share=values[index]===null||!proportional?'':'<small>'+esc(percentBR.format(fraction(values[index],total)))+'</small>';
-    const label=unified?'<span>'+esc(classNames[item.type])+'</span>':'<button type="button" class="of-link" data-investment-class="'+esc(item.type)+'">'+esc(classLabel(item.type))+'</button>';
+    const label=unified?'<span>'+esc(investmentClassLabel(item.type))+'</span>':'<button type="button" class="of-link" data-investment-class="'+esc(item.type)+'">'+esc(classLabel(item.type))+'</button>';
     return '<li><span class="of-allocation-dot" aria-hidden="true" style="--dot:'+palette[index%palette.length]+'"></span>'+label+'<strong>'+amount(item.value)+'</strong>'+share+'</li>';
   }).join('');
   return '<div class="of-allocation-layout">'+chart+'<ul class="of-allocation-legend">'+legend+'</ul></div>'+
@@ -292,8 +292,7 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
       metric('investments','Investimentos',investments.value,shared?metricNote(shared.investments):currentWealth?wealthDetail:positionNote(investments),
         shared?shown(shared.investments):currentWealth?wealthMetric:undefined)+
       metric('cards','Cartões de crédito',cards?.consolidated??cards?.used,shared?
-        (cards.included_count?('Faturas atuais · '+cards.included_count+' de '+cards.count+' · '+(cards.metric.partial?'subtotal':'cobertura informada')):
-         cards.active_count+' ativos · faturas indisponíveis'):cards?.consolidated!=null?
+        ('Saldo utilizado · '+(cards.metric.partial?'cobertura parcial':cards.included_count+' de '+cards.count+' considerados')):cards?.consolidated!=null?
         (cards.included_count+' de '+cards.count+' considerados'):(cards?.active_count||0)+' ativos informados',shown(shared?.cards.metric))+
       '</div></section><section><h3>Resultados do período</h3><div class="of-metrics of-kpi-group">'+
       metric('incoming',flowMode==='adjusted'?'Receitas identificadas':'Entradas bancárias',showAdjusted?insights.known.incoming:flow.reported?.incoming,
@@ -319,7 +318,7 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
       (international&&!shared?overviewWealth(loaded.wealth,esc,state.wealthPresentation||'original'):'')+
       portfolioPanel(history,shared?value=>wealthMoney(value,shared.currency,esc):amount,mode,esc,(value,currency)=>wealthMoney(value,currency,esc))+
       '<div class="of-overview-grid"><section class="of-summary-card"><div class="of-section-heading"><div><h3>Composição da carteira</h3></div><button type="button" class="of-link" data-open-assets>Ver investimentos</button></div>'+(shared?unifiedAllocation(shared,mode,esc):allocation(investments,mode,amount,esc))+'</section>'+incomeCard+'</div>'+
-      '<div class="of-overview-grid"><section class="of-summary-card"><h3>'+(showAdjusted?'Principais categorias de despesas':'Principais categorias de saída')+'</h3>'+rankings+'</section>'+(shared?cardBills(cards,esc,mode,cardIdentity):cardPanel(cards,amount,mode,esc))+'</div>'+
+      '<div class="of-overview-grid"><section class="of-summary-card"><h3>'+(showAdjusted?'Principais categorias de despesas':'Principais categorias de saída')+'</h3>'+rankings+'</section>'+(shared?cardUsage(cards,esc,mode,cardIdentity):cardPanel(cards,amount,mode,esc))+'</div>'+
       '<section class="of-summary-card" data-current-positions tabindex="-1"><h3>Posições por instituição</h3><p>Últimas posições conhecidas</p>'+(shared?institutionPositions(shared,esc):positionRows(loaded,catalog,amount,esc))+'</section>'+
       '<details class="of-summary-card of-quality"><summary>Qualidade dos dados</summary>'+
       (shared?portfolioQuality(shared,esc):'')+'<ul class="of-category-list">'+quality+'</ul><p>'+countBR.format((loaded.institutions||[]).filter(row=>row.current).length)+' conexões ativas no escopo · '+countBR.format(insights?.pending||0)+' movimentos em revisão.</p><p>Posições patrimoniais '+countBR.format(history?.points.length||0)+' no intervalo. Limites de cartão exigem comprovação de linhas distintas. A cobertura das despesas de cartões permanece em análise separada.</p><p>Última coleta registrada no escopo '+esc(dateBR(lastCollection))+'. Consulte as posições para ver a data financeira e a atualização informada pelo provedor.</p><p>Movimentos brutos incluem transferências e pagamentos. Posições e saldos podem se sobrepor.</p><div class="actions"><button type="button" class="of-link" data-open-connections>Conexões</button><button type="button" class="of-link" data-open-diagnostics>Diagnóstico</button></div></details>';

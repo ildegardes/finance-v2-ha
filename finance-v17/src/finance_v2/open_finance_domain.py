@@ -54,7 +54,7 @@ LABELS={
 KINDS={'item':'CONNECTION','resources':'DECLARED_RESOURCE','consents':'CONSENT','accounts':'BANK_ACCOUNT',
  'transactions':'BANK_TRANSACTION','investments':'INVESTMENT_POSITION','investment_transactions':'INVESTMENT_MOVEMENT',
  'loans':'CREDIT_CONTRACT','bills':'CREDIT_BILL','statements':'STATEMENT_REFERENCE'}
-HIDDEN={'id','itemId','accountId','resourceId','providerId','providerCode','order','categoryId','billId',
+HIDDEN={'id','itemId','cardLastFour','accountId','resourceId','providerId','providerCode','order','categoryId','billId',
  'transactions','identificationNumber','installmentId','proposalNumber','processNumber','credentials','url'}
 MONEY=re.compile(r'balance|amount|value|limit|payment|profit|taxes|fee$',re.I)
 RATE=re.compile(r'rate|percentage|^CET$',re.I)
