@@ -1,7 +1,7 @@
 import {privacyMode,bankMoney,dateBR} from './privacy.js';
 import {createQueryGeneration} from './query-generation.js';
 import {bankMark} from './open-finance-identity.js';
-import {countBR,classLabel} from './open-finance-labels.js';
+import {countBR,classLabel,investmentClassLabel} from './open-finance-labels.js';
 
 const countries={BR:'Brasil',US:'Estados Unidos',UNKNOWN:'Mercado não informado'};
 const resources={balances:'Saldos',positions:'Posições',activities:'Atividades'};
@@ -43,7 +43,7 @@ const statusNames={
 const presentOptions=[['original','Moedas originais'],['BRL','Converter para BRL'],['USD','Converter para USD']];
 const kinds=['stock','reit','etf','mutualfund','bond','option','FIXED_INCOME','EQUITY','TREASURY'];
 const mode=()=>privacyMode();
-const labelKind=key=>kindNames[key]||classLabel(key);
+const labelKind=key=>String(key).startsWith('PLUGGY:')?investmentClassLabel(key):kindNames[key]||classLabel(key);
 const formatDate=value=>value?dateBR(value):'Indisponível';
 const errorText=error=>statusNames[error?.code]||'Não foi possível confirmar a operação. Atualize o diagnóstico antes de repetir.';
 
@@ -73,8 +73,9 @@ export function wealthSummary(data,esc,{compositionDetails=true}={}){
     Object.entries(currencies).map(([currency,value])=>'<span>'+esc(currency)+' '+money(value,currency)+'</span>').join('')+'</li>').join('');
   const composition=Object.entries(summary.composition||{}).map(([key,groups])=>
     Object.keys(groups).length?'<details><summary>'+({kind:'Por classe',provider:'Por provedor',institution:'Por instituição'})[key]+
-      '</summary><ul class="of-category-list">'+Object.entries(groups).map(([name,values])=>
-        '<li><strong>'+esc(key==='kind'?labelKind(name):name)+'</strong>'+Object.entries(values).map(([currency,value])=>
+      '</summary><ul class="of-category-list">'+(key==='kind'&&summary.allocation?.length?
+        summary.allocation.map(row=>[row.class,row.metric.amounts]):Object.entries(groups)).map(([name,values])=>
+        '<li><strong>'+esc(key==='kind'?investmentClassLabel(name):name)+'</strong>'+Object.entries(values).map(([currency,value])=>
           '<span>'+esc(currency)+' '+money(value,currency)+'</span>').join('')+'</li>').join('')+'</ul></details>':'').join('');
   const target=summary.presentation;
   const display=summary.converted.positions!=null?summary.converted.positions:summary.converted_subtotal.positions;
@@ -83,7 +84,9 @@ export function wealthSummary(data,esc,{compositionDetails=true}={}){
     ' <strong>'+money(display,target)+'</strong></p>':'';
   const rates=summary.quote_dates.map(quote=>'<li>PTAX de venda · '+formatDate(quote.date)+' · '+money(quote.rate,'BRL')+
     ' por USD'+(quote.lag_days?' · '+quote.lag_days+' dias de defasagem':'')+'</li>').join('');
-  return converted+(summary.overlap?'<p class="attention">Possível sobreposição. Use uma conexão ou ajuste as fontes em Conexões.</p>':'')+
+  const excluded=Object.entries(summary.investment_metric?.conversion_excluded||{});
+  const exclusion=excluded.length?'<p>Valores originais fora da conversão '+excluded.map(([currency,value])=>money(value,currency)).join(' · ')+'</p>':'';
+  return converted+exclusion+(summary.overlap?'<p class="attention">Possível sobreposição. Use uma conexão ou ajuste as fontes em Conexões.</p>':'')+
     (Object.keys(summary.original).length&&!summary.date_comparable?'<p>Datas financeiras diferentes. Consolidação incompleta.</p>':'')+
     (summary.stale?'<p>Há posições com referência desatualizada.</p>':'')+
     (summary.missing||summary.partial_resources?'<p>Há dados parciais. Consulte a origem e a referência das posições.</p>':'')+
@@ -165,7 +168,7 @@ export function mountWealth({host,api,esc,navigation,state,today,getPeriod,snapt
   }
   function positionRows(){
     return loaded.items.map((row,index)=>'<article class="of-flow-item"><div><strong>'+esc(row.ticker||row.label)+'</strong>'+
-      '<p>'+bankMark(row.institution,esc)+esc(row.institution)+' · '+esc(row.provider)+' · '+esc(labelKind(row.kind))+
+      '<p>'+bankMark(row.institution,esc)+esc(row.institution)+' · '+esc(row.provider)+' · '+esc(row.asset_class?investmentClassLabel(row.asset_class):labelKind(row.kind))+
       (row.exchange?' · '+esc(row.exchange):'')+(row.state!=='AVAILABLE'?' · Histórico':'')+'</p>'+
       '<button type="button" class="of-link" data-wealth-asset="'+index+'">Ver posição</button></div>'+
       '<div><strong>'+money(row.market_value,row.currency)+'</strong>'+

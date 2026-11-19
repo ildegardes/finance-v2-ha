@@ -9,6 +9,8 @@ import unittest
 
 from finance_v2.db import connect
 from finance_v2.open_finance_analytics import analytics
+from finance_v2.pluggy_coverage import project
+from finance_v2.open_finance_relations import record_batch
 from finance_v2.portfolio_fx import refresh
 from finance_v2.snaptrade_sync import connection_policy
 import test_snaptrade_036 as fixture
@@ -50,6 +52,7 @@ def seed(test):
                           (replace(test.settings.pluggy_connections[0],id=SECOND,institution='Santander'),))
     db_path=test.case.db
     with closing(connect(db_path)) as db:
+        db.execute("BEGIN")
         db.execute("INSERT INTO of_connections(id,institution,enabled,binding_hash,updated_at) VALUES (?,'Santander',1,?,?)",
                    (SECOND,'a'*64,fixture.STAMP))
         db.execute("INSERT INTO of_connection_registry(connection_id,source,lifecycle,label,updated_at) VALUES (?,'LEGACY','ACTIVE','Santander',?)",
@@ -94,10 +97,27 @@ def seed(test):
             db.execute("""INSERT INTO of_classification_events(connection_id,account_id,transaction_id,action,decision_json,recorded_at,actor)
                           VALUES ('bank-test','account-BANK',?,'MANUAL',?,?,'UI:local')""",
                        (ext,json.dumps({**recognition,'origin':'MANUAL','review':'CONFIRMED'}),fixture.STAMP))
+        item=test.settings.pluggy_connections[0].item_id
+        item_payload={'id':item,'status':'UPDATED','connector':{'id':601,'isOpenFinance':True}}
+        consent={'id':'consent-039','itemId':item,'products':['CREDIT_CARDS'],
+                 'openFinancePermissionsGranted':['CREDIT_CARDS_ALL'],'revokedAt':None}
+        for resource,payload in [('item',item_payload),('consents',consent)]:
+            add('bank-test',resource,'',payload['id'],project(resource,payload)[0])
+        for resource,payloads in [('consents',[consent]),('accounts',[None]*4)]:
+            record_batch(db,'bank-test',{'resource':resource,'parent':'','state':'AVAILABLE','last':True,'rows':payloads},
+                         current,fixture.STAMP)
         for index,ext in enumerate(['account-CREDIT','card-extra','card-repeat','card-missing']):
             suffix=('T' if index==0 else str(index))
-            add('bank-test','accounts','',ext,{'type':'CREDIT','currencyCode':'BRL','name':'Cartão sintético '+suffix,
-                'balance':9000,'date':DATE,'creditData':{'status':'ACTIVE','creditLimit':10000,'balanceDueDate':DUE}})
+            balance=[320,180,0,0][index]
+            tail=str(9400+index)
+            card={'id':ext,'itemId':item,'type':'CREDIT','subtype':'CREDIT_CARD','currencyCode':'BRL',
+                  'name':'Cartão sintético '+suffix,'number':'xxxx'+tail,'balance':balance,'updatedAt':fixture.STAMP,
+                  'creditData':{'status':'ACTIVE','brand':'VISA','holderType':'MAIN','creditLimit':1000,'balanceDueDate':DUE,
+                                'disaggregatedCreditLimits':[{'creditLineLimitType':'LIMITE_CREDITO_TOTAL',
+                                     'consolidationType':'INDIVIDUAL','identificationNumber':tail,
+                                     'usedAmount':balance,'usedAmountCurrencyCode':'BRL','limitAmount':1000,
+                                     'limitAmountCurrencyCode':'BRL','isLimitFlexible':False}]}}
+            add('bank-test','accounts','',ext,project('accounts',card)[0])
             if index!=3:
                 total=50 if index==1 else 100
                 add('bank-test','bills',ext,'bill-second' if index==1 else 'bill-test',
@@ -135,16 +155,17 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(self.value(br['cash'],'BRL'),2500)
         self.assertEqual(self.value(br['incoming'],'BRL'),112)
         self.assertEqual(self.value(br['outgoing'],'BRL'),80)
-        self.assertEqual(self.value(br['cards']['metric'],'BRL'),150)
-        self.assertEqual((br['cards']['included_count'],br['cards']['count'],br['cards']['bills_state']),(2,4,'PARTIAL'))
+        self.assertEqual(self.value(br['cards']['metric'],'BRL'),500)
+        self.assertEqual((br['cards']['included_count'],br['cards']['count']),(4,4))
+        self.assertEqual(br['cards']['utilization_by_currency'],{'BRL':'0.125'})
         self.assertEqual(self.value(br['income']['credits'],'BRL'),92)
         self.assertEqual(self.value(br['income']['tax'],'BRL'),Decimal('16.25'))
         self.assertIsNone(br['income']['net'])
-        self.assertEqual({row['class'] for row in br['composition']},{'FIXED_INCOME','FII','STOCK','REIT','ETF','UNKNOWN'})
+        self.assertEqual({row['class'] for row in br['composition']},{'PLUGGY:TREASURY','PLUGGY:EQUITY','STOCK','REIT','ETF','UNKNOWN'})
         self.assertIn('foreign_withholding',{row['kind'] for row in br['income']['by_kind']})
         us=self.view('USD')
         self.assertEqual(self.value(us['investments'],'USD'),53400)
-        self.assertEqual(self.value(us['cards']['metric'],'USD'),Decimal('37.5'))
+        self.assertEqual(self.value(us['cards']['metric'],'USD'),100)
         self.assertEqual(self.value(us['outgoing'],'USD'),20)
         original=self.view('original')
         self.assertEqual({k:Decimal(v) for k,v in original['investments']['amounts'].items()},{'BRL':150000,'USD':23400})
@@ -178,14 +199,12 @@ class DashboardTests(unittest.TestCase):
         self.assertFalse(value['quality']['rates'])
         self.assertEqual(value['history']['points'],[])
 
-    def test_complete_unavailable_and_closed_card_evidence(self):
+    def test_bill_dates_and_amounts_do_not_change_used_balance(self):
         case=self.fixture.case
-        case.write("UPDATE of_resource_records SET payload_json=json_set(payload_json,'$.creditData.status','CANCELLED') WHERE external_id IN ('card-repeat','card-missing')")
-        self.assertEqual(self.view()['cards']['bills_state'],'COMPLETE')
-        case.write("UPDATE of_resource_records SET payload_json=json_set(payload_json,'$.dueDate','2026-10-10') WHERE resource='bills'")
-        view=self.view()
-        self.assertEqual(view['cards']['metric']['amounts'],{})
-        self.assertEqual(view['cards']['count'],2)
+        before=self.view()['cards']['metric']
+        case.write("UPDATE of_resource_records SET payload_json=json_set(payload_json,'$.dueDate','2026-10-10','$.totalAmount',9999) WHERE resource='bills'")
+        self.assertEqual(self.view()['cards']['metric'],before)
+        self.assertEqual(case.sql("SELECT count(*) FROM of_resource_records WHERE resource='bills' AND parent_id='account-CREDIT'"),[(1,)])
 
     def test_cross_provider_duplicate_credit_and_explicit_zero(self):
         case=self.fixture

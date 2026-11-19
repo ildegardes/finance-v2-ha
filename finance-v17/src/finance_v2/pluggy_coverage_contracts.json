@@ -861,6 +861,10 @@
             },
             "additionalProperties": false
           },
+          "cardLastFour": {
+            "type": "string",
+            "pattern": "^[0-9]{4}$"
+          },
           "creditData": {
             "type": "object",
             "properties": {

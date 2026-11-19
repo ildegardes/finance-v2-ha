@@ -1,13 +1,11 @@
 import {bankMark} from './open-finance-identity.js';
 import {dateBR} from './privacy.js';
-import {countBR,institutionName} from './open-finance-labels.js';
+import {countBR,institutionName,percentBR} from './open-finance-labels.js';
 import {proventNames} from './open-finance-classification-ui.js';
 import {wealthMoney} from './open-finance-wealth.js';
 
 const storageKey='finance-v17.open-finance.presentation';
 const currencies=[['BRL','BRL — Real brasileiro'],['USD','USD — Dólar americano'],['original','Moedas originais']];
-export const classes={FIXED_INCOME:'Renda fixa',BRAZIL_STOCK:'Ações brasileiras',FII:'FIIs',STOCK:'Stocks',
-  REIT:'REITs',ETF:'ETFs',FUND:'Fundos de investimento',OTHER:'Outros instrumentos',UNKNOWN:'Não classificado'};
 const incomes={...proventNames,stock_dividend:'Dividendos de Stocks',reit_distribution:'Distribuições de REITs',
   etf_distribution:'Distribuições de ETFs',foreign_dividend:'Dividendos internacionais',foreign_interest:'Juros internacionais',
   foreign_tax:'Tributos no exterior',foreign_withholding:'Impostos retidos no exterior'};
@@ -43,9 +41,18 @@ export function institutionPositions(view,esc){
   if(!view.institutions.length)return '<p class="of-chart-placeholder">Nenhuma conexão ativa neste escopo.</p>';
   return '<div class="of-position-list of-consolidated-positions">'+view.institutions.map(row=>{
     const broker=row.provider==='SNAPTRADE';
-    const metric=(label,item)=>'<div class="of-position-value"><span>'+label+'</span><strong>'+metricValue(item,esc)+
-      '</strong><small>'+esc(metricNote(item))+'</small>'+(view.currency!=='original'&&Object.keys(item.original).some(key=>key!==view.currency)?
-      '<small>Original '+metricValue(item,esc,'original')+'</small>':'')+'</div>';
+    const metric=(label,item)=>{
+      const alternate=view.currency!=='original'&&Object.keys(item.original).some(key=>key!==view.currency);
+      const reasons=item.missing_reasons||{};
+      const conversionNote=reasons.REFERENCE_UNAVAILABLE?'Referência financeira ausente':
+        reasons.RATE_UNAVAILABLE?'Cotação PTAX indisponível':reasons.CURRENCY_UNSUPPORTED?'Moeda sem conversão':'Conversão indisponível';
+      const converted=Object.keys(item.amounts).length?
+        '<span>'+(Object.keys(item.conversion_excluded||{}).length?'Subtotal em ':'Equivalente em ')+view.currency+
+        '</span>'+metricValue(item,esc):conversionNote;
+      return '<div class="of-position-value"><span>'+label+'</span><strong class="of-native-value">'+metricValue(item,esc,'original')+'</strong>'+
+        (alternate?'<small class="of-converted-value">'+converted+'</small>':'')+
+        '<small>'+esc(metricNote({...item,included:Object.keys(item.original).length,missing:0}))+'</small></div>';
+    };
     const detail=row.details.map(item=>'<li><strong>'+esc(item.label||'Nome não informado')+'</strong><span>'+
       wealthMoney(item.amount,item.currency,esc)+'</span><small>'+esc(item.account?item.account+' · ':'')+
       'Referência '+esc(item.reference?dateBR(item.reference):'Indisponível')+' · Coleta '+esc(dateBR(item.observed_at))+'</small></li>').join('');
@@ -69,11 +76,14 @@ export function portfolioQuality(view,esc){
   const notes=[
     data.mixed_dates?'Referências de '+dateBR(data.first)+' a '+dateBR(data.last)+'. Os valores representam datas diferentes.':'',
     data.overlap?'Possível sobreposição patrimonial. Consulte cada instituição ou revise as exclusões em Conexões.':'',
-    view.investments.missing?'Posições sem valor ou cotação elegível ficaram fora do subtotal convertido.':'',
+    view.investments.missing_reasons?.VALUE_UNAVAILABLE?'Há posições sem valor financeiro informado.':'',
+    view.investments.missing_reasons?.RATE_UNAVAILABLE?'Há posições sem cotação PTAX elegível.':'',
     view.investments.undated?'Há posições sem data financeira comprovada.':'',
     view.investments.stale?'Há referências patrimoniais com mais de sete dias.':'',
   ].filter(Boolean);
+  const excluded=view.investments.conversion_excluded||{};
   return notes.map(note=>'<p>'+esc(note)+'</p>').join('')+
+    (Object.keys(excluded).length?'<p>Valores originais fora da conversão '+metricValue(view.investments,esc,'conversion_excluded')+'</p>':'')+
     (rates?'<ul class="of-category-list">'+rates+'</ul>':'');
 }
 
@@ -97,23 +107,36 @@ export function unifiedIncomeMarkup(income,esc,{details=false}={}){
     (lines?'<ul class="of-category-list">'+lines+'</ul>':hasCredits?'':'<p>Nenhum rendimento elegível no período.</p>')+notes+months+events;
 }
 
-export function cardBills(cards,esc,mode,identity){
+export function cardUsage(cards,esc,mode,identity){
   if(!cards)return '';
-  const reasons={CURRENT_BILL_UNVERIFIED:'Fatura atual sem confirmação',AMOUNT_UNAVAILABLE:'Valor ou moeda da fatura indisponível',
-    OBLIGATION_OVERLAP:'Possível fatura repetida'};
+  const reasons={ASSOCIATION_INCONSISTENT:'Vínculo com o Item inconsistente',CONSENT_UNVERIFIED:'Consentimento não validado',
+    ACCOUNT_COLLECTION_UNVERIFIED:'Coleta atual do cartão sem confirmação',HISTORICAL_CONNECTION:'Conexão histórica',
+    AMOUNT_UNAVAILABLE:'Saldo utilizado não informado',CURRENCY_UNAVAILABLE:'Moeda não informada',
+    NEGATIVE_REPORTED:'Saldo credor informado',FUTURE_REFERENCE:'Referência futura',
+    CARD_STATUS_UNVERIFIED:'Estado do cartão sem confirmação',CONVERSION_UNAVAILABLE:'Conversão indisponível',
+    OBLIGATION_OVERLAP:'Possível obrigação repetida',
+    SHARED_SCOPE_UNVERIFIED:'Abrangência da linha compartilhada sem confirmação',
+    ALREADY_IN_SHARED_LINE:'Linha compartilhada já contabilizada',OBLIGATION_UNVERIFIED:'Titularidade ou escopo sem confirmação'};
   const list=cards.items.map((card,index)=>{
     const visual=identity(card,esc);
     return '<li><button type="button" class="of-card-compact" data-overview-card="'+index+'">'+visual.mark+
       '<span><strong>'+esc(visual.label)+'</strong><small>'+esc(institutionName(card.institution))+
       (visual.network?' · <span class="of-card-network">'+esc(visual.network)+'</span>':'')+
       (visual.tail&&mode!=='full'?' · •••• '+esc(visual.tail):'')+'</small>'+
-      (card.bill_due?'<small>Vencimento '+esc(dateBR(card.bill_due))+'</small>':'')+
       (card.consolidation_reason?'<small>'+esc(reasons[card.consolidation_reason]||'Fora do subtotal')+'</small>':'')+
-      '</span><span><strong>'+wealthMoney(card.bill_value,card.bill_currency,esc)+'</strong><small>Fatura informada</small></span></button></li>';
+      (!card.consolidation_reason&&card.limit_reason?'<small>Limite sem escopo ou valor comprovado</small>':'')+
+      '</span><span><strong>'+wealthMoney(card.used,card.currency,esc)+'</strong><small>Saldo utilizado</small></span></button></li>';
   }).join('');
+  const utilization=mode==='visible'?Object.entries(cards.utilization_by_currency).map(([currency,value])=>{
+    const percent=Number(value);
+    return '<div class="of-card-utilization"><label>Utilização em '+esc(currency)+' '+esc(percentBR.format(percent))+
+      '<progress max="100" value="'+Math.min(100,Math.max(0,100*percent))+'"></progress></label></div>';
+  }).join(''):'';
   return '<section class="of-summary-card of-card-insight"><div class="of-section-heading"><div><h3>Cartões de crédito</h3><p>'+
     countBR.format(cards.active_count)+' cartões ativos informados</p></div><button type="button" class="of-link" data-all-overview-cards>Ver todos</button></div>'+
-    '<p>'+(cards.metric.partial?'Subtotal de faturas atuais':'Faturas atuais identificadas')+' <strong>'+metricValue(cards.metric,esc)+
-    '</strong> · '+cards.included_count+' de '+cards.count+' considerados</p>'+
+    '<p>Saldo utilizado'+(cards.metric.partial?' · cobertura parcial':'')+'</p><strong class="of-card-used-total">'+metricValue(cards.metric,esc)+'</strong>'+
+    '<p>'+(cards.limit_metric.partial?'Subtotal de limites verificados':'Limite consolidado')+
+    ' <strong>'+metricValue(cards.limit_metric,esc)+'</strong></p>'+utilization+
+    (mode==='visible'&&!utilization&&cards.count?'<p>Percentual indisponível para a cobertura atual.</p>':'')+
     (list?'<ul class="of-compact-cards">'+list+'</ul>':'<p>Nenhum cartão encontrado neste escopo.</p>')+'</section>';
 }

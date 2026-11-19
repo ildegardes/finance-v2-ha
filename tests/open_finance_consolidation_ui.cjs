@@ -32,11 +32,36 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || path.join(process.env.
     const awaitAmount=async(name,amount)=>{await metric(name).getByText(amount,{exact:false}).first().waitFor();};
     try{await overview.locator('.of-six-kpis').waitFor();}catch(error){console.error(page.url(),await page.locator('body').innerText());throw error;}
     await selectPrivacy(page,'visible');
+    if(process.argv.includes('--missing-fx')){
+      await awaitAmount('Investimentos','150.000,00');
+      const broker=overview.locator('.of-position').filter({hasText:'Charles Schwab'});
+      assert.deepEqual((await broker.locator('.of-native-value').allInnerTexts()).map(value=>value.replace(/\s+/g,' ')),
+        ['USD 500,00','USD 23.400,00']);
+      await broker.getByText('Referência financeira ausente',{exact:true}).waitFor();
+      await broker.getByText('Cotação PTAX indisponível',{exact:true}).waitFor();
+      await overview.getByText('Qualidade dos dados',{exact:true}).click();
+      await overview.getByText('Valores originais fora da conversão',{exact:false}).waitFor();
+      await shot('schwab-moeda-nativa');
+      assert.deepEqual(errors,[]);
+      console.log('PASS: Schwab keeps native cash and positions when rates or references are missing');
+      return;
+    }
     await awaitAmount('Investimentos','267.000,00');
     assert.equal(await select.inputValue(),'BRL');
     assert.deepEqual(await overview.locator('.of-kpi-group').evaluateAll(groups=>groups.map(group=>group.children.length)),[3,3]);
     await awaitAmount('Saldo em contas','3.000,00');
-    await awaitAmount('Cartões de crédito','150,00');
+    await awaitAmount('Cartões de crédito','500,00');
+    const cards=overview.locator('.of-card-insight');
+    assert.equal(await cards.locator('.of-card-used-total').innerText(),await metric('Cartões de crédito').locator(':scope > strong').innerText());
+    await cards.getByText('12,5%', {exact:false}).waitFor();
+    assert.equal(await cards.getByRole('progressbar').getAttribute('value'),'12.5');
+    assert.equal(await cards.locator('li').count(),4);
+    await cards.getByText('R$ 0,00',{exact:true}).first().waitFor();
+    await cards.getByText('9400',{exact:false}).waitFor();
+    await overview.getByText('Renda variável',{exact:true}).waitFor();
+    const icons=await page.getByRole('navigation',{name:'Principal'}).locator('a svg path').evaluateAll(paths=>paths.map(p=>p.getAttribute('d')));
+    assert.equal(icons.length,10);
+    assert.equal(new Set(icons).size,10);
     await awaitAmount('Receitas identificadas','112,00');
     await awaitAmount('Despesas identificadas','80,00');
     await awaitAmount('Rendimentos','92,00');
@@ -46,6 +71,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || path.join(process.env.
     const schwab=institutions.locator('article').filter({hasText:'Charles Schwab'});
     await schwab.getByText('Caixa em corretora',{exact:true}).waitFor();
     assert.match(await schwab.innerText(),/2\.500,00/);
+    assert.match(await schwab.locator('.of-native-value').first().innerText(),/USD\s*500,00/);
     assert.match(await schwab.innerText(),/USD\s*500,00/);
     await overview.getByText('Stocks',{exact:true}).waitFor();
     await overview.getByText('REITs',{exact:true}).waitFor();
@@ -59,7 +85,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || path.join(process.env.
     const queriesBefore=calls.filter(path=>path.endsWith('/analytics')).length;
     await select.selectOption('USD');
     await awaitAmount('Investimentos','53.400,00');
-    await awaitAmount('Cartões de crédito','37,50');
+    await awaitAmount('Cartões de crédito','100,00');
     assert.equal(calls.filter(path=>path.endsWith('/analytics')).length-queriesBefore,1);
     assert.equal(calls.filter(path=>path.endsWith('/portfolio')).length,0);
     await series.selectOption({label:'Charles Schwab'});
@@ -90,15 +116,22 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || path.join(process.env.
     await tab('Visão geral').click();
     await awaitAmount('Investimentos','53.400,00');
     await selectPrivacy(page,'masked');
-    assert(!/53\.400,00|37,50/.test(await overview.innerHTML()));
+    assert(!/53\.400,00|500,00|100,00/.test(await overview.innerHTML()));
+    assert.equal(await cards.getByRole('progressbar').count(),0);
     await selectPrivacy(page,'full');
+    assert.equal(await cards.getByText('9400',{exact:false}).count(),0);
     assert.equal(await overview.locator('.of-allocation-ring,.of-portfolio-plot,.of-ranking-track').count(),0);
-    assert(!/53\.400,00|37,50/.test(await overview.innerHTML()));
+    assert(!/53\.400,00|500,00|100,00/.test(await overview.innerHTML()));
     await selectPrivacy(page,'visible');
     for(const width of [390,768,1440,1920]){
       await page.setViewportSize({width,height:950});
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true,'width '+width);
-      if(width===390)await shot('visao-geral-mobile');
+      if(width===390){
+        await page.getByRole('button',{name:'Abrir menu'}).click();
+        await page.getByRole('navigation',{name:'Principal'}).getByRole('link',{name:'Instituições Financeiras'}).waitFor();
+        await page.locator('#menu-toggle').click();
+        await shot('visao-geral-mobile');
+      }
     }
     assert.deepEqual(errors,[]);
     console.log('PASS: global currency, persistence, institution, investments, income, history, privacy and responsive overview');

@@ -7,7 +7,7 @@ import time
 from .open_finance import OpenFinanceService, SyncError
 from .open_finance_coverage import sync_full_automatic
 from .open_finance_registry import connection_views
-from .open_finance_schedule import allowed, preferences, claim_delay, _datetime
+from .open_finance_schedule import allowed, preferences, claim_delay, _datetime, legacy_binding_mismatches
 from .pluggy_client import PluggyClient, PluggyError, transport
 
 LOGGER = logging.getLogger(__name__)
@@ -24,21 +24,41 @@ class CoverageWorkers:
         self.send, self.now, self.clock = send, now, clock
         self.stop_event = threading.Event()
         self.threads = []
+        self._monitor=None
+        self._planned=set()
         self._io_lock = threading.Lock()
         self._inflight = {}
 
     def start(self):
-        if self.threads or self.stop_event.is_set():
+        if self._monitor or self.threads or self.stop_event.is_set():
             raise RuntimeError('COVERAGE_WORKERS_ALREADY_STARTED_OR_STOPPED')
-        service = OpenFinanceService(self.settings,self.clock)
+        self._start_eligible()
+        if self.settings.open_finance_auto_sync_allowed is not False:
+            self._monitor=threading.Thread(target=self._monitor_registry,name='coverage-registry',daemon=True)
+            self._monitor.start()
+
+    def _start_eligible(self):
+        service=OpenFinanceService(self.settings,self.clock)
         with closing(service._db()) as db:
-            planned = [view for view in connection_views(db, self.settings).values() if allowed(self.settings,view)]
-        for config in planned:
-            if config.enabled:
-                worker = threading.Thread(target=self._loop, args=(config,),
-                    name='coverage-' + config.id, daemon=True)
-                self.threads.append(worker)
-                worker.start()
+            mismatched=legacy_binding_mismatches(db,self.settings)
+            planned=[view for view in connection_views(db,self.settings).values()
+                     if allowed(self.settings,view) and view.id not in mismatched]
+        for view in planned:
+            if self.stop_event.is_set():
+                break
+            if view.id in self._planned:
+                continue
+            self._planned.add(view.id)
+            worker=threading.Thread(target=self._loop,args=(view,),name='coverage-'+view.id,daemon=True)
+            self.threads.append(worker)
+            worker.start()
+
+    def _monitor_registry(self):
+        while not self.stop_event.wait(self.CONFIG_CHECK_SECONDS):
+            try:
+                self._start_eligible()
+            except Exception:
+                LOGGER.warning('coverage registry refresh deferred')
 
     def _run_one(self, config, *, respect_schedule=False):
         deadline = self.now() + self.RUN_BUDGET_SECONDS
@@ -104,8 +124,11 @@ class CoverageWorkers:
                 service=OpenFinanceService(self.settings,self.clock)
                 with closing(service._db()) as db:
                     enabled,hours,_=preferences(db,self.settings)
-                    _,remaining=claim_delay(db,config.id,hours,_datetime(service._time()[1]))
-                if not enabled or remaining:
+                    current=connection_views(db,self.settings).get(config.id)
+                    effective=(enabled and current is not None and allowed(self.settings,current)
+                               and config.id not in legacy_binding_mismatches(db,self.settings))
+                    _,remaining=claim_delay(db,config.id,hours,_datetime(service._time()[1])) if effective else (None,0)
+                if not effective or remaining:
                     if self.stop_event.wait(min(self.CONFIG_CHECK_SECONDS,remaining or self.CONFIG_CHECK_SECONDS)):
                         break
                     continue
@@ -128,9 +151,11 @@ class CoverageWorkers:
     def stop(self):
         self.stop_event.set()
         deadline = self.now() + 1
+        if self._monitor:
+            self._monitor.join(max(0,deadline-self.now()))
         for worker in self.threads:
             worker.join(max(0, deadline - self.now()))
-        remaining = sum(worker.is_alive() for worker in self.threads)
+        remaining = sum(worker.is_alive() for worker in self.threads)+int(bool(self._monitor and self._monitor.is_alive()))
         with self._io_lock:
             pending_io = len(self._inflight)
         if pending_io:

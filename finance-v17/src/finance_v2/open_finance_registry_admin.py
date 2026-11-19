@@ -212,6 +212,34 @@ class RegistryAdmin:
         except sqlite3.Error:
             raise SyncError("REGISTRY_READ_FAILED", 503) from None
 
+    def set_auto_sync(self, connection_id, *, actor, revision, enabled, confirmed):
+        self._owner(actor)
+        if confirmed is not True or type(enabled) is not bool or type(revision) is not int or not 0 <= revision < 2**63 - 1:
+            raise SyncError('INVALID_REQUEST',422)
+        if enabled and self.service.settings.open_finance_auto_sync_allowed is False:
+            raise SyncError('AUTO_SYNC_DISABLED',403)
+        _,stamp=self.service._time()
+        try:
+            with closing(self.service._db()) as db,self.service._write(db):
+                row=_registered_row(db,connection_id,revision,{'ACTIVE'})
+                self._idle(db,connection_id,row)
+                item=db.execute('SELECT auto_sync_enabled FROM of_managed_pluggy_items WHERE connection_id=?',
+                                (connection_id,)).fetchone() if row['source']=='MANAGED' else None
+                if not item:
+                    raise SyncError('MANAGED_CONNECTION_REQUIRED',409)
+                before=bool(item['auto_sync_enabled'])
+                if before!=enabled:
+                    db.execute('UPDATE of_managed_pluggy_items SET auto_sync_enabled=? WHERE connection_id=?',
+                               (enabled,connection_id))
+                    db.execute('UPDATE of_connection_registry SET revision=revision+1,updated_at=? WHERE connection_id=?',
+                               (stamp,connection_id))
+                    revision+=1
+                    _event(db,connection_id,'AUTO_SYNC_POLICY','ENABLED' if before else 'DISABLED',
+                           'ENABLED' if enabled else 'DISABLED',revision,stamp)
+        except sqlite3.Error:
+            raise SyncError('REGISTRY_WRITE_FAILED',503) from None
+        return {'id':connection_id,'auto_sync_enabled':enabled,'revision':revision}
+
     def archive(self, connection_id, *, actor, revision, confirmed):
         return self._update_registry(connection_id, actor, revision, confirmed, "ARCHIVE", "ARCHIVED",
                                      {"ACTIVE", "DISABLED", "DRAFT"})

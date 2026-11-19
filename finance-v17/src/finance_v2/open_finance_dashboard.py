@@ -1,158 +1,15 @@
 """Read model for the six Open Finance indicators and their supporting views."""
 from collections import defaultdict
-from datetime import date
 from decimal import Decimal
-import json
 
 from .open_finance_classification import normalize
-from .open_finance_insights import banking_insights, card_insights
+from .open_finance_insights import banking_insights
+from .open_finance_card_usage import credit_usage
 from .open_finance_portfolio import window_start
 from .open_finance_query import civil
-from .open_finance_wealth import _activity_view, _execute, _format, _history, _pluggy, _snaptrade
-from .portfolio_fx import FX
+from .open_finance_wealth import _activity_view, _format, _history, _pluggy, _snaptrade
+from .portfolio_values import DashboardValues, asset_class, investment_projection, observation
 from .snaptrade_normalize import code, decimal
-
-
-def asset_class(row):
-    kind=row.get('kind')
-    subtype=row.get('subtype')
-    if subtype in ('REAL_ESTATE_FUND','FII'):
-        return 'FII'
-    if kind in ('reit','REIT') or subtype=='REIT':
-        return 'REIT'
-    if kind in ('ETF','etf') or subtype in ('ETF','ETF_FUND'):
-        return 'ETF'
-    if kind in ('bond','FIXED_INCOME','TREASURY'):
-        return 'FIXED_INCOME'
-    if kind in ('mutualfund','cef','FUND','MUTUAL_FUND'):
-        return 'FUND'
-    if kind in ('stock','preferred_stock','STOCK') or subtype in ('STOCK','COMMON_STOCK','PREFERRED_STOCK'):
-        if row.get('country')=='BR':
-            return 'BRAZIL_STOCK'
-        if row.get('provider')=='SNAPTRADE' or row.get('country'):
-            return 'STOCK'
-    if kind in ('adr','option','future','future_option','crypto','cfd','tokenized_asset'):
-        return 'OTHER'
-    return 'UNKNOWN'
-
-
-class DashboardValues:
-    def __init__(self,db,target,today):
-        self.target=target
-        self.today=today
-        self.fx=FX(db)
-        self.quotes={}
-
-    def record_quote(self,quote):
-        if quote and (quote['date'] not in self.quotes or self.quotes[quote['date']]['lag_days']<quote['lag_days']):
-            self.quotes[quote['date']]=quote
-
-    def project(self,amount,currency,reference):
-        if amount is None or not currency or reference and reference>self.today:
-            return None
-        if self.target=='original':
-            return Decimal(amount)
-        value,quote=self.fx.convert(amount,currency,self.target,reference)
-        self.record_quote(quote)
-        return value
-
-    def total(self,rows,*,overlap=False,partial=False,position=False):
-        native=defaultdict(Decimal)
-        presented=defaultdict(Decimal)
-        dates=set()
-        unavailable=undated=0
-        for row in rows:
-            amount,currency,reference=row['amount'],row['currency'],row['reference']
-            if amount is not None and currency and (not reference or reference<=self.today):
-                native[currency]+=Decimal(amount)
-                if reference:
-                    dates.add(reference)
-                else:
-                    undated+=1
-            value=self.project(amount,currency,reference)
-            if value is None:
-                unavailable+=1
-                continue
-            presented[currency if self.target=='original' else self.target]+=value
-        stale=position and any((date.fromisoformat(self.today)-date.fromisoformat(day)).days>7 for day in dates)
-        mixed=position and len(dates)>1
-        return {'original':{} if overlap else {k:_format(v) for k,v in sorted(native.items())},
-                'amounts':{} if overlap else {k:_format(v) for k,v in sorted(presented.items())},
-                'included':len(rows)-unavailable if not overlap else 0,'total':len(rows),
-                'missing':unavailable,'undated':undated,'dates':sorted(dates),'stale':stale,
-                'mixed_dates':mixed,'overlap':overlap,'partial':bool(partial or unavailable or undated or stale or mixed or overlap)}
-
-
-def observation(row,amount='market_value',reference='reference_at'):
-    return {'amount':row.get(amount),'currency':code(row.get('currency')),'reference':civil(row.get(reference))}
-
-
-def current_bills(db,accounts,current,views,checkpoints,values,parse_amount):
-    # Pluggy's card balance is used credit for regulated connectors. Match the
-    # current billing date to an imported bill instead of using that balance.
-    cards=card_insights(accounts,current,views,None,parse_amount,values.today)
-    rows=_execute(db,"""SELECT connection_id,parent_id,external_id,payload_json,observed_at
-                       FROM of_resource_records WHERE resource='bills' AND state='PRESENT'
-                        AND connection_id IN (SELECT value FROM json_each(?))""",(json.dumps(list(current)),))
-    bills=defaultdict(list)
-    for row in rows:
-        bills[(row['connection_id'],row['parent_id'])].append((row,json.loads(row['payload_json'],parse_float=Decimal)))
-    candidates=defaultdict(list)
-    evidence={}
-    for card in cards['items']:
-        cid,account=card['connection_id'],card['account_id']
-        checkpoint=checkpoints.get((cid,'bills',account),{})
-        due=card['due']
-        key=(cid,account)
-        if checkpoint.get('state') not in ('AVAILABLE','PARTIAL') or not due or due<values.today:
-            card['consolidation_reason']='CURRENT_BILL_UNVERIFIED'
-            continue
-        matches=[(row,bill) for row,bill in bills[key] if civil(bill.get('dueDate'))==due]
-        if len(matches)!=1:
-            card['consolidation_reason']='CURRENT_BILL_UNVERIFIED'
-            continue
-        row,bill=matches[0]
-        currency=code(bill.get('totalAmountCurrencyCode'))
-        amount=parse_amount(bill.get('totalAmount'))
-        if currency!=card['currency'] or amount is None or amount<0:
-            card['consolidation_reason']='AMOUNT_UNAVAILABLE'
-            continue
-        if bill.get('status') in ('PAID','SETTLED','CANCELLED'):
-            card['consolidation_reason']='CURRENT_BILL_UNVERIFIED'
-            continue
-        bank=normalize(views[cid].institution)
-        identity=(bank,row['external_id'])
-        account_data=accounts[key]['data']
-        reference=civil(bill.get('billClosingDate')) or civil(account_data.get('date') or account_data.get('updatedAt'))
-        if reference and reference>values.today:
-            reference=None
-        evidence[key]={'amount':amount,'currency':currency,'reference':reference}
-        candidates[identity].append(card)
-        card.update(bill_value=_format(amount),bill_currency=currency,bill_due=due,bill_reference=reference,
-                    bill_observed=row['observed_at'],bill_coverage=checkpoint['state'],
-                    consolidation_reason=None)
-    accepted=[]
-    bank_connections=defaultdict(set)
-    for card in cards['items']:
-        bank_connections[normalize(card['institution'])].add(card['connection_id'])
-    for (bank,_),matches in candidates.items():
-        if len(bank_connections[bank])>1:
-            for card in matches:
-                card['consolidation_reason']='OBLIGATION_OVERLAP'
-            continue
-        # Repeated representations of one bill count once only when they agree.
-        facts=[evidence[(c['connection_id'],c['account_id'])] for c in matches]
-        if any(fact!=facts[0] for fact in facts):
-            for card in matches:
-                card['consolidation_reason']='OBLIGATION_OVERLAP'
-            continue
-        accepted.append(facts[0])
-        for card in matches[1:]:
-            card['consolidation_reason']='OBLIGATION_OVERLAP'
-    partial=(len(accepted)<cards['count'] or any(card.get('bill_coverage')=='PARTIAL' for card in cards['items']))
-    total=values.total(accepted,partial=partial,position=True)
-    return {**cards,'basis':'CURRENT_BILL','consolidated':None,'used':None,'included_count':total['included'],
-            'bills_state':'NOT_ESTABLISHED' if not accepted else 'PARTIAL' if partial else 'COMPLETE','metric':total}
 
 
 def _projection_rows(rows,values):
@@ -309,12 +166,8 @@ def dashboard(db,settings,q,today,views,current,records,accounts,checkpoints,ite
            'liquid':values.total(liquid_by_connection[cid],position=True,
                                  partial=incomplete(row['members'],'accounts','balances')),
            'details':details[cid][:100]} for cid,row in groups.items()]
-    by_class=defaultdict(list)
-    for row,obs in zip(positions,portfolio_obs):
-        by_class[asset_class(row)].append(obs)
-    composition=[] if blocked else [{'class':kind,'metric':values.total(rows),
-                                     'negative':any(row['amount'] is not None and Decimal(row['amount'])<0 for row in rows)}
-                                    for kind,rows in sorted(by_class.items())]
+    investments,composition=investment_projection(positions,values,overlap=blocked,classes=True,
+                                                  partial=incomplete(members,'investments','positions'))
     history_options={r['connection_id']:r['institution'] for r in bank_members+broker_members}
     invested={row['connection_id'] for row in all_positions}
     pref=q.get('portfolio_connection')
@@ -346,9 +199,9 @@ def dashboard(db,settings,q,today,views,current,records,accounts,checkpoints,ite
     out={
       'currency':target,'institutions':inst,'composition':composition,'income':income,'movements':bank_groups,'history':history,
       'accounts':values.total(bank_rows,partial=incomplete([r for r in members if r['provider']=='PLUGGY'],'accounts','balances'),position=True),
-      'investments':values.total(portfolio_obs,overlap=blocked,partial=incomplete(members,'investments','positions'),position=True),
+      'investments':investments,
       'cash':values.total(cash_obs,overlap=blocked,position=True,partial=incomplete([r for r in members if r['provider']=='SNAPTRADE'],'accounts','balances')),
-      'cards':current_bills(db,accounts,current,views,checkpoints,values,parse_amount)}
+      'cards':credit_usage(db,settings,accounts,current,views,values,parse_amount)}
     for direction in ('incoming','outgoing'):
         out[direction]=values.total([dict(observation(row,'amount','date'),amount=_format(abs(Decimal(row['amount']))) if row['amount'] is not None else None)
                                      for row in adjusted if row['direction']==direction],partial=bank_coverage!='COMPLETE')

@@ -14,7 +14,7 @@ from .db import connect
 from .open_finance_write import staging_transaction
 from .domain.clock import SystemClock, utc_text
 from .pluggy_client import PluggyClient, PluggyError, _period
-from .open_finance_registry import load_keyring, managed_connection
+from .open_finance_registry import connection_views, load_keyring, managed_connection
 from .pluggy_credential_protection import CredentialProtectionError
 
 
@@ -296,6 +296,7 @@ class OpenFinanceService:
         return results
 
     def connections(self,c):
+        views=connection_views(c,self.settings)
         registered = {row["connection_id"]: row for row in c.execute(
             "SELECT connection_id,source,lifecycle,label,revision,replaces_id "
             "FROM of_connection_registry WHERE lifecycle<>'REMOVED' ORDER BY connection_id"
@@ -323,6 +324,7 @@ class OpenFinanceService:
                            'lease_expired':bool(row and row['lease_until'] is not None and row['lease_until']<=epoch),
                            'last_run':dict(last) if last else None,
                            'staged_account_count':account_count,
+                           'auto_sync_enabled':bool(views.get(connection_id) and views[connection_id].auto_sync_enabled),
                            'observed_resources':observed_resources,
                            **({key: entry[key] for key in ("source", "lifecycle", "revision", "replaces_id")} if entry else {})})
         return result

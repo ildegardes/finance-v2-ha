@@ -29,6 +29,7 @@ class ConnectionView:
     historical: bool
     access_mode: str
     auto_sync_enabled: bool
+    lifecycle: str = "ACTIVE"
 
 
 def connection_views(db, settings):
@@ -41,7 +42,7 @@ def connection_views(db, settings):
         for cid, cfg in legacy.items()
     }
     for cid, row in persisted.items():
-        views.setdefault(cid, ConnectionView(cid, row["institution"], False, True, "strict", False))
+        views.setdefault(cid, ConnectionView(cid, row["institution"], False, True, "strict", False, "ARCHIVED"))
     for row in db.execute(
         """SELECT r.connection_id,r.source,r.lifecycle,r.label,a.environment,i.auto_sync_enabled
            FROM of_connection_registry r
@@ -64,7 +65,7 @@ def connection_views(db, settings):
             auto = bool(cfg and cfg.auto_sync_enabled)
         views[cid] = ConnectionView(
             cid, row["label"], enabled, row["lifecycle"] == "ARCHIVED" or mode is None,
-            mode or "strict", auto and enabled,
+            mode or "strict", auto and enabled, row["lifecycle"],
         )
     return views
 

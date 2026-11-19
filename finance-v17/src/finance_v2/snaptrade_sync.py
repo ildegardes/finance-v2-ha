@@ -532,11 +532,7 @@ class SnapTradeWorker:
     def _loop(self):
         while not self.event.is_set():
             try:
-                result=sync(self.service,automatic=True,stop=self.event)
-                if result['state']=='AVAILABLE' and not self.event.is_set():
-                    from .portfolio_fx import refresh
-                    today=self.service.clock.today()
-                    refresh(self.service,today-timedelta(days=8),today)
+                sync(self.service,automatic=True,stop=self.event)
             except Exception:
                 # The separate worker must neither log provider exceptions nor stop Pluggy.
                 pass

@@ -10,10 +10,19 @@ import test_open_finance_038 as features
 
 class DashboardBrowser(unittest.TestCase):
     def test_currency_navigation_history_and_privacy(self):
+        self.exercise_dashboard()
+
+    def test_native_amounts_when_fx_is_absent(self):
+        self.exercise_dashboard(missing_fx=True)
+
+    def exercise_dashboard(self,missing_fx=False):
         scenario=features.DashboardTests('test_original_and_converted_kpis_card_dedup_and_economic_income')
         scenario.setUp()
         self.addCleanup(scenario.doCleanups)
         case=scenario.fixture
+        if missing_fx:
+            case.case.write('DELETE FROM portfolio_fx_rates')
+            case.case.write('UPDATE st_balances SET reference_at=NULL')
         case.case.fixture.no_network.stop()
         app=Application(case.settings,case.clock)
         app.snaptrade_reader_factory=case.broker.factory
@@ -21,8 +30,10 @@ class DashboardBrowser(unittest.TestCase):
         thread=threading.Thread(target=server.serve_forever,daemon=True)
         thread.start()
         try:
-            test=subprocess.run(['node','tests/open_finance_consolidation_ui.cjs',f'http://127.0.0.1:{server.server_port}'],
-                                capture_output=True,encoding='utf-8',timeout=95)
+            args=['node','tests/open_finance_consolidation_ui.cjs',f'http://127.0.0.1:{server.server_port}']
+            if missing_fx:
+                args.append('--missing-fx')
+            test=subprocess.run(args,capture_output=True,encoding='utf-8',timeout=95)
             self.assertEqual(test.returncode,0,test.stderr+test.stdout)
             self.assertIn('PASS:',test.stdout)
         finally:
