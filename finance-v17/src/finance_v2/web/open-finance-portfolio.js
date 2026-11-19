@@ -1,6 +1,6 @@
 import {dateBR} from './privacy.js';
 
-export function portfolioPanel(history,amount,mode,esc){
+export function portfolioPanel(history,amount,mode,esc,originalAmount=amount){
   if(!history)return '';
   const points=history.points;
   const periods=[['1','1 mês'],['3','3 meses'],['6','6 meses'],['12','12 meses'],['all','Todo o histórico']];
@@ -8,17 +8,22 @@ export function portfolioPanel(history,amount,mode,esc){
     ([key,label])=>'<option value="'+key+'" '+(key===history.window?'selected':'')+'>'+label+'</option>'
   ).join('')+'</select></label>';
   const banks=history.connections?.length?'<label>Instituição da série<select data-portfolio-connection>'+
-    '<option value="">Seleção automática</option>'+history.connections.map(row=>'<option value="'+esc(row.id)+'" '+
+    '<option value="">'+(history.consolidated?'Patrimônio consolidado':'Seleção automática')+'</option>'+history.connections.map(row=>'<option value="'+esc(row.id)+'" '+
       (row.id===history.connection_id?'selected':'')+'>'+esc(row.label)+(row.eligible?'':' · sem observações')+'</option>').join('')+
     '</select></label>':'';
   const available=history.state==='AVAILABLE';
   let content='<p class="of-chart-placeholder">'+(history.state==='SELECT_CONNECTION'?'Selecione uma conexão para comparar posições sem sobreposição.':
+    history.state==='OVERLAP'?'Possível sobreposição. Selecione uma instituição.':
     history.state==='LIMIT'?'O histórico ultrapassa o orçamento de consulta. Selecione um intervalo menor.':'Histórico patrimonial em formação.')+'</p>';
   const datesNote=(history.first_observed_at?'<p>Primeira observação registrada '+esc(dateBR(history.first_observed_at))+'.</p>':'')+
     (history.last_observed_at?'<p>Última coleta com posição '+esc(dateBR(history.last_observed_at))+' · '+points.length+' pontos no intervalo.</p>':'');
   if(!available&&history.latest_position!=null)content+='<p>Última posição disponível <strong>'+amount(history.latest_position)+'</strong>'+
     (history.latest_point?'<small> · Referência '+esc(dateBR(history.latest_point.date))+'</small>':'')+'</p>';
-  if(available&&mode!=='full'){
+  const native=points.some(point=>point.original);
+  if(native&&mode!=='full'){
+    content=(available?'':content)+'<ul class="of-category-list">'+points.map(point=>'<li><span>'+esc(dateBR(point.date))+'</span>'+
+      Object.entries(point.original||{}).map(([currency,value])=>'<strong>'+originalAmount(value,currency)+'</strong>').join('')+'</li>').join('')+'</ul>';
+  }else if(available&&mode!=='full'){
     const width=700,height=138,pad=10;
     const values=points.map(point=>Number(point.value));
     const dates=points.map(point=>Date.parse(point.date+'T00:00:00Z'));
@@ -32,7 +37,7 @@ export function portfolioPanel(history,amount,mode,esc){
       (history.percent==null?'':' · '+esc(new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2}).format(Number(history.percent)))+'%')+'</span></div>'+
       '<svg class="of-portfolio-plot" viewBox="0 0 '+width+' '+height+'" role="img" aria-label="Observações da posição patrimonial"><polyline points="'+line+'"></polyline>'+marks+'</svg>'+
       '<div class="of-portfolio-dates"><time>'+esc(dateBR(first.date))+'</time><time>'+esc(dateBR(last.date))+'</time></div>'+
-      '<details><summary>Observações em texto</summary><ul class="of-category-list">'+points.map(point=>'<li><span>'+esc(dateBR(point.date))+'</span><strong>'+amount(point.value)+'</strong></li>').join('')+'</ul></details>';
+      '<details><summary>Observações em texto</summary><ul class="of-category-list">'+points.map(point=>'<li><span>'+esc(dateBR(point.date))+'</span><strong>'+amount(point.value)+'</strong>'+(point.fx?'<small>PTAX '+esc(dateBR(point.fx.date))+'</small>':'')+'</li>').join('')+'</ul></details>';
   }else if(available)content='<p class="of-chart-placeholder">Evolução oculta em privacidade total.</p>';
   return '<section class="of-summary-card of-portfolio"><div class="of-section-heading"><div><h3>Evolução dos investimentos</h3><p>Posições observadas em datas comparáveis</p></div>'+'<div class="of-portfolio-filters">'+banks+select+'</div></div>'+content+datesNote+'<p>Variações podem incluir aportes, resgates e mudanças de mercado.</p><button class="of-link" type="button" data-open-assets>Ver investimentos</button></section>';
 }

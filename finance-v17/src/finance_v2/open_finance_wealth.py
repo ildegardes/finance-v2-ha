@@ -63,18 +63,21 @@ def _market(country):
     return 'BR' if country=='BR' else 'INTERNATIONAL' if country else 'UNKNOWN'
 
 
-def _pluggy(db,settings,include_history):
-    views=connection_views(db,settings)
+def _pluggy(db,settings,include_history,*,records=None,views=None):
+    if views is None:
+        views=connection_views(db,settings)
     accounts={cid:{'id':cid,'account_id':cid,'label':view.institution,'connection_id':cid,'institution':view.institution,
                    'provider':'PLUGGY','state':'AVAILABLE' if view.enabled and not view.historical else 'ARCHIVED'}
               for cid,view in views.items() if include_history or view.enabled and not view.historical}
     if not accounts:
         return [],[]
     rows=[]
-    for row in _execute(db,'''SELECT connection_id,external_id,payload_json,observed_at
-            FROM of_resource_records WHERE resource='investments' AND state='PRESENT'
-            AND connection_id IN (SELECT value FROM json_each(?))''',(json.dumps(list(accounts)),)):
-        raw=json.loads(row['payload_json'],parse_float=Decimal)
+    source=(row for row in records if row['resource']=='investments' and row['connection_id'] in accounts) if records is not None else _execute(db,
+        '''SELECT connection_id,external_id,payload_json,observed_at FROM of_resource_records
+           WHERE resource='investments' AND state='PRESENT' AND connection_id IN (SELECT value FROM json_each(?))''',
+        (json.dumps(list(accounts)),))
+    for row in source:
+        raw=row['data'] if records is not None else json.loads(row['payload_json'],parse_float=Decimal)
         cid=row['connection_id']
         # The Pluggy investment record is institution-scoped. Missing custody
         # account or trading market is represented explicitly by that context.
@@ -83,7 +86,7 @@ def _pluggy(db,settings,include_history):
         country='BR' if market in ('B3','BVMF') or raw.get('type')=='TREASURY' else None
         rows.append({**accounts[cid],'account_id':cid,'instrument_id':row['external_id'],
             'account_label':accounts[cid]['label'],'ticker':text(raw.get('code') or raw.get('symbol')),'label':text(raw.get('name')) or 'Investimento',
-            'kind':text(raw.get('type')) or 'UNKNOWN','exchange':market,'country':country,
+            'kind':text(raw.get('type')) or 'UNKNOWN','subtype':text(raw.get('subtype')),'exchange':market,'country':country,
             'market':_market(country),'currency':code(raw.get('currencyCode')),'market_value':decimal(raw.get('balance')),
             'units':decimal(raw.get('quantity')),'price':decimal(raw.get('unitValue')),'cost':None,'unrealized':None,
             'reference_at':raw.get('date'),'observed_at':row['observed_at'],'lots_json':None})
@@ -93,7 +96,7 @@ def _pluggy(db,settings,include_history):
 def _snaptrade(db,include_history,settings,activities=False):
     accounts={}
     for row in _execute(db,'''SELECT a.id,a.label,a.connection_id,a.state,a.suffix,c.institution,c.provider_state,
-            c.archived,c.excluded,a.net_value,a.net_currency FROM st_accounts a
+            c.archived,c.excluded,c.paused,a.net_value,a.net_currency FROM st_accounts a
             JOIN st_connections c ON a.connection_id=c.id ORDER BY c.institution,a.id'''):
         current=bool(settings.snaptrade_enabled and not row['archived'] and not row['excluded']
                      and row['provider_state']=='AVAILABLE' and row['state']=='AVAILABLE')
@@ -210,7 +213,7 @@ def classify_activity(service,body):
     return {'state':'AVAILABLE'}
 
 
-def _activity_view(db,q,account_index,positions,fx):
+def _activity_view(db,q,account_index,positions,fx,*,all_income=False,asset_classifier=None):
     instruments={(row['account_id'],row['instrument_id']):row for row in positions}
     reviewing=q.get('kind')=='OWNER_REVIEW'
     scope={key:value for key,value in q.items() if key!='kind'} if reviewing else q
@@ -236,6 +239,8 @@ def _activity_view(db,q,account_index,positions,fx):
             args.append(q['asset'])
         if reviewing:
             terms.append("kind='REVIEW' AND description IS NOT NULL")
+        if all_income:
+            terms.append("kind IN ('DIVIDEND','INTEREST','TAX','REVIEW')")
         cursor=db.execute('SELECT * FROM st_activities WHERE '+' AND '.join(terms)+
                           ' ORDER BY date DESC,account_id,activity_id LIMIT ?',(*args,MAX_ROWS+1))
         for index,row in enumerate(cursor):
@@ -255,7 +260,9 @@ def _activity_view(db,q,account_index,positions,fx):
                 income[(row['date'][:precision],currency)][label]+=Decimal(amount)
             if q.get('view')=='income' and label not in (*income_kinds,'REINVESTMENT'):
                 continue
-            if offset<=total<offset+page_size:
+            if all_income or offset<=total<offset+page_size:
+                if asset_classifier:
+                    combined['asset_class']=asset_classifier(instrument)
                 value,quote=fx.convert(amount,currency,target,row['date']) if target!='original' else (None,None)
                 combined.update(presented_amount=_format(value),fx=quote)
                 items.append(combined)
@@ -279,6 +286,9 @@ def _history(db,q,accounts,current,fx,today,has_overlap):
     asset=q.get('asset')
     sql = ('SELECT account_id,currency,reference_date,market_value FROM st_position_snapshots WHERE instrument_id=?'
            if asset else 'SELECT account_id,currency,reference_date,market_value FROM st_snapshots WHERE 1=1')
+    if q.get('positions_only') and not asset:
+        sql+=''' AND EXISTS(SELECT 1 FROM st_position_snapshots p WHERE p.account_id=st_snapshots.account_id
+                        AND p.currency=st_snapshots.currency AND p.reference_date=st_snapshots.reference_date)'''
     for row in _execute(db,sql+''' AND account_id IN (SELECT value FROM json_each(?))
            AND reference_date BETWEEN ? AND ?''',((asset,) if asset else ())+(scope,start,end)):
         sources[row['reference_date']][row['account_id']][row['currency']]=Decimal(row['market_value'])

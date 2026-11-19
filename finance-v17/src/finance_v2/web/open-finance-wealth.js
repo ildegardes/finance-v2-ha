@@ -8,7 +8,7 @@ const resources={balances:'Saldos',positions:'Posições',activities:'Atividades
 const outcomes={AVAILABLE:'Disponível',PARTIAL:'Parcial',FAILED:'Falha na leitura',UNAVAILABLE:'Indisponível',
   REAUTH_REQUIRED:'Reautenticação necessária na SnapTrade',UNKNOWN:'Estado da conexão não informado',NOT_SEEN:'Ausente na última descoberta'};
 const kindNames={stock:'Ações',etf:'ETF',mutualfund:'Fundos',adr:'ADR',bond:'Renda fixa',option:'Opção',
-  preferred_stock:'Ações preferenciais',DIVIDEND:'Dividendo',INTEREST:'Juros',TAX:'Retenção ou tributo',
+  preferred_stock:'Ações preferenciais',reit:'REITs',DIVIDEND:'Dividendo',INTEREST:'Juros',TAX:'Retenção ou tributo',
   FEE:'Taxa',CAPITAL:'Capital',REINVESTMENT:'Reinvestimento',TRANSFER:'Transferência',
   CORPORATE_ACTION:'Evento corporativo',REVIEW:'A revisar'};
 const statusNames={
@@ -41,7 +41,7 @@ const statusNames={
   STORAGE_UNAVAILABLE:'O armazenamento do add-on está indisponível. Consulte o Supervisor.'
 };
 const presentOptions=[['original','Moedas originais'],['BRL','Converter para BRL'],['USD','Converter para USD']];
-const kinds=['stock','etf','mutualfund','bond','option','FIXED_INCOME','EQUITY','TREASURY'];
+const kinds=['stock','reit','etf','mutualfund','bond','option','FIXED_INCOME','EQUITY','TREASURY'];
 const mode=()=>privacyMode();
 const labelKind=key=>kindNames[key]||classLabel(key);
 const formatDate=value=>value?dateBR(value):'Indisponível';
@@ -99,7 +99,7 @@ export function overviewWealth(data,esc,presentation){
     '<button type="button" class="of-link" data-open-unified-portfolio>Ver carteira unificada</button></section>';
 }
 
-export function mountWealth({host,api,esc,navigation,state,today,getPeriod}){
+export function mountWealth({host,api,esc,navigation,state,today,getPeriod,snaptrade=true}){
   const panel=host.querySelector('#of-panel-assets'),section=document.createElement('section');
   section.className='panel of-wealth';
   const legacy=document.createElement('details');
@@ -110,12 +110,12 @@ export function mountWealth({host,api,esc,navigation,state,today,getPeriod}){
   panel.prepend(section);
   const options=(entries)=>optionList(entries,esc);
   section.innerHTML='<h2>Carteira unificada</h2><form class="of-overview-filters" aria-label="Filtros da carteira">'+
-    '<label>Visualizar<select name="view">'+options([['portfolio','Posições'],['activities','Atividades da corretora'],['income','Proventos internacionais'],['history','Histórico patrimonial']])+'</select></label>'+
+    '<label>Visualizar<select name="view">'+options([['portfolio','Posições'],...(snaptrade?[['activities','Atividades da corretora'],['income','Proventos internacionais']]:[]),['history','Histórico patrimonial']])+'</select></label>'+
     '<label>Moeda de apresentação<select name="presentation">'+options(presentOptions)+'</select></label>'+
     '<details class="of-wealth-advanced"><summary>Filtros e ordenação</summary><div class="of-overview-filters">'+
     '<label hidden>Agrupar proventos<select name="group">'+options([['month','Por mês'],['year','Por ano']])+'</select></label>'+
     '<label>Mercado<select name="market">'+options([['','Todos'],['BR','Brasil'],['INTERNATIONAL','Internacional'],['UNKNOWN','Não informado']])+'</select></label>'+
-    '<label>Provedor<select name="provider">'+options([['','Todos'],['PLUGGY','Pluggy'],['SNAPTRADE','SnapTrade']])+'</select></label>'+
+    '<label>Provedor<select name="provider">'+options([['','Todos'],['PLUGGY','Pluggy'],...(snaptrade?[['SNAPTRADE','SnapTrade']]:[])])+'</select></label>'+
     '<label>Instituição<select name="connection_id"><option value="">Todas</option></select></label>'+
     '<label>Conta<select name="account_id"><option value="">Todas</option></select></label>'+
     '<label>Moeda original<input name="currency" maxlength="3" pattern="[A-Z]{3}" placeholder="Todas"></label>'+
@@ -220,6 +220,9 @@ export function mountWealth({host,api,esc,navigation,state,today,getPeriod}){
     const query=queries.begin();
     filters={};
     for(const name of names)if(form.elements[name].value)filters[name]=form.elements[name].value;
+    if(!accounts.length){
+      for(const key of ['connection_id','account_id'])if(state[key])filters[key]=state[key];
+    }
     if(form.elements.history.checked)filters.history='1';
     if(asset){
       filters.account_id=asset.account_id;
@@ -273,12 +276,17 @@ export function mountWealth({host,api,esc,navigation,state,today,getPeriod}){
   host.addEventListener('of-tab-selected',event=>{
     if(event.detail!=='assets'){queries.cancel();return;}
     const period=getPeriod();
+    if(period.presentation)state.presentation=period.presentation;
     for(const name of names)if(name!=='sort'&&name!=='connection_id'&&name!=='account_id')form.elements[name].value=state[name]||(
       name==='start'?period.start||'':name==='end'?period.end||today:'');
     form.elements.history.checked=Boolean(state.history);
     fields();controlMode();load();
   });
-  return {show(context){Object.assign(state,context);asset=null;page=1;},showLegacy(){legacy.open=true;}};
+  return {show(context){
+    Object.assign(state,context);
+    for(const key of ['connection_id','account_id'])form.elements[key].value='';
+    asset=null;page=1;
+  },showLegacy(){legacy.open=true;}};
 }
 
 export function mountSnapTradeConnections({host,panel,api,esc,navigation,today,enabled}){

@@ -1,7 +1,9 @@
-import {bankMark} from './open-finance-identity.js';
+import {bankMark,cardIdentity} from './open-finance-identity.js';
 import {overviewWealth,wealthMoney} from './open-finance-wealth.js';
+import {classes as classNames,presentationPreference,savePresentation,presentationControl,metricValue,metricNote,
+  institutionPositions,portfolioQuality,unifiedIncomeMarkup,cardBills} from './open-finance-consolidated.js';
 import {portfolioPanel} from './open-finance-portfolio.js';
-import {bridgePanel,cardPanel,incomePanel} from './open-finance-insights.js';
+import {automaticPanel,bridgePanel,cardPanel,incomePanel} from './open-finance-insights.js';
 import {createQueryGeneration} from './query-generation.js';
 import {bankMoney,dateBR,privacyMode} from './privacy.js';
 import {activeConnections,connectionLabel} from './open-finance-status.js';
@@ -117,14 +119,14 @@ function flowChart(data,filters,grouping,page,mode,money,esc){
   return '<div class="of-chart-legend"><span>Entradas</span><span>Saídas</span></div><div class="of-chart-frame">'+axis+'<div class="of-chart-groups">'+columns+'</div></div>'+navigation+alternative;
 }
 
-function allocation(investments,mode,amount,esc){
+function allocation(investments,mode,amount,esc,unified=false){
   if(mode==='full')return '<p class="of-chart-placeholder">Composição oculta em privacidade total.</p>';
   const classes=investments.by_class||[];
   if(!classes.length)return '<p class="of-chart-placeholder">Distribuição indisponível para esta moeda.</p>';
   const values=classes.map(item=>item.value==null?null:scaled(item.value));
   const total=values.reduce((sum,value)=>sum+(value??0n),0n);
   const proportional=total>0n&&values.every(value=>value===null||value>=0n)
-    && !(investments.items||[]).some(item=>item.value!=null&&scaled(item.value)<0n);
+    && !investments.negative && !(investments.items||[]).some(item=>item.value!=null&&scaled(item.value)<0n);
   let cumulative=0n;
   const bands=values.flatMap((value,index)=>{
     if(!proportional||!value)return [];
@@ -135,10 +137,33 @@ function allocation(investments,mode,amount,esc){
   const chart=proportional?'<div class="of-allocation-ring" style="--segments:conic-gradient('+bands.join(',')+')"><div><small>Total representado</small><strong>'+amount(decimal(total))+'</strong></div></div>':'';
   const legend=classes.map((item,index)=>{
     const share=values[index]===null||!proportional?'':'<small>'+esc(percentBR.format(fraction(values[index],total)))+'</small>';
-    return '<li><span class="of-allocation-dot" aria-hidden="true" style="--dot:'+palette[index%palette.length]+'"></span><button type="button" class="of-link" data-investment-class="'+esc(item.type)+'">'+esc(classLabel(item.type))+'</button><strong>'+amount(item.value)+'</strong>'+share+'</li>';
+    const label=unified?'<span>'+esc(classNames[item.type])+'</span>':'<button type="button" class="of-link" data-investment-class="'+esc(item.type)+'">'+esc(classLabel(item.type))+'</button>';
+    return '<li><span class="of-allocation-dot" aria-hidden="true" style="--dot:'+palette[index%palette.length]+'"></span>'+label+'<strong>'+amount(item.value)+'</strong>'+share+'</li>';
   }).join('');
   return '<div class="of-allocation-layout">'+chart+'<ul class="of-allocation-legend">'+legend+'</ul></div>'+
     (!proportional?'<p>Os valores informados aparecem na lista. A distribuição proporcional está indisponível.</p>':'');
+}
+
+function moneyGroups(groups,render,grouped){
+  return groups.map(([currency,view])=>'<div class="of-currency-group">'+(grouped?'<h4>'+escCurrency(currency)+'</h4>':'')+render(view,currency)+'</div>').join('');
+}
+
+function escCurrency(currency){return /^[A-Z]{3}$/.test(currency)?currency:'';}
+
+function unifiedAllocation(view,mode,esc){
+  if(mode==='full')return '<p class="of-chart-placeholder">Composição oculta em privacidade total.</p>';
+  const groups=new Map();
+  for(const row of view.composition){
+    for(const [currency,value] of Object.entries(row.metric.amounts)){
+      if(!groups.has(currency))groups.set(currency,{by_class:[],negative:false});
+      const group=groups.get(currency);
+      group.by_class.push({type:row.class,value});
+      group.negative||=row.negative;
+    }
+  }
+  return (view.investments.partial?'<p>'+esc(metricNote(view.investments))+'</p>':'')+
+    (groups.size?moneyGroups([...groups],(data,currency)=>allocation(data,mode,value=>wealthMoney(value,currency,esc),esc,true),view.currency==='original'):
+      '<p class="of-chart-placeholder">Composição indisponível para este escopo.</p>');
 }
 
 function categoryRanking(data,mode,amount,esc,economic){
@@ -177,39 +202,50 @@ function positionRows(data,catalog,amount,esc){
   }).join('')+'</div>';
 }
 
-export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,today,international=false,onUnified=()=>{},onPeriod=()=>{},onNavigate=()=>{},onAssets=()=>{},onCards=()=>{},onConnections=()=>{}}) {
+export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,today,international=false,consolidated=false,onUnified=()=>{},onPeriod=()=>{},onNavigate=()=>{},onAssets=()=>{},onCards=()=>{},onConnections=()=>{}}) {
   const panel=host.querySelector('#of-panel-overview');
   today ||= new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo'}).format(new Date());
   const [first,last]=periodRange('month',today);
   state.start ||= first;
   state.end ||= last;
   state.currency ||= 'BRL';
+  if(consolidated)state.presentation=presentationPreference();
   const active=activeConnections(catalog);
   const options=active.map(c=>'<option value="'+esc(c.id)+'">'+esc(connectionLabel(c,active))+'</option>').join('');
-  panel.innerHTML='<div class="of-overview"><form class="of-dashboard-filters" aria-label="Filtros da visão geral">'+
+  panel.innerHTML='<div class="of-overview"><form class="of-dashboard-filters'+(consolidated?' of-global-filters':'')+'" aria-label="Filtros da visão geral">'+
     '<div class="of-timebar"><label>Período<select name="preset" aria-label="Período"><option value="month">Mensal</option><option value="year">Anual</option><option value="custom">Personalizado</option><optgroup label="Atalhos"><option value="previous">Mês anterior</option><option value="days30">Últimos 30 dias</option><option value="days90">Últimos 90 dias</option><option value="yearRolling">Últimos 12 meses</option></optgroup></select></label>'+
     '<div class="of-period-step"><button type="button" class="quiet" data-period-step="-1" aria-label="Período anterior">‹</button>'+
     '<input type="month" name="month" aria-label="Mês e ano selecionados"><input type="number" name="year" min="1900" aria-label="Ano selecionado" hidden>'+
     '<button type="button" class="quiet" data-period-step="1" aria-label="Próximo período">›</button></div>'+
-    '<button type="button" class="quiet" data-period-now>Período atual</button></div>'+
-    '<div class="of-overview-filters"><label>Instituição<select name="connection_id" aria-label="Instituição"><option value="">Todas as ativas</option>'+options+'<option value="!history">Histórico completo</option></select></label><label>Moeda<input name="currency" pattern="[A-Z]{3}" maxlength="3" required></label><label>De<input type="date" name="start" required></label><label>Até<input type="date" name="end" required></label><button type="submit">Aplicar</button></div></form><div data-overview-result aria-live="polite"></div></div>';
+    '<button type="button" class="quiet" data-period-now>Período atual</button>'+
+    (consolidated?presentationControl(state.presentation):'')+'</div>'+
+    '<div class="of-overview-filters"><label>Instituição<select name="connection_id" aria-label="Instituição"><option value="">Todas as ativas</option>'+options+'<option value="!history">Histórico completo</option></select></label>'+
+    (consolidated?'<input name="currency" type="hidden">':'<label>Moeda<input name="currency" pattern="[A-Z]{3}" maxlength="3" required></label>')+'<label>De<input type="date" name="start" required></label><label>Até<input type="date" name="end" required></label><button type="submit">Aplicar</button></div></form><div data-overview-result aria-live="polite"></div></div>';
   const form=panel.querySelector('form'),result=panel.querySelector('[data-overview-result]');
   const people=form.elements.connection_id;
+  const nativeOptions=new Set([...people.options].map(option=>option.value));
   const queries=createQueryGeneration(navigation);
   const fields=['start','end','currency'];
   let filters,loaded=null,grouping,chartPage=0,flowMode=state.perspective==='gross'?'gross':'adjusted';
   const bucketFor=()=>'operating';
-  function chartData(){
-    if(flowMode==='gross'||!loaded.insights)return loaded;
-    return {flow:{BANK:{coverage_state:loaded.insights.coverage==='COMPLETE_BANK_SCOPE'?'COMPLETE':'PARTIAL'}},
-      series:loaded.insights.series.filter(row=>row.bucket===bucketFor()).map(row=>({...row,product:'BANK'}))};
+  function chartData(view){
+    if(flowMode==='gross'||!view.insights)return view;
+    return {flow:{BANK:{coverage_state:view.insights.coverage==='COMPLETE_BANK_SCOPE'?'COMPLETE':'PARTIAL'}},
+      series:view.insights.series.filter(row=>row.bucket===bucketFor()).map(row=>({...row,product:'BANK'}))};
   }
   host.dataset.ofPrivacyHost='';
   function paint(){
     const mode=privacyMode(host.ownerDocument);
     if(!loaded)return;
-    const accounts=loaded.positions.accounts,investments=loaded.positions.investments,flow=loaded.flow.BANK;
-    const money=value=>bankMoney(value,filters.currency);
+    const shared=loaded.presentation_view;
+    const views=shared?Object.entries(shared.movements):[[filters.currency,loaded]];
+    const grouped=shared?.currency==='original';
+    const preferred=views.find(([currency])=>currency===(grouped?filters.currency:shared?.currency))||views[0];
+    const secondary=preferred?.[1]||loaded;
+    const displayCurrency=preferred?.[0]||(shared?.currency==='USD'?'USD':filters.currency);
+    const accounts=loaded.positions.accounts,investments=loaded.positions.investments,flow=secondary.flow.BANK;
+    const cards=shared?.cards||loaded.cards,history=shared?.history||loaded.portfolio_history;
+    const money=value=>bankMoney(value,displayCurrency);
     const amount=value=>value==null?'Indisponível':mode==='visible'?esc(money(value)):'<span aria-label="Valor oculto">••••••</span>';
     const metric=(icon,title,value,detail,override)=>'<article class="of-metric of-kpi"><div><span class="of-kpi-icon '+icon+'"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="'+icons[icon]+'"></path></svg></span><h3><button type="button" class="of-link" data-metric="'+icon+'">'+title+'</button></h3></div><strong>'+(override??amount(value))+'</strong><small>'+esc(detail)+'</small></article>';
     const currentWealth=loaded.wealth?.summary;
@@ -224,12 +260,12 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
       const dates=(position.items||[]).map(item=>item.reference_date).filter(Boolean).sort();
       return dates.length?'Última referência '+dateBR(dates.at(-1)):countBR.format(position.known||0)+' posições informadas';
     };
-    const insights=loaded.insights,showAdjusted=insights&&flowMode==='adjusted';
+    const insights=secondary.insights,showAdjusted=insights&&flowMode==='adjusted';
     const economicNote=insights?.coverage==='COMPLETE_BANK_SCOPE'?'Janela bancária coberta':'Subtotal identificado · cobertura bancária parcial';
     const flowTitle=showAdjusted?'Resultado econômico identificado':'Fluxo bancário líquido';
     const net=showAdjusted?insights.known.net:flow.net??flow.observed_net;
     const netNote=showAdjusted?(economicNote) :flow.net!=null?'Entradas menos saídas':net!=null?'Saldo dos movimentos conhecidos · cobertura parcial':'Resultado indisponível para a cobertura deste período';
-    const comparable=showAdjusted?insights.comparison:flow.comparison;
+    const comparable=shared?null:showAdjusted?insights.comparison:flow.comparison;
     const comparison=comparable?'<p class="of-comparison">Diferença frente a '+esc(dateBR(comparable.start))+' a '+esc(dateBR(comparable.end))+' · Entradas '+amount(comparable.incoming)+' · Saídas '+amount(comparable.outgoing)+' · Fluxo '+amount(comparable.net)+'</p>':'<p class="of-comparison">Comparação com período anterior indisponível.</p>';
     const coverage=loaded.coverage||[];
     const lastCollection=coverage.map(point=>point.observed_at).filter(Boolean).sort().at(-1);
@@ -237,34 +273,56 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
       const points=coverage.filter(point=>point.resource===kind);
       return '<li><strong>'+label+'</strong><span>'+esc(coverageLabel(kind==='transactions'?flow.coverage_state:loaded.positions[kind].coverage_state))+'</span>'+(points.some(point=>point.state==='FAILED'||point.state==='NOT_AVAILABLE'||point.state==='NOT_AUTHORIZED')?'<small>Há recursos com indisponibilidade neste escopo.</small>':'')+'</li>';
     }).join('');
+    const shown=(entry)=>shared?metricValue(entry,esc):undefined;
+    const charts=views.length?moneyGroups(views,(view,currency)=>flowChart(chartData(view),{...filters,currency},grouping,chartPage,
+      mode,value=>bankMoney(value,currency),esc),grouped):'<p class="of-chart-placeholder">Nenhuma movimentação elegível no período.</p>';
+    const groupNet=shared?views.map(([currency,view])=>'<span class="of-money-line">'+wealthMoney(
+      flowMode==='adjusted'?view.insights.known.net:view.flow.BANK.observed_net,currency,esc)+'</span>').join('')||'Indisponível':amount(net);
+    const breakdown=shared?moneyGroups(views,(view,currency)=>bridgePanel(view.insights,value=>wealthMoney(value,currency,esc),esc),grouped):
+      bridgePanel(insights,amount,esc);
+    const rankings=views.length?moneyGroups(views,(view,currency)=>categoryRanking(view,mode,
+      value=>wealthMoney(value,currency,esc),esc,showAdjusted),grouped):categoryRanking(secondary,mode,amount,esc,showAdjusted);
+    const incomeCard=shared?'<section class="of-summary-card of-income-insight"><div class="of-section-heading"><div><h3>Rendimentos de investimentos</h3>'+
+      '<p>Créditos identificados no período</p></div><button type="button" class="of-link" data-open-income>Ver rendimentos e proventos</button></div>'+
+      unifiedIncomeMarkup(shared.income,esc)+moneyGroups(views.filter(([,view])=>Object.keys(view.insights.automatic.counts).length||view.insights.automatic.position!=null),
+        (view,currency)=>automaticPanel(view.insights.automatic,value=>wealthMoney(value,currency,esc),esc),grouped)+'</section>':incomePanel(insights,amount,mode,esc);
     result.innerHTML=(filters.history==='1'?'<p class="of-notice">Histórico completo · O fluxo inclui conexões arquivadas. As posições abaixo têm como referência somente conexões ativas.</p>':'')+
-      '<div class="of-six-kpis"><section><h3>Posição financeira atual</h3><div class="of-metrics of-kpi-group">'+metric('accounts','Saldo em contas',accounts.value,positionNote(accounts))+
-      metric('investments','Investimentos',investments.value,currentWealth?wealthDetail:positionNote(investments),
-        currentWealth?wealthMetric:undefined)+
-      metric('cards','Cartões de crédito',loaded.cards?.consolidated??loaded.cards?.used,loaded.cards?.consolidated!=null?
-        (loaded.cards.included_count+' de '+loaded.cards.count+' considerados'):(loaded.cards?.active_count||0)+' ativos informados')+
+      '<div class="of-six-kpis"><section><h3>Posição financeira atual</h3><div class="of-metrics of-kpi-group">'+
+      metric('accounts','Saldo em contas',accounts.value,shared?metricNote(shared.accounts):positionNote(accounts),shown(shared?.accounts))+
+      metric('investments','Investimentos',investments.value,shared?metricNote(shared.investments):currentWealth?wealthDetail:positionNote(investments),
+        shared?shown(shared.investments):currentWealth?wealthMetric:undefined)+
+      metric('cards','Cartões de crédito',cards?.consolidated??cards?.used,shared?
+        (cards.included_count?('Faturas atuais · '+cards.included_count+' de '+cards.count+' · '+(cards.metric.partial?'subtotal':'cobertura informada')):
+         cards.active_count+' ativos · faturas indisponíveis'):cards?.consolidated!=null?
+        (cards.included_count+' de '+cards.count+' considerados'):(cards?.active_count||0)+' ativos informados',shown(shared?.cards.metric))+
       '</div></section><section><h3>Resultados do período</h3><div class="of-metrics of-kpi-group">'+
-      metric('incoming',showAdjusted?'Receitas identificadas':'Entradas bancárias',showAdjusted?insights.known.incoming:flow.reported?.incoming,showAdjusted?economicNote:coverageLabel(flow.coverage_state))+
-      metric('outgoing',showAdjusted?'Despesas identificadas':'Saídas bancárias',showAdjusted?insights.known.outgoing:flow.reported?.outgoing,showAdjusted?economicNote:coverageLabel(flow.coverage_state))+
-      metric('income','Rendimentos',insights?.income.value,'Créditos de investimento identificados')+'</div></section></div>'+
+      metric('incoming',flowMode==='adjusted'?'Receitas identificadas':'Entradas bancárias',showAdjusted?insights.known.incoming:flow.reported?.incoming,
+        shared?metricNote(shared[flowMode==='gross'?'gross_incoming':'incoming']):showAdjusted?economicNote:coverageLabel(flow.coverage_state),
+        shown(shared?.[flowMode==='gross'?'gross_incoming':'incoming']))+
+      metric('outgoing',flowMode==='adjusted'?'Despesas identificadas':'Saídas bancárias',showAdjusted?insights.known.outgoing:flow.reported?.outgoing,
+        shared?metricNote(shared[flowMode==='gross'?'gross_outgoing':'outgoing']):showAdjusted?economicNote:coverageLabel(flow.coverage_state),
+        shown(shared?.[flowMode==='gross'?'gross_outgoing':'outgoing']))+
+      metric('income','Rendimentos',insights?.income.value,'Créditos de investimento identificados',shown(shared?.income.credits))+'</div></section></div>'+
+      (shared?.quality.mixed_dates?'<p class="of-notice">Os valores patrimoniais têm datas de referência diferentes.</p>':'')+
       '<section class="of-summary-card of-bank-flow"><div class="of-section-heading"><div><h3>'+flowTitle+'</h3>'+
-      '<strong class="of-net-value">'+amount(net)+'</strong>'+
+      '<strong class="of-net-value">'+groupNet+'</strong>'+
       '<p>'+netNote+'</p></div><div class="actions of-insight-selects">'+(insights?'<label>Visão do fluxo<select data-financial-flow aria-label="Visão do fluxo"><option value="adjusted">Econômica</option><option value="gross">Bancária</option></select></label>':'')+
       '<label>Agrupar por<select data-grouping aria-label="Agrupar por"><option value="day">Dia</option><option value="week">Semana</option><option value="month">Mês</option></select></label></div></div>'+
-      '<div data-flow-chart>'+flowChart(chartData(),filters,grouping,chartPage,mode,money,esc)+'</div>'+
-      comparison+bridgePanel(insights,amount,esc)+
+      '<div data-flow-chart>'+charts+'</div>'+
+      comparison+breakdown+
       (showAdjusted&&insights.card_activity?.purchases!=null?'<p><button type="button" class="of-link" data-card-expenses>Compras de cartão identificadas</button> '+amount(insights.card_activity.purchases)+' · '+countBR.format(insights.card_activity.installments)+' parcelas. Subtotal pelas datas lançadas no cartão.</p>':'')+
       (showAdjusted&&insights.card_activity?.credits!=null?'<p><button type="button" class="of-link" data-card-credits>Estornos identificados no cartão</button> '+amount(insights.card_activity.credits)+'</p>':'')+
       (showAdjusted&&insights.card_activity?.unresolved?'<p>'+countBR.format(insights.card_activity.unresolved)+' movimentos de cartão sem natureza econômica comprovada.</p>':'')+
       (insights?.unresolved_scope?'<p>Há registros fora do recorte por falta de data, moeda ou situação comprovada.</p>':'')+
       (insights?'<button type="button" class="of-link" data-classification-pending>Ver '+countBR.format(insights.pending)+' movimentações pendentes de classificação</button>':'')+
       '</section>'+
-      (international?overviewWealth(loaded.wealth,esc,state.wealthPresentation||'original'):'')+
-      portfolioPanel(loaded.portfolio_history,amount,mode,esc)+
-      '<div class="of-overview-grid"><section class="of-summary-card"><div class="of-section-heading"><div><h3>Composição da carteira</h3></div><button type="button" class="of-link" data-open-assets>Ver investimentos</button></div>'+allocation(investments,mode,amount,esc)+'</section>'+incomePanel(insights,amount,mode,esc)+'</div>'+
-      '<div class="of-overview-grid"><section class="of-summary-card"><h3>'+(showAdjusted?'Principais categorias de despesas':'Principais categorias de saída')+'</h3>'+categoryRanking(loaded,mode,amount,esc,showAdjusted)+'</section>'+cardPanel(loaded.cards,amount,mode,esc)+'</div>'+
-      '<section class="of-summary-card" data-current-positions tabindex="-1"><h3>Posições por instituição</h3><p>Últimas posições conhecidas</p>'+positionRows(loaded,catalog,amount,esc)+'</section>'+
-      '<details class="of-summary-card of-quality"><summary>Qualidade dos dados</summary><ul class="of-category-list">'+quality+'</ul><p>'+countBR.format((loaded.institutions||[]).filter(row=>row.current).length)+' conexões ativas no escopo · '+countBR.format(insights?.pending||0)+' movimentos em revisão.</p><p>Posições patrimoniais '+countBR.format(loaded.portfolio_history?.points.length||0)+' no intervalo. Limites de cartão exigem comprovação de linhas distintas. A cobertura das despesas de cartões permanece em análise separada.</p><p>Última coleta registrada no escopo '+esc(dateBR(lastCollection))+'. Consulte as posições para ver a data financeira e a atualização informada pelo provedor.</p><p>Movimentos brutos incluem transferências e pagamentos. Posições e saldos podem se sobrepor.</p><div class="actions"><button type="button" class="of-link" data-open-connections>Conexões</button><button type="button" class="of-link" data-open-diagnostics>Diagnóstico</button></div></details>';
+      (international&&!shared?overviewWealth(loaded.wealth,esc,state.wealthPresentation||'original'):'')+
+      portfolioPanel(history,shared?value=>wealthMoney(value,shared.currency,esc):amount,mode,esc,(value,currency)=>wealthMoney(value,currency,esc))+
+      '<div class="of-overview-grid"><section class="of-summary-card"><div class="of-section-heading"><div><h3>Composição da carteira</h3></div><button type="button" class="of-link" data-open-assets>Ver investimentos</button></div>'+(shared?unifiedAllocation(shared,mode,esc):allocation(investments,mode,amount,esc))+'</section>'+incomeCard+'</div>'+
+      '<div class="of-overview-grid"><section class="of-summary-card"><h3>'+(showAdjusted?'Principais categorias de despesas':'Principais categorias de saída')+'</h3>'+rankings+'</section>'+(shared?cardBills(cards,esc,mode,cardIdentity):cardPanel(cards,amount,mode,esc))+'</div>'+
+      '<section class="of-summary-card" data-current-positions tabindex="-1"><h3>Posições por instituição</h3><p>Últimas posições conhecidas</p>'+(shared?institutionPositions(shared,esc):positionRows(loaded,catalog,amount,esc))+'</section>'+
+      '<details class="of-summary-card of-quality"><summary>Qualidade dos dados</summary>'+
+      (shared?portfolioQuality(shared,esc):'')+'<ul class="of-category-list">'+quality+'</ul><p>'+countBR.format((loaded.institutions||[]).filter(row=>row.current).length)+' conexões ativas no escopo · '+countBR.format(insights?.pending||0)+' movimentos em revisão.</p><p>Posições patrimoniais '+countBR.format(history?.points.length||0)+' no intervalo. Limites de cartão exigem comprovação de linhas distintas. A cobertura das despesas de cartões permanece em análise separada.</p><p>Última coleta registrada no escopo '+esc(dateBR(lastCollection))+'. Consulte as posições para ver a data financeira e a atualização informada pelo provedor.</p><p>Movimentos brutos incluem transferências e pagamentos. Posições e saldos podem se sobrepor.</p><div class="actions"><button type="button" class="of-link" data-open-connections>Conexões</button><button type="button" class="of-link" data-open-diagnostics>Diagnóstico</button></div></details>';
     result.querySelector('[data-grouping]').value=grouping;
     const kind=result.querySelector('[data-financial-flow]');
     if(kind)kind.value=flowMode;
@@ -272,7 +330,8 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
 
   function syncForm(){
     for(const key of fields)form.elements[key].value=state[key];
-    people.value=state.history==='1'?'!history':active.some(c=>c.id===state.connection_id)?state.connection_id:'';
+    people.value=state.history==='1'?'!history':[...people.options].some(option=>option.value===state.connection_id)?state.connection_id:'';
+    if(consolidated)form.elements.presentation.value=state.presentation;
     form.elements.preset.value=state.periodMode||'month';
     form.elements.month.value=state.start.slice(0,7);
     form.elements.month.max=today.slice(0,7);
@@ -316,24 +375,33 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
     filters={start:form.elements.start.value,end:minDate(form.elements.end.value,today),currency:form.elements.currency.value,
       history:people.value==='!history'?'1':'0',connection_id:people.value==='!history'?'':people.value};
     Object.assign(state,filters,{periodMode:form.elements.preset.value});
+    if(consolidated)state.presentation=form.elements.presentation.value;
     onPeriod(filters);
     const days=(+asDate(filters.end)-+asDate(filters.start))/dayMs+1;
     grouping=days<=14?'day':days<=90?'week':'month';
     chartPage=0;
     loaded=null;
-    result.innerHTML='<p role="status" class="of-chart-placeholder">Carregando resumo bancário…</p>';
+    result.innerHTML='<p role="status" class="of-chart-placeholder">Carregando resumo financeiro…</p>';
     result.setAttribute('aria-busy','true');
     const params=new URLSearchParams({...filters,product:'ALL',status:'POSTED',portfolio_window:state.portfolioWindow||'6'});
-    if(active.some(item=>item.id===state.portfolioConnection))params.set('portfolio_connection',state.portfolioConnection);
+    if(state.portfolioConnection&&(consolidated||active.some(item=>item.id===state.portfolioConnection)))params.set('portfolio_connection',state.portfolioConnection);
+    if(consolidated)params.set('presentation',state.presentation);
     if(!filters.connection_id)params.delete('connection_id');
     try{
       const bank=api('/open-finance/analytics?'+params,{queryScope:query});
       const wealthParams=new URLSearchParams({presentation:state.wealthPresentation||'original',page_size:'25'});
       if(filters.connection_id)wealthParams.set('connection_id',filters.connection_id);
-      const wealth=international?api('/open-finance/portfolio?'+wealthParams,{queryScope:query}).catch(()=>null):null;
+      const wealth=international&&!consolidated?api('/open-finance/portfolio?'+wealthParams,{queryScope:query}).catch(()=>null):null;
       const [response,wealthData]=await Promise.all([bank,wealth]);
       if(!query.current()||!host.isConnected)return;
-      loaded=international?{...response,wealth:wealthData}:response;
+      loaded=international&&!consolidated?{...response,wealth:wealthData}:response;
+      if(consolidated){
+        for(const option of [...people.options])if(!nativeOptions.has(option.value))option.remove();
+        for(const row of (response.presentation_view?.history.connections||[])){
+          if(!nativeOptions.has(row.id))people.add(new Option(institutionName(row.label),row.id));
+        }
+        people.value=filters.history==='1'?'!history':filters.connection_id;
+      }
       paint();
     }catch(_){
       if(query.current()&&host.isConnected){
@@ -351,6 +419,11 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
   }
   people.onchange=filtersChanged;
   form.elements.currency.oninput=filtersChanged;
+  if(consolidated)form.elements.presentation.onchange=()=>{
+    state.presentation=form.elements.presentation.value;
+    savePresentation(state.presentation);
+    form.requestSubmit();
+  };
   form.onsubmit=event=>{
     event.preventDefault();
     if(form.elements.start.value>minDate(form.elements.end.value,today)){
@@ -394,29 +467,32 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
     const button=event.target.closest('button');
     if(!button)return;
     if(button.matches('[data-retry-summary]')){load();return}
+    const shared=loaded?.presentation_view;
+    const presented=shared?.currency||state.wealthPresentation||'original';
     const context={...filters,account_id:'',product:'BANK',status:'POSTED',direction:'all',category:'',search:'',bill_id:''};
     if(button.dataset.metric==='accounts'){
       const target=result.querySelector('[data-current-positions]');target.focus();target.scrollIntoView({block:'start'});
     }else if(button.matches('[data-open-income],[data-metric="income"]')){
       onAssets({...context,income:true});
     }else if(button.matches('[data-overview-card],[data-all-overview-cards],[data-metric="cards"]')){
-      const card=button.dataset.overviewCard===undefined?null:loaded.cards.items[Number(button.dataset.overviewCard)];
-      onCards({connection_id:card?.connection_id||filters.connection_id,account_id:card?.account_id||'',currency:filters.currency});
+      const card=button.dataset.overviewCard===undefined?null:(shared?.cards||loaded.cards).items[Number(button.dataset.overviewCard)];
+      onCards({connection_id:card?.connection_id||filters.connection_id,account_id:card?.account_id||'',currency:card?.currency||filters.currency});
     }else if(button.matches('[data-classification-pending]')){
       onNavigate({...context,bucket:'pending',openClassification:true});
     }else if(button.dataset.insightBucket){
       onNavigate({...context,bucket:button.dataset.insightBucket,direction:button.dataset.insightDirection});
-    }else if(international&&button.matches('[data-open-unified-portfolio],[data-metric="investments"]')){
-      onUnified({view:'portfolio',presentation:state.wealthPresentation||'original',
-        ...(filters.connection_id?{connection_id:filters.connection_id}:{})});
+    }else if((consolidated||international)&&button.matches('[data-open-unified-portfolio],[data-open-assets],[data-metric="investments"]')){
+      onUnified({view:'portfolio',presentation:presented,
+        connection_id:(button.closest('.of-portfolio')?shared?.history.connection_id:filters.connection_id)||'',account_id:''});
     }else if(button.closest('.of-portfolio')&&button.matches('[data-open-assets]')){
       onAssets({connection_id:loaded.portfolio_history?.connection_id||'',currency:filters.currency,type:''});
     }else if(button.matches('[data-investment-class],[data-open-assets],[data-metric="investments"]')){
       onAssets({connection_id:filters.connection_id,currency:filters.currency,type:button.dataset.investmentClass||''});
     }else if(button.dataset.institutionAssets){
-      onAssets({connection_id:button.dataset.institutionAssets,currency:filters.currency,type:''});
+      if(consolidated)onUnified({view:'portfolio',presentation:presented,connection_id:button.dataset.institutionAssets,account_id:''});
+      else onAssets({connection_id:button.dataset.institutionAssets,currency:filters.currency,type:''});
     }else if(button.dataset.institutionConnection){
-      onConnections(button.dataset.institutionConnection,true);
+      onConnections(button.dataset.institutionConnection,true,button.hasAttribute('data-broker-connection'));
     }else if(button.matches('[data-card-expenses],[data-card-credits]')){
       onNavigate({...context,product:'CREDIT',direction:button.matches('[data-card-expenses]')?'outgoing':'incoming',
         card_economic:button.matches('[data-card-expenses]')?'recognized_purchase':'credit'});
@@ -435,8 +511,12 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
       onNavigate({...context,direction:button.dataset.metric,...(flowMode==='gross'||!loaded.insights?{}:{bucket:bucketFor()})});
     }else if(button.dataset.overviewCategory){
       const economic=Boolean(loaded.insights&&flowMode==='adjusted');
-      const row=(economic?loaded.economic_category_ranking:loaded.category_ranking.BANK).find(item=>item.key===button.dataset.overviewCategory);
-      onNavigate({...context,direction:'outgoing',effective_key:row.key,effectiveLabel:categoryLabel(row),...(economic?{bucket:'operating'}:{})});
+      const source=shared?Object.values(shared.movements).flatMap(view=>economic?view.economic_category_ranking:view.category_ranking.BANK):
+        (economic?loaded.economic_category_ranking:loaded.category_ranking.BANK);
+      const row=source.find(item=>item.key===button.dataset.overviewCategory);
+      if(row)onNavigate({...context,direction:'outgoing',effective_key:row.key,effectiveLabel:categoryLabel(row),...(economic?{bucket:'operating'}:{})});
+    }else if(button.hasAttribute('data-broker-activity')){
+      onUnified({view:'activities',presentation:presented,connection_id:button.dataset.overviewInstitution,account_id:''});
     }else if(button.dataset.overviewInstitution){
       onNavigate({...context,connection_id:button.dataset.overviewInstitution,history:'0'});
     }else if(button.dataset.bucket){

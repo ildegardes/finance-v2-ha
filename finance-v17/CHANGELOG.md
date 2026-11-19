@@ -1,3 +1,10 @@
+## 0.1.38-open-finance.1
+
+- Define a moeda de apresentação no cabeçalho e consolida Pluggy e SnapTrade nos seis indicadores.
+- Integra as instituições, composição, rendimentos e séries patrimoniais. Mantém o caixa da corretora separado dos investimentos.
+- Usa faturas atuais identificadas para o subtotal de cartões e explicita lacunas de cobertura ou cotação.
+- Preserva o schema 16 e as consultas anteriores da API.
+
 ## 0.1.37-open-finance.1
 
 - Corrige a descoberta Personal com o envelope `results` e o vínculo `connection_id` do SDK SnapTrade.

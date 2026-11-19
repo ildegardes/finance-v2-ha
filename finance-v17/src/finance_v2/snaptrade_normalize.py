@@ -13,12 +13,12 @@ KINDS = {
     'BUY':'CAPITAL', 'SELL':'CAPITAL', 'CONTRIBUTION':'TRANSFER', 'DEPOSIT':'TRANSFER',
     'WITHDRAWAL':'TRANSFER', 'TRANSFER':'TRANSFER', 'DIVIDEND':'DIVIDEND',
     'SUBSTITUTE_DIVIDEND':'DIVIDEND', 'INTEREST':'INTEREST', 'REI':'REINVESTMENT',
-    'REINVESTMENT':'REINVESTMENT', 'FEE':'FEE', 'TAX':'TAX', 'WITHHOLDING':'TAX',
+    'REINVESTMENT':'REINVESTMENT', 'FEE':'FEE', 'TAX':'TAX', 'WITHHOLDING':'TAX','TAX_WITHHOLDING':'TAX',
     'SPLIT':'CORPORATE_ACTION', 'REVERSE_SPLIT':'CORPORATE_ACTION', 'STOCK_DIVIDEND':'CORPORATE_ACTION',
     'MERGER':'CORPORATE_ACTION', 'SPINOFF':'CORPORATE_ACTION', 'OPTIONEXPIRATION':'CORPORATE_ACTION',
     'OPTIONEXERCISE':'CORPORATE_ACTION','OPTIONASSIGNMENT':'CORPORATE_ACTION',
 }
-SECURITIES = {'stock','preferred_stock','adr','etf','mutualfund','cef','bond','other'}
+SECURITIES = {'stock','preferred_stock','adr','etf','mutualfund','cef','bond','other','reit'}
 
 
 def key(*parts):
@@ -143,6 +143,14 @@ def financial_text(row,field):
     return decimal(financial_amount(row,field))
 
 
+def is_reit(instrument):
+    security_type=instrument.get('type') if isinstance(instrument,dict) else None
+    if not isinstance(security_type,dict):
+        return False
+    return (security_type.get('code')=='reit' or
+            security_type.get('description') in ('REIT','Real Estate Investment Trust'))
+
+
 def position(row,as_of,observed,secrets):
     instrument = row.get('instrument')
     if not isinstance(instrument,dict):
@@ -150,6 +158,8 @@ def position(row,as_of,observed,secrets):
     kind = text(instrument.get('kind'),secrets)
     if not kind:
         raise invalid('kind')
+    if kind in ('stock','preferred_stock','other') and is_reit(instrument):
+        kind='reit'
     cash = row.get('cash_equivalent') is True or kind=='cash'
     currency = code(row.get('currency')) or (code(instrument.get('code')) if kind=='cash' else None)
     identity = instrument.get('id') or (currency if kind=='cash' else None)

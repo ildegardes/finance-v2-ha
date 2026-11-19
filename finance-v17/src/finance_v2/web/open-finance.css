@@ -216,3 +216,11 @@ button.of-column{position:relative;background:transparent;border-radius:.2rem;pa
 .of-wealth-advanced label:has(input[type=checkbox]){display:flex;align-items:center}
 .of-wealth-advanced input[type=checkbox]{width:auto}
 .of-wealth-legacy>summary{cursor:pointer;font-weight:650}
+
+.of-money-line{display:block}.of-currency-group+.of-currency-group{margin-top:.8rem}.of-timebar label:has([name=presentation]){margin-left:auto}
+@media(max-width:600px){.of-timebar label:has([name=presentation]){margin-left:0;flex-basis:100%}}
+
+@media(min-width:781px){.of-dashboard-filters.of-global-filters .of-overview-filters{grid-template-columns:minmax(11rem,1.3fr) repeat(2,minmax(9rem,1fr)) auto}}
+.of-consolidated-positions .of-position{grid-template-columns:repeat(2,minmax(0,1fr))}
+.of-consolidated-positions .of-position-identity{grid-column:1/-1}
+.of-six-kpis .of-metric strong .of-money-line{color:inherit}

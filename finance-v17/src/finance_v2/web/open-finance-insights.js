@@ -1,3 +1,4 @@
+import {unifiedIncomeMarkup} from './open-finance-consolidated.js';
 import {cardIdentity} from './open-finance-identity.js';
 import {bankMoney,dateBR,privacyMode} from './privacy.js';
 import {countBR,institutionName,statusLabel} from './open-finance-labels.js';
@@ -62,16 +63,19 @@ function proportions(rows,mode,amount,esc){
     '<span class="of-ranking-track" aria-hidden="true"><i style="width:'+(max>0?100*Number(row.value)/max:0)+'%"></i></span></li>').join('')+'</ul>';
 }
 
-export function incomePanel(insights,amount,mode,esc){
-  if(!insights)return '';
-  const automatic=insights.automatic;
-  const auto=automatic&&(Object.keys(automatic.counts).length||automatic.position!=null)?'<details class="of-automatic-card"><summary>Aplic Aut Mais</summary><ul class="of-category-list">'+
+export function automaticPanel(automatic,amount,esc){
+  return automatic&&(Object.keys(automatic.counts).length||automatic.position!=null)?'<details class="of-automatic-card"><summary>Aplic Aut Mais</summary><ul class="of-category-list">'+
     Object.entries(volumeNames).map(([key,label])=>'<li>'+
       (key==='capital_flow'?'<span>'+label+'</span>':'<button type="button" class="of-link" data-auto-category="'+key+'">'+label+'</button>')+
       '<strong>'+amount(automatic.value[key])+'</strong>'+
       (automatic.counts[key]?'<small>'+esc(countBR.format(automatic.counts[key]))+' movimentos</small>':'')+'</li>').join('')+
       '<li><button type="button" class="of-link" data-auto-category="pending">Resgates pendentes</button><strong>'+amount(automatic.pending?.incoming)+'</strong></li>'+
       '<li><span>Posição informada do produto</span><strong>'+amount(automatic.position)+'</strong></li></ul></details>':'';
+}
+
+export function incomePanel(insights,amount,mode,esc){
+  if(!insights)return '';
+  const auto=automaticPanel(insights.automatic,amount,esc);
   const monthlyNote=insights.income.comparison==null?'':'<p>Diferença de rendimentos frente ao período anterior '+amount(insights.income.comparison)+'.</p>';
   const rows=Object.entries(insights.income.by_kind).map(([key,value])=>({key,label:proventNames[key]||key,value}));
   return '<section class="of-summary-card of-income-insight"><div class="of-section-heading"><div><h3>Rendimentos de investimentos</h3>'+
@@ -80,14 +84,15 @@ export function incomePanel(insights,amount,mode,esc){
     monthlyNote+'<p>A cobertura depende dos registros disponíveis e das classificações confirmadas.</p>'+auto+'</section>';
 }
 
-export function mountInvestmentIncome({host,api,esc,navigation,getScope}){
+export function mountInvestmentIncome({host,api,esc,navigation,getScope,consolidated=false}){
   const panel=host.querySelector('#of-panel-assets');
   const section=document.createElement('section');
   section.className='panel of-investment-income';
   section.innerHTML='<details><summary>Rendimentos e proventos</summary><form class="of-overview-filters" aria-label="Período de rendimentos">'+
     '<label>De<input name="start" type="date" required></label><label>Até<input name="end" type="date" required></label>'+
-    '<label>Moeda<input name="currency" maxlength="3" pattern="[A-Z]{3}" required></label>'+
-    '<label>Ordenar por<select name="order"><option value="date">Data</option><option value="asset">Código</option><option value="count">Ocorrências</option><option value="value">Valor acumulado</option></select></label>'+
+    (consolidated?'<input name="currency" type="hidden">':
+      '<label>Moeda<input name="currency" maxlength="3" pattern="[A-Z]{3}" required></label>'+
+      '<label>Ordenar por<select name="order"><option value="date">Data</option><option value="asset">Código</option><option value="count">Ocorrências</option><option value="value">Valor acumulado</option></select></label>')+
     '<button type="submit">Consultar rendimentos</button></form><div data-income-result aria-live="polite"></div></details>';
   panel.append(section);
   const details=section.querySelector('details'),form=section.querySelector('form'),result=section.querySelector('[data-income-result]');
@@ -100,6 +105,12 @@ export function mountInvestmentIncome({host,api,esc,navigation,getScope}){
       if(mode!=='visible')return '<span aria-label="Valor oculto">••••••</span>';
       return esc(bankMoney(value,scope.currency));
     };
+    if(consolidated){
+      if(snapshot)result.innerHTML=unifiedIncomeMarkup(snapshot.income,esc,{details:true})+
+        Object.entries(snapshot.movements).map(([currency,view])=>automaticPanel(view.insights.automatic,
+          value=>value==null?'Indisponível':mode==='visible'?esc(bankMoney(value,currency)):'<span aria-label="Valor oculto">••••••</span>',esc)).join('');
+      return;
+    }
     order.querySelector('[value=value]').disabled=mode==='full';
     if(mode==='full'&&order.value==='value')order.value='date';
     if(!snapshot)return;
@@ -134,6 +145,7 @@ export function mountInvestmentIncome({host,api,esc,navigation,getScope}){
   async function load(){
     const query=queries.begin();
     const filters={start:form.elements.start.value,end:form.elements.end.value,currency:form.elements.currency.value,product:'BANK',status:'POSTED'};
+    if(consolidated)filters.presentation=scope.presentation||'BRL';
     if(scope.connection_id)filters.connection_id=scope.connection_id;
     if(scope.history==='1')filters.history='1';
     scope={...scope,...filters};
@@ -143,7 +155,7 @@ export function mountInvestmentIncome({host,api,esc,navigation,getScope}){
     try{
       const data=await api('/open-finance/analytics?'+new URLSearchParams(filters),{queryScope:query});
       if(!query.current()||!host.isConnected)return;
-      snapshot=data.insights;
+      snapshot=consolidated?data.presentation_view:data.insights;
       if(snapshot)paint();
       else result.innerHTML='<p>Consulta de rendimentos indisponível.</p>';
     }catch(_){if(query.current())result.innerHTML='<p role="alert">Não foi possível consultar os rendimentos.</p>';}
@@ -162,7 +174,7 @@ export function mountInvestmentIncome({host,api,esc,navigation,getScope}){
     else queryCurrentPeriod();
   });
   form.onsubmit=event=>{event.preventDefault();load();};
-  form.elements.order.onchange=paint;
+  if(form.elements.order)form.elements.order.onchange=paint;
   host.addEventListener('finance-privacy-changed',paint);
   host.addEventListener('of-tab-selected',event=>{
     if(event.detail!=='assets'){queries.cancel();details.open=false;}

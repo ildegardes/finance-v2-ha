@@ -1,4 +1,12 @@
-# Finance V17 0.1.37-open-finance.1
+# Finance V17 0.1.38-open-finance.1
+
+Faça um backup e atualize pelo Supervisor. A versão usa o schema 16. Abra **Open Finance › Visão geral** e escolha a moeda no cabeçalho. O navegador guarda essa preferência. BRL é a seleção inicial. A aba Investimentos mantém os valores originais e a distribuição por mercado.
+
+Confira **Posições por instituição**, **Rendimentos de investimentos** e **Evolução dos investimentos** para as instituições conectadas. A série patrimonial tem seletores de instituição e janela próprios. Quando faltam cotações ou referências comparáveis, a interface indica a cobertura disponível. As cotações podem ser atualizadas em **Open Finance › Conexões › Cotações PTAX**.
+
+[Critérios de consolidação e faturas](../docs/open-finance/CONSOLIDACAO_038.md)
+
+## Finance V17 0.1.37-open-finance.1
 
 A atualização mantém o schema 16. Faça o backup do add-on e instale a nova versão pelo Supervisor. Na aba **Configuração** do add-on, confira `snaptrade_enabled`, `snaptrade_client_id` e `snaptrade_consumer_key`. Em **Open Finance › Conexões › SnapTrade**, selecione **Testar credenciais e descobrir contas**. Depois da descoberta, execute **Atualizar dados** e confira a conta e as posições no Finance e na SnapTrade.
 
@@ -8,7 +16,7 @@ Se houver erro, use **Atualizar diagnóstico**, abra **Diagnóstico técnico** e
 
 ## Atualização e reversão
 
-Faça um backup recuperável do add-on com banco, opções e chave de credenciais quando utilizada. Atualize o catálogo pelo Supervisor do Home Assistant e instale a atualização do add-on Finance V17. Confira `migrations.current_version=16` em `/api/v2/health`. O slug permanece `finance_v17`. Para retornar à 0.1.36, guarde uma cópia separada dos dados atuais e restaure o backup anterior de schema 16 com suas opções e chave correspondentes.
+Faça um backup recuperável do add-on com banco, opções e chave de credenciais quando utilizada. Atualize o catálogo pelo Supervisor do Home Assistant e instale a atualização do add-on Finance V17. Confira `migrations.current_version=16` em `/api/v2/health`. O slug permanece `finance_v17`. Para retornar à versão anterior, guarde uma cópia separada dos dados atuais e restaure o backup anterior de schema 16 com suas opções e chave correspondentes.
 
 ## SnapTrade Personal e Charles Schwab
 
