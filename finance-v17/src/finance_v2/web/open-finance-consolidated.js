@@ -111,7 +111,9 @@ export function cardDiagnostics(cards,esc){
   if(!cards?.diagnostics?.length)return '';
   const lines=['FINANCE_V17_CARD_DIAGNOSTICS/1',...cards.diagnostics.map(row=>
     row.usage+' | '+(row.limit||'—')+' | '+row.count)];
+  const consentMismatch=cards.diagnostics.some(row=>row.usage==='CONSENT_ITEM_MISMATCH');
   return '<details class="of-card-diagnostics" data-card-diagnostics><summary>Diagnóstico de cartões</summary>'+
+    (consentMismatch?'<p>Consentimento associado a outro Item</p>':'')+
     '<label>Código de saldo, código de limite e quantidade<textarea readonly rows="4">'+esc(lines.join('\n'))+
     '</textarea></label><button type="button" class="quiet" data-copy-card-diagnostics>Copiar diagnóstico</button>'+
     '<p role="status" data-card-copy-status></p></details>';

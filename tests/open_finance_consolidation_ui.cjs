@@ -54,8 +54,11 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || path.join(process.env.
       assert.deepEqual(await overview.locator('.of-chart-axis span').allInnerTexts(),['US$ 27,16','US$ 13,58','US$ 0,00']);
       assert.match(await overview.locator('.of-column.incoming').getAttribute('title'),/US\$ 27,16$/);
       const card=overview.locator('.of-card-insight');
-      await card.getByText('Consentimento associado a outro Item',{exact:true}).first().waitFor();
+      const association=card.getByText('Consentimento associado a outro Item',{exact:true});
+      assert.equal(await association.count(),1);
+      assert.equal(await association.isVisible(),false);
       await card.getByText('Diagnóstico de cartões',{exact:true}).click();
+      await association.waitFor();
       const diagnostics=card.getByRole('textbox',{name:'Código de saldo, código de limite e quantidade'});
       const copy=await diagnostics.inputValue();
       assert.equal(copy,'FINANCE_V17_CARD_DIAGNOSTICS/1\nCONSENT_ITEM_MISMATCH | CONSENT_ITEM_MISMATCH | 4');
