@@ -2,7 +2,7 @@ import {bankMark} from './open-finance-identity.js';
 import {dateBR} from './privacy.js';
 import {countBR,institutionName,percentBR} from './open-finance-labels.js';
 import {proventNames} from './open-finance-classification-ui.js';
-import {wealthMoney} from './open-finance-wealth.js';
+import {wealthMoney,wealthRate} from './open-finance-wealth.js';
 
 const storageKey='finance-v17.open-finance.presentation';
 const currencies=[['BRL','BRL — Real brasileiro'],['USD','USD — Dólar americano'],['original','Moedas originais']];
@@ -72,7 +72,7 @@ export function institutionPositions(view,esc){
 export function portfolioQuality(view,esc){
   const data=view.quality;
   const rates=data.rates.map(quote=>'<li><strong>PTAX de venda</strong><span>'+esc(dateBR(quote.date))+' · '+
-    wealthMoney(quote.rate,'BRL',esc)+' por USD</span>'+(quote.lag_days?'<small>Até '+quote.lag_days+' dias de defasagem</small>':'')+'</li>').join('');
+    wealthRate(quote.rate,esc)+' por USD</span>'+(quote.lag_days?'<small>Até '+quote.lag_days+' dias de defasagem</small>':'')+'</li>').join('');
   const notes=[
     data.mixed_dates?'Referências de '+dateBR(data.first)+' a '+dateBR(data.last)+'. Os valores representam datas diferentes.':'',
     data.overlap?'Possível sobreposição patrimonial. Consulte cada instituição ou revise as exclusões em Conexões.':'',
@@ -107,9 +107,30 @@ export function unifiedIncomeMarkup(income,esc,{details=false}={}){
     (lines?'<ul class="of-category-list">'+lines+'</ul>':hasCredits?'':'<p>Nenhum rendimento elegível no período.</p>')+notes+months+events;
 }
 
+export function cardDiagnostics(cards,esc){
+  if(!cards?.diagnostics?.length)return '';
+  const lines=['FINANCE_V17_CARD_DIAGNOSTICS/1',...cards.diagnostics.map(row=>
+    row.usage+' | '+(row.limit||'—')+' | '+row.count)];
+  return '<details class="of-card-diagnostics" data-card-diagnostics><summary>Diagnóstico de cartões</summary>'+
+    '<label>Código de saldo, código de limite e quantidade<textarea readonly rows="4">'+esc(lines.join('\n'))+
+    '</textarea></label><button type="button" class="quiet" data-copy-card-diagnostics>Copiar diagnóstico</button>'+
+    '<p role="status" data-card-copy-status></p></details>';
+}
+
 export function cardUsage(cards,esc,mode,identity){
   if(!cards)return '';
-  const reasons={ASSOCIATION_INCONSISTENT:'Vínculo com o Item inconsistente',CONSENT_UNVERIFIED:'Consentimento não validado',
+  const reasons={
+    LOCAL_ITEM_UNIDENTIFIED:'Item local não identificado',LOCAL_BINDING_MISMATCH:'Vínculo local incompatível',
+    MANAGED_BINDING_UNVERIFIED:'Vínculo gerenciado sem validação',ITEM_RECORD_MISSING:'Registro do Item ausente',
+    ITEM_ASSOCIATION_MISMATCH:'Item coletado difere do Item cadastrado',ITEM_METADATA_INCOMPLETE:'Metadados do Item incompletos',
+    ITEM_ACCESS_UNVERIFIED:'Acesso ao Item sem confirmação',PRIOR_SCOPE_FAILURE:'Falha de escopo ainda relevante',
+    CONSENT_ITEM_MISMATCH:'Consentimento associado a outro Item',CONSENT_ASSOCIATION_UNVERIFIED:'Associação do consentimento sem confirmação',
+    CONSENT_CHECKPOINT_MISSING:'Coleta do consentimento sem registro',CONSENT_SCAN_UNVERIFIED:'Consulta do consentimento sem confirmação',
+    CONSENT_EXPIRED:'Consentimento expirado',CONSENT_NOT_ACTIVE:'Consentimento inativo',CONSENT_REVOKED:'Consentimento revogado',
+    CONSENT_NO_CARD_SCOPE:'Permissão de cartões ausente',CONSENT_GRANTS_UNREPORTED:'Permissões do consentimento não informadas',
+    CONSENT_METADATA_INCOMPLETE:'Metadados do consentimento incompletos',
+    ACCOUNT_METADATA_INCOMPLETE:'Identidade da conta incompleta',ACCOUNT_ID_MISMATCH:'Identidade da conta divergente',
+    ACCOUNT_ITEM_MISMATCH:'Cartão associado a outro Item',ACCOUNT_PRESERVED:'Registro preservado de coleta anterior',
     ACCOUNT_COLLECTION_UNVERIFIED:'Coleta atual do cartão sem confirmação',HISTORICAL_CONNECTION:'Conexão histórica',
     AMOUNT_UNAVAILABLE:'Saldo utilizado não informado',CURRENCY_UNAVAILABLE:'Moeda não informada',
     NEGATIVE_REPORTED:'Saldo credor informado',FUTURE_REFERENCE:'Referência futura',
@@ -138,5 +159,6 @@ export function cardUsage(cards,esc,mode,identity){
     '<p>'+(cards.limit_metric.partial?'Subtotal de limites verificados':'Limite consolidado')+
     ' <strong>'+metricValue(cards.limit_metric,esc)+'</strong></p>'+utilization+
     (mode==='visible'&&!utilization&&cards.count?'<p>Percentual indisponível para a cobertura atual.</p>':'')+
-    (list?'<ul class="of-compact-cards">'+list+'</ul>':'<p>Nenhum cartão encontrado neste escopo.</p>')+'</section>';
+    (list?'<ul class="of-compact-cards">'+list+'</ul>':'<p>Nenhum cartão encontrado neste escopo.</p>')+
+    cardDiagnostics(cards,esc)+'</section>';
 }

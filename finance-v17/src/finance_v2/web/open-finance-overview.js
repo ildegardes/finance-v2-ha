@@ -16,7 +16,6 @@ const shift=(value,days)=>iso(new Date(+asDate(value)+dayMs*days));
 const monthStart=value=>value.slice(0,7)+'-01';
 const minDate=(a,b)=>a<b?a:b;
 const maxDate=(a,b)=>a>b?a:b;
-const decimalScale=10n**20n;
 const directionLabels={incoming:'Entradas',outgoing:'Saídas'};
 const palette=['#08765f','#377db8','#9461aa','#c57925','#6e8320','#95705c','#5a737e'];
 const resources={accounts:'Contas',investments:'Investimentos',transactions:'Movimentações'};
@@ -29,16 +28,23 @@ const icons={
   outgoing:'M6 18 18 6 M9 6h9v9',
 };
 
-function scaled(value){
-  const [whole,fraction='']=String(value).replace(/^-/,'').split('.');
-  const magnitude=BigInt(whole)*decimalScale+BigInt(fraction.padEnd(20,'0'));
-  return String(value).startsWith('-')?-magnitude:magnitude;
-}
-
-function decimal(value){
-  const magnitude=value<0n?-value:value;
-  const digits=(magnitude%decimalScale).toString().padStart(20,'0').replace(/0+$/,'');
-  return (value<0n?'-':'')+(magnitude/decimalScale).toString()+(digits?'.'+digits:'');
+function decimalMath(values){
+  // Use one scale for every operand in the graph. This retains the full FX
+  // decimal through chart totals and allows an exact half tick on the axis.
+  const precision=values.reduce((max,value)=>Math.max(max,String(value).split('.')[1]?.length||0),0)+1;
+  const scale=10n**BigInt(precision);
+  const scaled=value=>{
+    const text=String(value);
+    const [whole,decimals='']=text.replace(/^-/,'').split('.');
+    const magnitude=BigInt(whole)*scale+BigInt(decimals.padEnd(precision,'0'));
+    return text.startsWith('-')?-magnitude:magnitude;
+  };
+  const decimal=value=>{
+    const magnitude=value<0n?-value:value;
+    const digits=(magnitude%scale).toString().padStart(precision,'0').replace(/0+$/,'');
+    return (value<0n?'-':'')+(magnitude/scale).toString()+(digits?'.'+digits:'');
+  };
+  return {scaled,decimal};
 }
 
 function fraction(part,total){
@@ -68,7 +74,7 @@ function bucketBounds(day,grouping){
   return [start,shift(iso(next),-1)];
 }
 
-function flowBuckets(series,filters,grouping){
+function flowBuckets(series,filters,grouping,scaled){
   const buckets=new Map();
   for(const point of series){
     if(point.product!=='BANK'||!Object.hasOwn(directionLabels,point.direction))continue;
@@ -94,7 +100,8 @@ function flowChart(data,filters,grouping,page,mode,money,esc){
   if(mode==='full')return '<p class="of-chart-placeholder">Gráfico oculto em privacidade total.</p>';
   const series=(data.series||[]).filter(point=>point.product==='BANK');
   if(!series.length)return '<p class="of-chart-placeholder">'+(data.flow.BANK.coverage_state==='COMPLETE'?'Sem movimentações no período.':'Sem movimentações registradas para exibir. A cobertura do período pode estar incompleta.')+'</p>';
-  const buckets=flowBuckets(series,filters,grouping);
+  const {scaled,decimal}=decimalMath(series.map(point=>point.value));
+  const buckets=flowBuckets(series,filters,grouping,scaled);
   const pageSize=12,offset=page*pageSize;
   const displayed=buckets.slice(offset,offset+pageSize);
   const allValues=buckets.flatMap(bucket=>[bucket.incoming??0n,bucket.outgoing??0n]);
@@ -123,6 +130,7 @@ function allocation(investments,mode,amount,esc,unified=false){
   if(mode==='full')return '<p class="of-chart-placeholder">Composição oculta em privacidade total.</p>';
   const classes=investments.by_class||[];
   if(!classes.length)return '<p class="of-chart-placeholder">Distribuição indisponível para esta moeda.</p>';
+  const {scaled,decimal}=decimalMath([...classes,...(investments.items||[])].map(row=>row.value));
   const values=classes.map(item=>item.value==null?null:scaled(item.value));
   const total=values.reduce((sum,value)=>sum+(value??0n),0n);
   const proportional=total>0n&&values.every(value=>value===null||value>=0n)
@@ -168,7 +176,9 @@ function unifiedAllocation(view,mode,esc){
 
 function categoryRanking(data,mode,amount,esc,economic){
   if(mode==='full')return '<p class="of-chart-placeholder">Ranking oculto em privacidade total.</p>';
-  const rows=[...((economic?data.economic_category_ranking:data.category_ranking?.BANK)||[])].sort((a,b)=>scaled(a.value)>scaled(b.value)?-1:scaled(a.value)<scaled(b.value)?1:0);
+  const rows=[...((economic?data.economic_category_ranking:data.category_ranking?.BANK)||[])];
+  const {scaled}=decimalMath(rows.map(row=>row.value));
+  rows.sort((a,b)=>scaled(a.value)>scaled(b.value)?-1:scaled(a.value)<scaled(b.value)?1:0);
   if(!rows.length){
     const note=economic&&data.insights?.pending?'Há movimentações pendentes de classificação.':
       data.flow.BANK.coverage_state!=='COMPLETE'&&!data.flow.BANK.reported?.outgoing?'Cobertura insuficiente para determinar as despesas.':
@@ -466,6 +476,15 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
     const button=event.target.closest('button');
     if(!button)return;
     if(button.matches('[data-retry-summary]')){load();return}
+    if(button.matches('[data-copy-card-diagnostics]')){
+      const box=button.closest('[data-card-diagnostics]');
+      const field=box.querySelector('textarea'),status=box.querySelector('[data-card-copy-status]');
+      const select=()=>{field.select();status.textContent='Texto selecionado. Use o comando de copiar do dispositivo.';};
+      if(navigator.clipboard?.writeText){
+        navigator.clipboard.writeText(field.value).then(()=>{status.textContent='Diagnóstico copiado.';},select);
+      }else select();
+      return;
+    }
     const shared=loaded?.presentation_view;
     const presented=shared?.currency||state.wealthPresentation||'original';
     const context={...filters,account_id:'',product:'BANK',status:'POSTED',direction:'all',category:'',search:'',bill_id:''};

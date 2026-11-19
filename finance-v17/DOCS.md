@@ -1,4 +1,10 @@
-# Finance V17 0.1.39-open-finance.1
+# Finance V17 0.1.40-open-finance.1
+
+A versão preserva o schema 16. Valores em BRL e USD têm duas casas decimais na interface. O arredondamento ocorre somente na apresentação.
+
+Para investigar exclusões de cartões, selecione a instituição em **Open Finance › Visão geral** e expanda **Diagnóstico de cartões** no card. O texto copiável contém apenas códigos e contagem. Confira as condições e os passos de homologação em [Formatação e diagnóstico de cartões](../docs/open-finance/FORMATO_CARTOES_040.md).
+
+## Finance V17 0.1.39-open-finance.1
 
 A versão mantém o schema 16. A Visão geral usa crédito utilizado nos indicadores e na lista de cartões. Faturas e pagamentos ficam nas telas específicas. As posições por instituição mostram primeiro a moeda original. A linha seguinte informa o equivalente na moeda selecionada, quando houver referência e cotação PTAX elegíveis.
 

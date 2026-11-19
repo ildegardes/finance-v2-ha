@@ -32,11 +32,62 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || path.join(process.env.
     const awaitAmount=async(name,amount)=>{await metric(name).getByText(amount,{exact:false}).first().waitFor();};
     try{await overview.locator('.of-six-kpis').waitFor();}catch(error){console.error(page.url(),await page.locator('body').innerText());throw error;}
     await selectPrivacy(page,'visible');
+    if(process.argv.includes('--rounding')){
+      const cases=await page.evaluate(async()=>{
+        const {bankMoney,money,exchangeRate}=await import('/app/assets/privacy.js');
+        return [bankMoney('0','BRL'),bankMoney('-150.245','BRL'),bankMoney('0.0049999','USD'),
+          bankMoney('0.005','USD'),bankMoney('9007199254740993.12500000000000000000000000001','BRL'),
+          bankMoney('1e-40','USD'),bankMoney('1.995','EUR'),bankMoney(null,'BRL'),
+          bankMoney('9.999','BRL'),money(-15025),exchangeRate('4.123456')];
+      });
+      assert.deepEqual(cases,['R$ 0,00','-R$ 150,25','US$ 0,00','US$ 0,01','R$ 9.007.199.254.740.993,13',
+        'US$ 0,00','€ 2,00','Valor indisponível','R$ 10,00','-R$ 150,25','R$ 4,123456']);
+      await metric('Investimentos').getByText('R$ 246.487,56',{exact:true}).waitFor();
+      const aggregate=page.waitForResponse(response=>response.url().includes('presentation=USD')&&response.url().includes('/analytics'));
+      await select.selectOption('USD');
+      const data=(await (await aggregate).json()).presentation_view;
+      assert(data.investments.amounts.USD.split('.')[1].length>30);
+      assert(data.income.credits.amounts.USD.split('.')[1].length>30);
+      await metric('Investimentos').getByText('US$ 59.777,75',{exact:true}).waitFor();
+      await metric('Rendimentos').getByText('US$ 18,91',{exact:true}).waitFor();
+      await overview.locator('.of-allocation-ring').getByText('US$ 59.777,75',{exact:true}).waitFor();
+      assert.deepEqual(await overview.locator('.of-chart-axis span').allInnerTexts(),['US$ 27,16','US$ 13,58','US$ 0,00']);
+      assert.match(await overview.locator('.of-column.incoming').getAttribute('title'),/US\$ 27,16$/);
+      const card=overview.locator('.of-card-insight');
+      await card.getByText('Consentimento associado a outro Item',{exact:true}).first().waitFor();
+      await card.getByText('Diagnóstico de cartões',{exact:true}).click();
+      const diagnostics=card.getByRole('textbox',{name:'Código de saldo, código de limite e quantidade'});
+      const copy=await diagnostics.inputValue();
+      assert.equal(copy,'FINANCE_V17_CARD_DIAGNOSTICS/1\nCONSENT_ITEM_MISMATCH | CONSENT_ITEM_MISMATCH | 4');
+      assert(!/9400|account-CREDIT|consent-039/.test(copy));
+      await card.getByRole('button',{name:'Copiar diagnóstico'}).click();
+      await card.getByText(/Diagnóstico copiado|Texto selecionado/).waitFor();
+      await overview.getByText('Qualidade dos dados',{exact:true}).click();
+      await overview.getByText('R$ 4,1234',{exact:false}).first().waitFor();
+      for(const width of [390,768,1440]){
+        await page.setViewportSize({width,height:950});
+        assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
+        if(width===390)await shot('formatacao-usd-mobile');
+      }
+      await shot('diagnostico-cartoes');
+      for(const mode of ['masked','full']){
+        await selectPrivacy(page,mode);
+        assert(!/59\.777,75|18,91|4,1234/.test(await overview.innerHTML()));
+        assert(!/59\.777,75|18,91|4,1234/.test(await overview.ariaSnapshot()));
+      }
+      await selectPrivacy(page,'visible');
+      await select.selectOption('original');
+      await metric('Investimentos').getByText('R$ 150.000,00',{exact:true}).waitFor();
+      await metric('Investimentos').getByText('US$ 23.400,00',{exact:true}).waitFor();
+      assert.deepEqual(errors,[]);
+      console.log('PASS: exact money rendering, precision, sanitized card diagnostics and privacy');
+      return;
+    }
     if(process.argv.includes('--missing-fx')){
       await awaitAmount('Investimentos','150.000,00');
       const broker=overview.locator('.of-position').filter({hasText:'Charles Schwab'});
       assert.deepEqual((await broker.locator('.of-native-value').allInnerTexts()).map(value=>value.replace(/\s+/g,' ')),
-        ['USD 500,00','USD 23.400,00']);
+        ['US$ 500,00','US$ 23.400,00']);
       await broker.getByText('Referência financeira ausente',{exact:true}).waitFor();
       await broker.getByText('Cotação PTAX indisponível',{exact:true}).waitFor();
       await overview.getByText('Qualidade dos dados',{exact:true}).click();
@@ -71,8 +122,8 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || path.join(process.env.
     const schwab=institutions.locator('article').filter({hasText:'Charles Schwab'});
     await schwab.getByText('Caixa em corretora',{exact:true}).waitFor();
     assert.match(await schwab.innerText(),/2\.500,00/);
-    assert.match(await schwab.locator('.of-native-value').first().innerText(),/USD\s*500,00/);
-    assert.match(await schwab.innerText(),/USD\s*500,00/);
+    assert.match(await schwab.locator('.of-native-value').first().innerText(),/US\$\s*500,00/);
+    assert.match(await schwab.innerText(),/US\$\s*500,00/);
     await overview.getByText('Stocks',{exact:true}).waitFor();
     await overview.getByText('REITs',{exact:true}).waitFor();
     await overview.getByText('ETFs',{exact:true}).waitFor();

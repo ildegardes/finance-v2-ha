@@ -1,4 +1,4 @@
-import {privacyMode,bankMoney,dateBR} from './privacy.js';
+import {privacyMode,bankMoney,exchangeRate,dateBR} from './privacy.js';
 import {createQueryGeneration} from './query-generation.js';
 import {bankMark} from './open-finance-identity.js';
 import {countBR,classLabel,investmentClassLabel} from './open-finance-labels.js';
@@ -48,10 +48,17 @@ const formatDate=value=>value?dateBR(value):'Indisponível';
 const errorText=error=>statusNames[error?.code]||'Não foi possível confirmar a operação. Atualize o diagnóstico antes de repetir.';
 
 export function wealthMoney(value,currency,esc){
+  return privateValue(value,esc,amount=>bankMoney(amount,currency));
+}
+
+export function wealthRate(value,esc){
+  return privateValue(value,esc,exchangeRate);
+}
+
+function privateValue(value,esc,format){
   if(value==null)return 'Indisponível';
   if(mode()!=='visible')return '<span aria-label="Valor oculto">••••••</span>';
-  if(!currency)return esc(value);
-  return esc(bankMoney(value,currency));
+  return esc(format(value));
 }
 
 function optionList(entries,esc){
@@ -82,7 +89,7 @@ export function wealthSummary(data,esc,{compositionDetails=true}={}){
   const converted=target!=='original'?'<p>'+(
     summary.converted.positions==null?'Subtotal convertido quando disponível':'Posições convertidas')+
     ' <strong>'+money(display,target)+'</strong></p>':'';
-  const rates=summary.quote_dates.map(quote=>'<li>PTAX de venda · '+formatDate(quote.date)+' · '+money(quote.rate,'BRL')+
+  const rates=summary.quote_dates.map(quote=>'<li>PTAX de venda · '+formatDate(quote.date)+' · '+wealthRate(quote.rate,esc)+
     ' por USD'+(quote.lag_days?' · '+quote.lag_days+' dias de defasagem':'')+'</li>').join('');
   const excluded=Object.entries(summary.investment_metric?.conversion_excluded||{});
   const exclusion=excluded.length?'<p>Valores originais fora da conversão '+excluded.map(([currency,value])=>money(value,currency)).join(' · ')+'</p>':'';
@@ -177,7 +184,7 @@ export function mountWealth({host,api,esc,navigation,state,today,getPeriod,snapt
       '</div></article>').join('');
   }
   function detail(row){
-    const quantities=(value)=>money(value,null);
+    const quantities=value=>privateValue(value,esc,String);
     return '<div class="of-summary-card" tabindex="-1" data-wealth-detail><h3>'+esc(row.ticker||row.label)+'</h3>'+
       '<p>'+[row.provider,row.institution,row.account_label,labelKind(row.kind),row.currency,row.exchange].filter(Boolean).map(esc).join(' · ')+'</p>'+
       '<dl class="of-wealth-grid"><div><dt>Posição</dt><dd>'+money(row.market_value,row.currency)+'</dd></div>'+

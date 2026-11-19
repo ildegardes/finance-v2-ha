@@ -4,7 +4,8 @@ export const PRIVACY_MODES={visible:'Valores visíveis',masked:'Ocultar valores'
 export const privacyMode=(doc=document)=>doc.documentElement.dataset.financePrivacy||'full';
 const fromStorage=value=>value==='true'?'visible':Object.hasOwn(PRIVACY_MODES,value)?value:'full';
 export const MASK='R$ ••••••';
-export const money=cents=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format((cents||0)/100);
+export const money=cents=>formatCurrency(cents,'BRL',2);
+
 
 // Native window.prompt is outside the DOM privacy boundary. Monetary edits use
 // this shared dialog instead, preserving the original input value and result.
@@ -23,13 +24,34 @@ export function moneyPrompt(text,value,doc=document){
   });
 }
 
-// Keep the provider's decimal precision and sign, without floating-point conversion.
-export function bankMoney(value,currency){
-  const match=/^(-?)(\d+)(?:\.(\d+))?$/.exec(String(value));
-  if(!match||!(/^[A-Z]{3}$/).test(currency||''))return 'Valor indisponível';
-  const [,sign,integer,fraction='']=match;
-  return `${sign}${currency==='BRL'?'R$':currency} ${BigInt(integer).toLocaleString('pt-BR')},${fraction.padEnd(2,'0')}`;
+const currencySymbols={BRL:'R$',USD:'US$',EUR:'€',GBP:'£',JPY:'¥'};
+const decimalPattern=/^([+-]?)([0-9]+)(?:\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?$/;
+
+function formatCurrency(value,currency,minorDigits=0,{rate=false}={}){
+  const match=decimalPattern.exec(String(value));
+  if(!match||!/^[A-Z]{3}$/.test(currency||''))return 'Valor indisponível';
+  const [,sign,whole,fraction='',exponent='0']=match;
+  const shift=Number(exponent)-minorDigits;
+  if(!Number.isSafeInteger(shift)||Math.abs(shift)>1000)return 'Valor indisponível';
+  const digits=whole+fraction;
+  const point=whole.length+shift;
+  let integer=point<=0?'0':digits.slice(0,point).padEnd(point,'0');
+  let decimals=point<=0?'0'.repeat(-point)+digits:digits.slice(point);
+  if(!rate){
+    // Round the final amount from its decimal digits. Avoid rounding operands
+    // or relying on binary floating-point to resolve half-cent ties.
+    const minor=BigInt(integer+decimals.padEnd(2,'0').slice(0,2))+(decimals[2]>='5'?1n:0n);
+    integer=String(minor/100n);
+    decimals=String(minor%100n).padStart(2,'0');
+  }else{
+    decimals=decimals.padEnd(4,'0');
+  }
+  const negative=sign==='-'&&/[1-9]/.test(integer+decimals)?'-':'';
+  return negative+(currencySymbols[currency]||currency)+' '+BigInt(integer).toLocaleString('pt-BR')+','+decimals;
 }
+
+export const bankMoney=(value,currency)=>formatCurrency(value,currency);
+export const exchangeRate=value=>formatCurrency(value,'BRL',0,{rate:true});
 
 export function dateBR(value){
   if(!value)return '—';

@@ -169,9 +169,9 @@ test('mobile and desktop responsive layout, touch targets and focus',async()=>{
   await page.locator('#money-privacy-toggle').focus();assert.equal(await page.locator('#money-privacy-toggle').evaluate(e=>document.activeElement===e),true);
   if(evidence){fs.mkdirSync(evidence,{recursive:true});await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:path.join(evidence,'desktop-hidden.png')});await page.setViewportSize({width:390,height:844});await page.waitForFunction(()=>document.querySelector('nav').getBoundingClientRect().right<=0);await page.screenshot({path:path.join(evidence,'mobile-hidden.png')});await togglePrivacy(page);await page.screenshot({path:path.join(evidence,'mobile-visible-synthetic.png')});}
 });
-test('formatting preserves precision and calendar dates, rejects unsupported input',async()=>{
+test('money rounds for display and calendar dates reject unsupported input',async()=>{
   const {bankMoney,dateBR,maskText}=await import(pathToFileURL(path.join(web,'privacy.js')));
-  assert.equal(bankMoney('-1234.56','BRL'),'-R$ 1.234,56');assert.equal(bankMoney('9007199254740993.1234','BRL'),'R$ 9.007.199.254.740.993,1234');assert.equal(bankMoney('0','USD'),'USD 0,00');assert.equal(bankMoney('no','BRL'),'Valor indisponível');assert.equal(bankMoney('1','<x>'),'Valor indisponível');assert.equal(dateBR('2026-10-12T23:30:00-03:00'),'12/10/2026');assert.equal(dateBR('2026-02-30'),'Data indisponível');assert.equal(maskText('Previstas R$ 12,34; -USD 1,00'),`Previstas ${MASK}; ${MASK}`);
+  assert.equal(bankMoney('-1234.56','BRL'),'-R$ 1.234,56');assert.equal(bankMoney('9007199254740993.1234','BRL'),'R$ 9.007.199.254.740.993,12');assert.equal(bankMoney('0','USD'),'US$ 0,00');assert.equal(bankMoney('no','BRL'),'Valor indisponível');assert.equal(bankMoney('1','<x>'),'Valor indisponível');assert.equal(dateBR('2026-10-12T23:30:00-03:00'),'12/10/2026');assert.equal(dateBR('2026-02-30'),'Data indisponível');assert.equal(maskText('Previstas R$ 12,34; -USD 1,00'),`Previstas ${MASK}; ${MASK}`);
 });
 test('financial action guards and direction semantics remain intact',async()=>{
   const c=await import(pathToFileURL(path.join(web,'capabilities.js'))),p=await import(pathToFileURL(path.join(web,'presentation.js')));
@@ -260,8 +260,20 @@ test('missing currency never silently becomes BRL or a zero balance',async()=>{
 });
 
 test('foreign card balances require their own currency instead of inheriting BRL',async()=>{
-  await page.route('**/api/v2/open-finance/domain?**',route=>route.fulfill({json:typedFixture({resource:'accounts',total:1,has_more:false,coverage:[],items:[{connection_id:'itau-test',state:'PRESENT',observed_at:'2026-10-23',data:{name:'Cartão sintético',currencyCode:'BRL',creditData:{creditLimit:1234.56,balanceForeignCurrency:[{balance:1000},{balance:50,currencyCode:'USD'}]}}}]})}));
-  await go('open-finance');await page.locator('.of-resource-card').waitFor();await togglePrivacy(page);
-  const text=await page.locator('#of-panel-overview').innerText();
-  assert.match(text,/Valor indisponível/);assert.match(text,/USD 50,00/);assert.match(text,/R\$ 1\.234,56/);assert.doesNotMatch(text,/R\$ 1\.000,00/);
+  await page.route('**/api/v2/open-finance/analytics?**',route=>route.fulfill({status:503,json:{error:{code:'SYNTHETIC'}}}));
+  await page.route('**/api/v2/open-finance/domain?**',route=>{
+    const data=typedFixture({resource:'accounts',total:1,has_more:false,coverage:[],items:[
+      {connection_id:'itau-test',state:'PRESENT',observed_at:'2026-10-23',data:{name:'Cartão sintético',currencyCode:'BRL',
+        creditData:{creditLimit:1234.56,balanceForeignCurrency:[{balance:1000},{balance:50,currencyCode:'USD'}]}}}]});
+    data.items[0].kind='CREDIT_CARD';
+    return route.fulfill({json:data});
+  });
+  await go('open-finance');
+  await page.getByRole('tab',{name:'Cartões',exact:true}).click();
+  const panel=page.locator('#of-panel-cards');
+  await panel.locator('.of-resource-card').waitFor();
+  await panel.locator('.of-resource-card details').evaluateAll(nodes=>nodes.forEach(node=>node.open=true));
+  await togglePrivacy(page);
+  const text=await panel.innerText();
+  assert.match(text,/Valor indisponível/);assert.match(text,/US\$ 50,00/);assert.match(text,/R\$ 1\.234,56/);assert.doesNotMatch(text,/R\$ 1\.000,00/);
 });

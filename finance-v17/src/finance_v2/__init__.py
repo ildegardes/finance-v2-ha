@@ -1,3 +1,3 @@
 """Finance V2 executable foundation."""
 
-__version__ = "0.1.39-open-finance.1"
+__version__ = "0.1.40-open-finance.1"
