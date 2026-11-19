@@ -1,3 +1,10 @@
+## 0.1.41-open-finance.1
+
+- Cartões exibem a última posição comprovada com a referência da coleta. A consolidação atual continua condicionada à auditoria de escopo e consentimento.
+- O KPI, a Visão geral e a aba Cartões compartilham a mesma projeção de saldo utilizado e limite.
+- Movimentações exibe datas em cada linha e apresenta diagnóstico quando a API entrega uma página incompleta ou quando a montagem falha.
+- Faturas recebem título amigável e datas legíveis, com o horário e fuso da origem no detalhe. Schema 16.
+
 ## 0.1.40-open-finance.1
 
 - BRL e USD são arredondados para duas casas na apresentação. Cotações PTAX e quantidades mantêm a precisão da fonte.

@@ -240,3 +240,5 @@ button.of-column{position:relative;background:transparent;border-radius:.2rem;pa
 .of-card-diagnostics{margin-top:.7rem}
 .of-card-diagnostics label,.of-card-diagnostics textarea{display:block;width:100%;margin:.4rem 0}
 .of-card-diagnostics textarea{max-inline-size:100%;resize:vertical;font:inherit}
+
+html[data-finance-privacy=full] [data-of-card-tail]{display:none}

@@ -156,12 +156,15 @@ def _usage_scopes(db,settings,current,today):
         else:
             reason=_previous_error(db,cid,evidence,item['last_run_id']) or _consent_state(db,cid,expected,audit,regulated,today)
         collection=evidence.get('accounts')
-        # Preserved rows may still be displayed, but the current accounts
-        # collection has to validate this exact run before they can count.
-        account_run=collection['last_complete_run_id'] if collection and collection['state']=='COMPLETE' else None
-        if not reason and not account_run:
+        last_complete=collection['last_complete_run_id'] if collection else None
+        if last_complete and not db.execute('SELECT 1 FROM of_sync_runs WHERE id=? AND connection_id=?',
+                                            (last_complete,cid)).fetchone():
+            last_complete=None
+        if not reason and (not last_complete or collection['state']!='COMPLETE'):
             reason='ACCOUNT_COLLECTION_UNVERIFIED'
-        scopes[cid]=(reason,(expected,account_run) if not reason else None,regulated)
+        binding=(expected,last_complete) if metadata.get('id')==expected and last_complete and reason not in (
+            'PRIOR_SCOPE_FAILURE','LOCAL_BINDING_MISMATCH') else None
+        scopes[cid]=(reason,binding,regulated)
     return scopes
 
 
@@ -194,6 +197,7 @@ def credit_usage(db,settings,accounts,current,views,values,parse_amount):
     scopes=_usage_scopes(db,settings,credit_connections,values.today)
     cards=[]
     grouped=defaultdict(list)
+    preserved=defaultdict(list)
     banks=defaultdict(set)
     for (cid,account),row in accounts.items():
         data=row['data']
@@ -208,16 +212,17 @@ def credit_usage(db,settings,accounts,current,views,values,parse_amount):
         holder=credit.get('holderType')
         line,ambiguous=_line(credit,currency)
         reason,binding,regulated=scopes.get(cid,('HISTORICAL_CONNECTION',None,False))
-        if not reason and (not data.get('id') or not data.get('itemId')):
-            reason='ACCOUNT_METADATA_INCOMPLETE'
-        if not reason and data['id']!=account:
-            reason='ACCOUNT_ID_MISMATCH'
-        if not reason and data['itemId']!=binding[0]:
-            reason='ACCOUNT_ITEM_MISMATCH'
-        if not reason and row['last_run_id']!=binding[1]:
-            reason='ACCOUNT_PRESERVED'
-        if not reason and state not in ('ACTIVE',None):
-            reason='CARD_STATUS_UNVERIFIED'
+        local_error=None
+        if not data.get('id') or not data.get('itemId'):
+            local_error='ACCOUNT_METADATA_INCOMPLETE'
+        elif data['id']!=account:
+            local_error='ACCOUNT_ID_MISMATCH'
+        elif binding and data['itemId']!=binding[0]:
+            local_error='ACCOUNT_ITEM_MISMATCH'
+        elif binding and row['last_run_id']!=binding[1]:
+            local_error='ACCOUNT_PRESERVED'
+        elif state not in ('ACTIVE',None):
+            local_error='CARD_STATUS_UNVERIFIED'
         identity=line.get('identificationNumber')
         line_type=line.get('consolidationType')
         used_field=parse_amount(line.get('usedAmount')) if currency and line.get('usedAmountCurrencyCode')==currency else None
@@ -227,29 +232,65 @@ def credit_usage(db,settings,accounts,current,views,values,parse_amount):
         limit=(parse_amount(line.get('limitAmount')) if currency and line.get('limitAmountCurrencyCode')==currency else None)
         if not line and not ambiguous and credit.get('isLimitFlexible') is not True:
             limit=parse_amount(credit.get('creditLimit'))
-        if not reason and not currency:
-            reason='CURRENCY_UNAVAILABLE'
-        if not reason and reference and reference>values.today:
-            reason='FUTURE_REFERENCE'
-        if not reason and used is not None and used<0:
-            reason='NEGATIVE_REPORTED'
-        if not reason and used is None:
-            reason='AMOUNT_UNAVAILABLE'
-        if reason and reason!='AMOUNT_UNAVAILABLE':
-            used=None
+        if not local_error and not currency:
+            local_error='CURRENCY_UNAVAILABLE'
+        if not local_error and reference and reference>values.today:
+            local_error='FUTURE_REFERENCE'
+        if local_error in ('ACCOUNT_ID_MISMATCH','ACCOUNT_ITEM_MISMATCH'):
+            reason=local_error
+        readable=bool(binding and not local_error)
+        amount_reason=('AMOUNT_UNAVAILABLE' if used is None else 'NEGATIVE_REPORTED' if used<0 else None)
+        current_reason=reason or local_error or amount_reason
+        blocked=current_reason in ('LOCAL_BINDING_MISMATCH','ITEM_ASSOCIATION_MISMATCH',
+                                   'ACCOUNT_ID_MISMATCH','ACCOUNT_ITEM_MISMATCH')
         card={'connection_id':cid,'account_id':account,'institution':views[cid].institution,
               'name':masked_card_text(data.get('marketingName') or data.get('name')) or 'Cartão sem nome',
-              'brand':masked_card_text(credit.get('brand')),'tail':_number(data.get('cardLastFour')),'currency':currency,
+              'brand':masked_card_text(credit.get('brand')),
+              'tail':_number(data.get('cardLastFour')) or _number(data.get('number')),'currency':currency,
               'status':state,'holder':holder,'reference_date':reference,'observed_at':row['observed_at'],
-              'used':_format(used),'used_basis':basis if used is not None else None,'included':False,
-              'consolidation_reason':reason,'limit_reason':None}
+              'used':_format(used) if not current_reason else None,
+              'used_basis':basis if readable and not amount_reason else None,'included':False,
+              'consolidation_reason':current_reason,'limit_reason':None,'limit':None,
+              'provenance_verified':readable,'position_state':'CURRENT' if readable and not reason else
+              'PRESERVED' if readable else 'UNAVAILABLE',
+              'reported_balance':_format(parse_amount(data.get('balance'))) if readable and not regulated else None}
+        if readable and line_type!='CONSOLIDATED' and limit is not None and limit>=0:
+            card['reported_limit']=_format(limit)
+        if blocked:
+            card.update(name='Cartão com origem não confirmada',brand=None,tail=None)
         cards.append(card)
         if cid not in current:
             continue
         bank=normalize(views[cid].institution)
         banks[bank].add(cid)
-        grouped[(bank,cid,currency)].append((card,used,limit,line_type,identity,ambiguous,
-                                             line.get('isLimitFlexible',credit.get('isLimitFlexible'))))
+        key=(bank,cid,currency)
+        line_data=(limit,line_type,identity,ambiguous,line.get('isLimitFlexible',credit.get('isLimitFlexible')))
+        grouped[key].append((card,used if not current_reason else None,*line_data))
+        if reason and readable:
+            copy={**card,'consolidation_reason':amount_reason,'used':_format(used) if not amount_reason else None}
+            preserved[key].append((copy,used if not amount_reason else None,*line_data))
+    actual=_totals(grouped,banks,cards,values)
+    # A connection shares one authorization state. Leave other cards from that
+    # Item in the cohort so an unverified line cannot turn into an independent limit.
+    for key,group in preserved.items():
+        ids={entry[0]['account_id'] for entry in group}
+        group.extend(({**card,'consolidation_reason':'OBLIGATION_UNVERIFIED'},used,*extras)
+                     for card,used,*extras in grouped[key] if card['account_id'] not in ids)
+    last=[entry[0] for group in preserved.values() for entry in group]
+    preserved_totals=_totals(preserved,banks,last,values,preserved=True)
+    preserved_by_id={(card['connection_id'],card['account_id']):card for card in last}
+    for card in cards:
+        if card['position_state']=='PRESERVED':
+            previous=preserved_by_id[(card['connection_id'],card['account_id'])]
+            card.update(preserved_used=previous['used'],limit=previous['limit'])
+    diagnostics=Counter((card['consolidation_reason'] or 'INCLUDED',card['limit_reason']) for card in cards)
+    return {'diagnostics':[{'usage':usage,'limit':limit,'count':count}
+                           for (usage,limit),count in sorted(diagnostics.items(),key=lambda entry:(entry[0][0],entry[0][1] or ''))],
+            'items':cards,'active_count':sum(card['status']=='ACTIVE' for card in cards),'count':len(cards),
+            'basis':'CREDIT_USED',**actual,'preserved':preserved_totals}
+
+
+def _totals(grouped,banks,cards,values,*,preserved=False):
     used_rows=[]
     limit_rows=[]
     used_partial=any(card['consolidation_reason'] for card in cards)
@@ -279,6 +320,7 @@ def credit_usage(db,settings,accounts,current,views,values,parse_amount):
                 if shared_main and card['account_id']!=shared_main and typ=='CONSOLIDATED':
                     card['consolidation_reason']='ALREADY_IN_SHARED_LINE'
                     card['used']=None  # This value is the line total, not this card's amount.
+                    card['shared_line']=True
                     continue
                 if not shared_main or typ!='CONSOLIDATED':
                     reason=reason or 'SHARED_SCOPE_UNVERIFIED'
@@ -305,15 +347,19 @@ def credit_usage(db,settings,accounts,current,views,values,parse_amount):
                 card['limit_reason']=limit_reason
                 limit_partial=True
             else:
+                card['limit']=_format(limit)
                 limit_rows.append({'amount':limit,'currency':currency,'reference':card['reference_date']})
     used=values.total(used_rows,partial=used_partial,position=True)
     limits=values.total(limit_rows,partial=limit_partial,position=True)
     same_references=used['dates']==limits['dates'] and len(used['dates'])==1
-    comparable=not used['partial'] and not limits['partial'] and same_references and used['amounts'].keys()==limits['amounts'].keys()
+    complete=not (used_partial or limit_partial or used['missing'] or limits['missing'] or
+                  used['undated'] or limits['undated'])
+    comparable=(complete and same_references and used['amounts'].keys()==limits['amounts'].keys()
+                and (preserved or not (used['stale'] or limits['stale'])))
+    if preserved:
+        for metric,partial in ((used,used_partial),(limits,limit_partial)):
+            metric['partial']=bool(partial or metric['missing'] or metric['undated'] or metric['mixed_dates'])
     utilization={currency:_format(Decimal(amount)/Decimal(limits['amounts'][currency]))
                  for currency,amount in used['amounts'].items() if comparable and Decimal(limits['amounts'][currency])>0}
-    diagnostics=Counter((card['consolidation_reason'] or 'INCLUDED',card['limit_reason']) for card in cards)
-    return {'diagnostics':[{'usage':usage,'limit':limit,'count':count}
-                           for (usage,limit),count in sorted(diagnostics.items(),key=lambda entry:(entry[0][0],entry[0][1] or ''))],
-            'items':cards,'active_count':sum(card['status']=='ACTIVE' for card in cards),'count':len(cards),
-            'basis':'CREDIT_USED','included_count':used['included'],'metric':used,'limit_metric':limits,'utilization_by_currency':utilization}
+    return {'included_count':used['included'],'metric':used,'limit_metric':limits,
+            'utilization_by_currency':utilization}

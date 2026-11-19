@@ -5,9 +5,12 @@ import json
 import re
 
 from .open_finance import SyncError
+from .open_finance_registry import connection_views
+from .domain.clock import SystemClock
 from .pluggy_coverage import CONTRACT, RESOURCES
 
 LABELS={
+ 'bills':'Fatura de cartão',
  'name':'Nome','marketingName':'Produto','type':'Tipo','subtype':'Subtipo','status':'Estado informado',
  'balance':'Saldo informado','currencyCode':'Moeda','creditData':'Dados do cartão','bankData':'Dados bancários',
  'creditLimit':'Limite contratado','availableCreditLimit':'Limite disponível','minimumPayment':'Pagamento mínimo',
@@ -97,7 +100,7 @@ def field(key,spec,value,present,currency,depth=0):
             else:items.append({'key':key,'label':label,'state':'NULL' if entry is None else 'UNSUPPORTED','kind':'TEXT'})
         return {**node,'kind':'COLLECTION','items':items}
     if isinstance(value,bool):return {**node,'kind':'BOOLEAN','value':value}
-    if spec.get('format') in ('date','date-time'):
+    if spec.get('format') in ('date','date-time') or key in ('dueDate','billClosingDate'):
         try:
             if not isinstance(value,str) or len(value)>40:raise ValueError()
             dt=datetime.fromisoformat(value.replace('Z','+00:00'))
@@ -145,12 +148,34 @@ def _freshness(item,resource,kind):
         'warning_count':len(warnings) if isinstance(warnings,list) else 0}
 
 
+def _card_positions(c,settings,result,values):
+    if result['resource']!='accounts' or result['history'] or not any(
+            row['data'].get('type')=='CREDIT' for row in result['items']):
+        return {}
+    from .open_finance_analytics import _amount
+    from .open_finance_card_usage import credit_usage
+    from .portfolio_values import DashboardValues
+    scope=values.get('connection_id',[None])[0]
+    views={cid:view for cid,view in connection_views(c,settings).items()
+           if view.enabled and not view.historical and scope in (None,cid)}
+    rows=c.execute("""SELECT connection_id,external_id,payload_json,last_run_id,observed_at
+        FROM of_resource_records WHERE parent_id='' AND resource='accounts' AND state='PRESENT'
+        AND json_extract(payload_json,'$.type')='CREDIT' AND connection_id IN
+        (SELECT value FROM json_each(?))""",(json.dumps(list(views)),))
+    accounts={(row['connection_id'],row['external_id']):
+              {**dict(row),'data':json.loads(row['payload_json'],parse_float=Decimal)} for row in rows}
+    native=DashboardValues(c,'original',str(SystemClock(settings.timezone).today()))
+    position=credit_usage(c,settings,accounts,views,views,native,_amount)
+    return {(row['connection_id'],row['account_id']):row for row in position['items']}
+
+
 def query_domain(c,settings,values):
     from .open_finance_coverage import query
     c.execute('BEGIN')
     try:
         result=query(c,settings,values,manage_transaction=False)
         resource=result['resource'];items=[]
+        card_positions=_card_positions(c,settings,result,values)
         for row in result['items']:
             data=row['data'];kind='CREDIT_CARD' if resource=='accounts' and data.get('type')=='CREDIT' else KINDS[resource]
             origin_run,origin_collected_at=_origin(c,{**row,'_resource':resource},result['history'])
@@ -185,7 +210,22 @@ def query_domain(c,settings,values):
             origin_item=_context_at_origin(c,row['connection_id'],'item',None,origin_run)
             quality=_freshness(origin_item,resource,kind)
             current_run=c.execute('SELECT state,error_code,started_at,finished_at FROM of_sync_runs WHERE connection_id=? ORDER BY rowid DESC LIMIT 1',(row['connection_id'],)).fetchone()
-            financial_dates={k:data[k] for k in ('date','transactionDateTime','tradeDate','billPostDate','paymentDate') if isinstance(data.get(k),str)}
+            date_fields=('date','transactionDateTime','tradeDate','billPostDate','paymentDate')
+            if kind=='CREDIT_BILL':
+                date_fields+=('dueDate','billClosingDate')
+            financial_dates={k:data[k] for k in date_fields if isinstance(data.get(k),str)}
+            position=card_positions.get((row['connection_id'],row['external_id'])) if kind=='CREDIT_CARD' else None
+            credit_scope_failed=kind=='CREDIT_CARD' and (not data.get('itemId') or data.get('id')!=row['external_id']
+                    or data['itemId']!=origin_item.get('id') or
+                    position and position['consolidation_reason'] in (
+                        'LOCAL_BINDING_MISMATCH','ITEM_ASSOCIATION_MISMATCH','ACCOUNT_ID_MISMATCH','ACCOUNT_ITEM_MISMATCH'))
+            if credit_scope_failed:
+                # Strip the incompatible payload from the product view. Its
+                # staging records and revision history are retained.
+                fields=[]
+                position=None
+                children=[]
+
             temporal={'financial_observation':financial_dates or None,'collected_at':row['observed_at'],
                 'content_first_collected_at':origin_collected_at,'last_seen_at':row['observed_at'] if row['state']=='PRESENT' else None,
                 'absence_observed_at':row['observed_at'] if row['state']=='NOT_SEEN' else None,
@@ -194,7 +234,11 @@ def query_domain(c,settings,values):
                     'quality':quality},'current_sync':dict(current_run) if current_run else None,
                 'effective_freshness':'STALE' if quality['state']=='STALE' else 'NOT_ESTABLISHED',
                 'historical_revision':result['history']}
-            items.append({'identity':identity,'kind':kind,'name':data.get('name') or data.get('productName') or data.get('description') or LABELS.get(resource,kind),
+            items.append({'identity':identity,'kind':kind,
+                **({'credit_position':position} if kind=='CREDIT_CARD' else {}),
+                'name':('Cartão com origem não confirmada' if credit_scope_failed else
+                        (position['name'] if position else None) or data.get('name') or data.get('productName') or
+                        data.get('description') or LABELS.get(resource,kind)),
                 'record_state':row['state'],'observed_at':row['observed_at'],'fields':fields,'children':children,'relation':relation,
                 'collection':dict(checkpoint) if checkpoint else {'state':'NOT_QUERIED'},
                 'freshness':quality,'temporal':temporal,

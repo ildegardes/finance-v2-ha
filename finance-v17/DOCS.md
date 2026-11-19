@@ -1,4 +1,10 @@
-# Finance V17 0.1.40-open-finance.1
+# Finance V17 0.1.41-open-finance.1
+
+A Visão geral e a lista de cartões usam o mesmo registro de crédito importado. Quando a auditoria não confirma a posição atual, o último valor verificável aparece com sua referência. Faturas apresentam datas civis no resumo e conservam o horário e o fuso no detalhe.
+
+Movimentações exibe cada registro da página com sua data e informa quando a resposta é incompleta ou não pode ser exibida. O schema permanece na versão 16. Consulte a [auditoria e a homologação do proprietário](../docs/open-finance/RECUPERACAO_041.md).
+
+## Finance V17 0.1.40-open-finance.1
 
 A versão preserva o schema 16. Valores em BRL e USD têm duas casas decimais na interface. O arredondamento ocorre somente na apresentação.
 

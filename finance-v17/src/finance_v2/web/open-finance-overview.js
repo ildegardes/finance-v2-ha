@@ -1,7 +1,7 @@
 import {bankMark,cardIdentity} from './open-finance-identity.js';
 import {overviewWealth,wealthMoney} from './open-finance-wealth.js';
 import {presentationPreference,savePresentation,presentationControl,metricValue,metricNote,
-  institutionPositions,portfolioQuality,unifiedIncomeMarkup,cardUsage} from './open-finance-consolidated.js';
+  institutionPositions,portfolioQuality,unifiedIncomeMarkup,cardKpi,cardUsage} from './open-finance-consolidated.js';
 import {portfolioPanel} from './open-finance-portfolio.js';
 import {automaticPanel,bridgePanel,cardPanel,incomePanel} from './open-finance-insights.js';
 import {createQueryGeneration} from './query-generation.js';
@@ -302,8 +302,8 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
       metric('investments','Investimentos',investments.value,shared?metricNote(shared.investments):currentWealth?wealthDetail:positionNote(investments),
         shared?shown(shared.investments):currentWealth?wealthMetric:undefined)+
       metric('cards','Cartões de crédito',cards?.consolidated??cards?.used,shared?
-        ('Saldo utilizado · '+(cards.metric.partial?'cobertura parcial':cards.included_count+' de '+cards.count+' considerados')):cards?.consolidated!=null?
-        (cards.included_count+' de '+cards.count+' considerados'):(cards?.active_count||0)+' ativos informados',shown(shared?.cards.metric))+
+        cardKpi(cards).note:cards?.consolidated!=null?
+        (cards.included_count+' de '+cards.count+' considerados'):(cards?.active_count||0)+' ativos informados',shown(shared?cardKpi(cards).metric:undefined))+
       '</div></section><section><h3>Resultados do período</h3><div class="of-metrics of-kpi-group">'+
       metric('incoming',flowMode==='adjusted'?'Receitas identificadas':'Entradas bancárias',showAdjusted?insights.known.incoming:flow.reported?.incoming,
         shared?metricNote(shared[flowMode==='gross'?'gross_incoming':'incoming']):showAdjusted?economicNote:coverageLabel(flow.coverage_state),
