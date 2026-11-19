@@ -101,13 +101,13 @@ function flowChart(data,filters,grouping,page,mode,money,esc){
   const maximum=allValues.reduce((max,value)=>value>max?value:max,0n);
   const axis=mode==='visible'?'<div class="of-chart-axis" aria-hidden="true">'+[maximum,maximum/2n,0n].map(value=>'<span>'+esc(money(decimal(value)))+'</span>').join('')+'</div>':'';
   const navigation=buckets.length>pageSize?'<div class="of-chart-nav"><button type="button" class="of-link" data-chart-page="-1" '+(page?'':'disabled')+'>Anterior</button><span>'+esc(dateBR(displayed[0].start))+' a '+esc(dateBR(displayed.at(-1).end))+'</span><button type="button" class="of-link" data-chart-page="1" '+(offset+pageSize<buckets.length?'':'disabled')+'>Próximo</button></div>':'';
-  const columns=displayed.map((bucket,index)=>{
+  const columns=displayed.map(bucket=>{
     const period=dateBR(bucket.start)+(bucket.start===bucket.end?'':' a '+dateBR(bucket.end));
     const bars=Object.entries(directionLabels).map(([direction,label])=>{
       const value=bucket[direction];
       if(value===undefined)return '<span class="of-chart-gap" aria-hidden="true"></span>';
       const summary=label+' · '+period+(mode==='visible'?' · '+money(decimal(value)):'');
-      return '<button type="button" class="of-column '+direction+'" style="--height:'+(fraction(value,maximum)*100)+'%" data-bucket="'+index+'" data-direction="'+direction+'" title="'+esc(summary)+'" aria-label="'+esc(summary)+'"></button>';
+      return '<button type="button" class="of-column '+direction+'" style="--height:'+(fraction(value,maximum)*100)+'%" data-bucket-start="'+bucket.start+'" data-bucket-end="'+bucket.end+'" data-bucket-currency="'+esc(filters.currency)+'" data-direction="'+direction+'" title="'+esc(summary)+'" aria-label="'+esc(summary)+'"></button>';
     }).join('');
     return '<div class="of-chart-group"><div class="of-column-pair">'+bars+'</div><time datetime="'+bucket.start+'" aria-hidden="true">'+esc(dateBR(bucket.start).slice(0,5))+'</time></div>';
   }).join('');
@@ -519,9 +519,10 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
       onUnified({view:'activities',presentation:presented,connection_id:button.dataset.overviewInstitution,account_id:''});
     }else if(button.dataset.overviewInstitution){
       onNavigate({...context,connection_id:button.dataset.overviewInstitution,history:'0'});
-    }else if(button.dataset.bucket){
-      const bucket=flowBuckets(chartData().series,filters,grouping)[chartPage*12+Number(button.dataset.bucket)];
-      onNavigate({...context,start:bucket.start,end:bucket.end,direction:button.dataset.direction,...(flowMode==='gross'||!loaded.insights?{}:{bucket:bucketFor()})});
+    }else if(button.dataset.bucketStart){
+      onNavigate({...context,start:button.dataset.bucketStart,end:button.dataset.bucketEnd,
+        currency:shared?.currency==='original'?button.dataset.bucketCurrency:filters.currency,
+        direction:button.dataset.direction,...(flowMode==='gross'||!loaded.insights?{}:{bucket:bucketFor()})});
     }else if(button.dataset.chartPage){
       chartPage+=Number(button.dataset.chartPage);paint();
       const next=result.querySelector('[data-chart-page="'+button.dataset.chartPage+'"]:not(:disabled)')||result.querySelector('[data-chart-page]:not(:disabled)');
