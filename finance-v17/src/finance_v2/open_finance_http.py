@@ -264,6 +264,7 @@ def _dispatch_raw(app,operation,identity,body,query,request_id):
                 raise SyncError('FORBIDDEN',403)
             return save(service,body),200
         with closing(app.db()) as c:
+            c.execute('BEGIN')
             return report(c,app.settings,_datetime(service._time()[1])),200
     if op.startswith('classification_'):
         from .open_finance_classification_admin import dispatch

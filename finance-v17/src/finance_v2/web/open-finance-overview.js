@@ -255,6 +255,7 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
     const displayCurrency=preferred?.[0]||(shared?.currency==='USD'?'USD':filters.currency);
     const accounts=loaded.positions.accounts,investments=loaded.positions.investments,flow=secondary.flow.BANK;
     const cards=shared?.cards||loaded.cards,history=shared?.history||loaded.portfolio_history;
+    const cardPosition=shared?cardKpi(cards):null;
     const money=value=>bankMoney(value,displayCurrency);
     const amount=value=>value==null?'Indisponível':mode==='visible'?esc(money(value)):'<span aria-label="Valor oculto">••••••</span>';
     const metric=(icon,title,value,detail,override)=>'<article class="of-metric of-kpi"><div><span class="of-kpi-icon '+icon+'"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="'+icons[icon]+'"></path></svg></span><h3><button type="button" class="of-link" data-metric="'+icon+'">'+title+'</button></h3></div><strong>'+(override??amount(value))+'</strong><small>'+esc(detail)+'</small></article>';
@@ -301,9 +302,9 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
       metric('accounts','Saldo em contas',accounts.value,shared?metricNote(shared.accounts):positionNote(accounts),shown(shared?.accounts))+
       metric('investments','Investimentos',investments.value,shared?metricNote(shared.investments):currentWealth?wealthDetail:positionNote(investments),
         shared?shown(shared.investments):currentWealth?wealthMetric:undefined)+
-      metric('cards','Cartões de crédito',cards?.consolidated??cards?.used,shared?
-        cardKpi(cards).note:cards?.consolidated!=null?
-        (cards.included_count+' de '+cards.count+' considerados'):(cards?.active_count||0)+' ativos informados',shown(shared?cardKpi(cards).metric:undefined))+
+      metric('cards',cardPosition?.label||'Cartões de crédito',cards?.consolidated??cards?.used,shared?
+        cardPosition.note:cards?.consolidated!=null?
+        (cards.included_count+' de '+cards.count+' considerados'):(cards?.active_count||0)+' ativos informados',shown(cardPosition?.metric))+
       '</div></section><section><h3>Resultados do período</h3><div class="of-metrics of-kpi-group">'+
       metric('incoming',flowMode==='adjusted'?'Receitas identificadas':'Entradas bancárias',showAdjusted?insights.known.incoming:flow.reported?.incoming,
         shared?metricNote(shared[flowMode==='gross'?'gross_incoming':'incoming']):showAdjusted?economicNote:coverageLabel(flow.coverage_state),

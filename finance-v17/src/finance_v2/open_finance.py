@@ -14,7 +14,7 @@ from .db import connect
 from .open_finance_write import staging_transaction
 from .domain.clock import SystemClock, utc_text
 from .pluggy_client import PluggyClient, PluggyError, _period
-from .open_finance_registry import connection_views, load_keyring, managed_connection
+from .open_finance_registry import connection_views, legacy_auto_sync, load_keyring, managed_connection
 from .pluggy_credential_protection import CredentialProtectionError
 
 
@@ -65,7 +65,9 @@ class OpenFinanceService:
         try:
             with closing(self._db()) as db:
                 entry = db.execute(
-                    "SELECT source,lifecycle,revision,label FROM of_connection_registry WHERE connection_id=?",
+                    """SELECT r.source,r.lifecycle,r.revision,r.label,c.binding_hash
+                       FROM of_connection_registry r JOIN of_connections c ON c.id=r.connection_id
+                       WHERE r.connection_id=?""",
                     (connection_id,),
                 ).fetchone()
                 if entry is None:
@@ -74,7 +76,11 @@ class OpenFinanceService:
                     raise SyncError("CONNECTION_NOT_ACTIVE")
                 if entry["source"] == "LEGACY":
                     config = self.config.get(connection_id)
-                    return replace(config, institution=entry["label"], registry_revision=entry["revision"]) if config else None
+                    if config is None:
+                        return None
+                    automatic = legacy_auto_sync(db,connection_id,entry["binding_hash"],config.auto_sync_enabled)
+                    return replace(config, institution=entry["label"], registry_revision=entry["revision"],
+                                   auto_sync_enabled=automatic)
                 return managed_connection(
                     db, connection_id, entry["revision"],
                     load_keyring(self.settings.pluggy_keyring_path),

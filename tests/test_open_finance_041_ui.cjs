@@ -42,10 +42,12 @@ const isQuery = request => new URL(request.url()).pathname === '/api/v2/open-fin
       assert.match(await kpi.innerText(), /Indisponível/);
     } else {
       await list.getByText('Última posição conhecida · 20/10/2026').first().waitFor();
-      assert.match(await kpi.innerText(), /R\$ 690,00/);
+      assert.match(await kpi.innerText(), /R\$ 214,00/);
+      await list.getByText('Crédito utilizado e limites',{exact:true}).click();
+      assert.match(await list.locator('.of-card-used-total').innerText(),/R\$ 690,00/);
       assert.match(await list.innerText(), /17,25%/);
       assert.equal(await list.locator('progress').count(), 1);
-      for (const [value,count] of [['276,25',1],['413,75',1],['0,00',2]]) {
+      for (const [value,count] of [['53,00',2],['54,00',2]]) {
         assert.equal(await list.getByText(amount(value), {exact:true}).count(), count);
       }
     }
@@ -56,7 +58,8 @@ const isQuery = request => new URL(request.url()).pathname === '/api/v2/open-fin
     await cards.locator('[data-domain-kind=CREDIT_CARD]').last().waitFor();
     if (!baseline) {
       const summaries = cards.locator('.of-product-summary');
-      assert.equal(await summaries.getByText('Saldo utilizado', {exact:true}).count(),4);
+      assert.equal(await summaries.getByText('Saldo em aberto', {exact:true}).count(),4);
+      assert.equal(await summaries.getByText('Crédito utilizado', {exact:true}).count(),4);
       assert.equal(await summaries.getByText(amount('0,00'), {exact:true}).count(),2);
       assert.equal(await summaries.getByText(amount('413,75'), {exact:true}).count(),1);
     }

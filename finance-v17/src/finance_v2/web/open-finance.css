@@ -229,7 +229,7 @@ button.of-column{position:relative;background:transparent;border-radius:.2rem;pa
 .of-consolidated-positions .of-position{grid-template-rows:auto 1fr auto}
 .of-consolidated-positions .of-position-identity{min-height:2.8rem}
 .of-converted-value>span{display:block}
-.of-card-used-total{display:block;font-size:1.4rem;margin:.2rem 0 .5rem}
+.of-card-open-total,.of-card-used-total{display:block;font-size:1.4rem;margin:.2rem 0 .5rem}
 .of-card-utilization{margin:.45rem 0}
 .of-card-utilization label{display:grid;gap:.25rem;font-size:.84rem;font-weight:600}
 .of-card-utilization progress{inline-size:100%;height:.65rem;accent-color:var(--brand)}

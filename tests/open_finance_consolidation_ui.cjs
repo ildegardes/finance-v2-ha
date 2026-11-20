@@ -104,9 +104,10 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || path.join(process.env.
     assert.equal(await select.inputValue(),'BRL');
     assert.deepEqual(await overview.locator('.of-kpi-group').evaluateAll(groups=>groups.map(group=>group.children.length)),[3,3]);
     await awaitAmount('Saldo em contas','3.000,00');
-    await awaitAmount('Cartões de crédito','500,00');
+    await awaitAmount('Crédito utilizado nos cartões','500,00');
     const cards=overview.locator('.of-card-insight');
-    assert.equal(await cards.locator('.of-card-used-total').innerText(),await metric('Cartões de crédito').locator(':scope > strong').innerText());
+    assert.equal(await cards.locator('.of-card-open-total').innerText(),await metric('Crédito utilizado nos cartões').locator(':scope > strong').innerText());
+    await cards.getByText('Crédito utilizado e limites',{exact:true}).click();
     await cards.getByText('12,5%', {exact:false}).waitFor();
     assert.equal(await cards.getByRole('progressbar').getAttribute('value'),'12.5');
     assert.equal(await cards.locator('li').count(),4);
@@ -139,7 +140,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || path.join(process.env.
     const queriesBefore=calls.filter(path=>path.endsWith('/analytics')).length;
     await select.selectOption('USD');
     await awaitAmount('Investimentos','53.400,00');
-    await awaitAmount('Cartões de crédito','100,00');
+    await awaitAmount('Crédito utilizado nos cartões','100,00');
     assert.equal(calls.filter(path=>path.endsWith('/analytics')).length-queriesBefore,1);
     assert.equal(calls.filter(path=>path.endsWith('/portfolio')).length,0);
     await series.selectOption({label:'Charles Schwab'});

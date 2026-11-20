@@ -140,7 +140,8 @@ class Application:
     try:payload,status=open_finance_http.dispatch(self,route.operation,identity,body,query,request_id=rid)
     except SyncError:raise
     except Exception:raise HttpError(503,'STORAGE_UNAVAILABLE','staging unavailable') from None
-    if route.operation in ('open_finance_connections','open_finance_snaptrade_status'):
+    if route.operation in ('open_finance_connections','open_finance_snaptrade_status',
+                           'open_finance_sync_preferences','open_finance_sync_preferences_write'):
      payload['registry_admin_available']=self.private_registry_session(environ)
     return self.respond(start_response,status,payload,rid,origin)
    assistant_operation=route.operation.startswith("assistant_")

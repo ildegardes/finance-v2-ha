@@ -43,8 +43,13 @@ export function productSummary(row,esc){
   const card=row.credit_position;
   if(card){
     const money=(label,value)=>({label,kind:'MONEY',state:value==null?'NULL':'VALUE',value,currency:card.currency});
-    found.unshift(money('Saldo utilizado',card.used??card.preserved_used),money('Limite informado',card.limit??card.reported_limit));
-    if(card.reported_balance!=null&&card.used==null&&card.preserved_used==null)found.push(money('Saldo em aberto',card.reported_balance));
+    const used=card.used??card.preserved_used;
+    if(card.open_balance_applicable)found.unshift(money('Saldo em aberto',card.reported_balance));
+    if(!card.open_balance_applicable)found.unshift(money('Crédito utilizado',used));
+    if(used!=null){
+      if(card.open_balance_applicable)found.push(money('Crédito utilizado',used));
+      if(card.limit!=null)found.push(money('Limite de crédito',card.limit));
+    }
   }
   return found.length?`<dl class="of-product-summary">${found.map(node=>`<div><dt>${esc(node.label)}</dt><dd>${row.kind==='INVESTMENT_POSITION'&&node.key==='type'?esc(classLabel(node.value)):
     row.kind==='CREDIT_BILL'&&['dueDate','billClosingDate'].includes(node.key)?esc(dateBR(node.value)):fieldHtml(node,esc)}</dd></div>`).join('')}</dl>`:'<p class="muted">Dados resumidos indisponíveis; consulte os detalhes.</p>';
@@ -60,7 +65,9 @@ function cardContext(row,esc){
   if(!card)return '';
   const identity=cardIdentity(card,esc);
   const tail=identity.tail?'<span data-of-card-tail>•••• '+esc(identity.tail)+'</span>':'';
-  const position=card.position_state==='PRESERVED'?'Última posição conhecida · '+dateBR(card.reference_date||card.observed_at):null;
+  const date=card.reference_date?dateBR(card.reference_date):'coleta de '+dateBR(card.observed_at);
+  const position=card.position_state==='PRESERVED'?'Última posição conhecida · '+date:
+    card.reference_date?'Referência · '+date:null;
   const details=[esc(identity.network),tail,position?esc(position):''].filter(Boolean);
   return details.length?'<p>'+details.join(' · ')+'</p>':'';
 }
