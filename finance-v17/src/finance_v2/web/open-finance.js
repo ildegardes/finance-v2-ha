@@ -125,11 +125,16 @@ export function organizeConnectionSections(panel){
 
 export function connectionCards(catalog,esc){
   if(!catalog.connections.length)return '<p class="empty">Nenhuma conexão registrada.</p>';
-  return `<div class="of-connection-grid">${catalog.connections.map(c=>{
+  const render=c=>{
     const accounts=catalog.accounts.filter(a=>a.connection_id===c.id),banks=accounts.filter(a=>a.type==='BANK').length,cards=accounts.filter(a=>a.type==='CREDIT').length;
-    const run=catalog.runs.find(r=>r.connection_id===c.id),state=c.historical?'Histórica':c.enabled?'Habilitada':'Desabilitada';
-    return `<article class="of-connection-card" data-connection-id="${esc(c.id)}"><h3>${bankMark(c.institution,esc)}${esc(connectionLabel(c,catalog.connections))}</h3><span class="status">${esc(state)}</span><details><summary>Identificação original</summary><p>${esc(c.institution)} · ${esc(c.id)}</p></details><p>${banks} ${banks===1?'conta':'contas'} · ${cards} ${cards===1?'cartão':'cartões'} no catálogo</p><p>${run?`Última sincronização registrada: ${esc(dateBR(run.started_at))} · ${esc(runStateLabel(run.state))}`:'Nenhuma sincronização registrada.'}</p><div data-connection-coverage><small>Cobertura ainda não consultada.</small></div>${c.enabled&&!c.historical?`<button type="button" class="quiet" data-connection-diagnostic="${esc(c.id)}">Consultar diagnóstico</button>`:'<small>Histórico preservado; seleção operacional indisponível.</small>'}</article>`;
-  }).join('')}</div>`;
+    const run=catalog.runs.find(r=>r.connection_id===c.id),state=c.historical?'Arquivada':c.enabled?'Ativa':'Desativada';
+    return `<article class="of-connection-card" data-connection-id="${esc(c.id)}"><h3>${bankMark(c.institution,esc)}${esc(connectionLabel(c,catalog.connections))}</h3><span class="status">${esc(state)}</span><details><summary>Identificação original</summary><p>${esc(c.institution)} · ${esc(c.id)}</p></details><p>${banks} ${banks===1?'conta':'contas'} · ${cards} ${cards===1?'cartão':'cartões'} no catálogo</p><p>${run?`Última sincronização registrada: ${esc(dateBR(run.started_at))} · ${esc(runStateLabel(run.state))}`:'Nenhuma sincronização registrada.'}</p><div data-connection-coverage><small>Cobertura ainda não consultada.</small></div>${c.enabled&&!c.historical?`<div data-connection-policy></div><button type="button" class="quiet" data-connection-diagnostic="${esc(c.id)}">Consultar diagnóstico</button>`:'<small>Histórico preservado; seleção operacional indisponível.</small>'}</article>`;
+  };
+  const active=catalog.connections.filter(connection=>!connection.historical);
+  const archived=catalog.connections.filter(connection=>connection.historical);
+  const grid=rows=>'<div class="of-connection-grid">'+rows.map(render).join('')+'</div>';
+  return grid(active)+(archived.length?'<details class="of-connection-section"><summary>Conexões arquivadas ('+
+    archived.length+')</summary>'+grid(archived)+'</details>':'');
 }
 
 

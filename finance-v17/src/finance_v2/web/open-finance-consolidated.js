@@ -122,45 +122,50 @@ export function cardDiagnostics(cards,esc){
 const cardPercent=new Intl.NumberFormat('pt-BR',{style:'percent',maximumFractionDigits:2});
 
 export function cardKpi(cards){
-  if(!cards.metric.included&&cards.preserved?.metric.included){
-    return {metric:cards.preserved.metric,note:'Saldo utilizado · última posição conhecida'+
-      (cards.preserved.metric.partial?' · cobertura parcial':'')};
-  }
-  return {metric:cards.metric,note:'Saldo utilizado · '+
-    (cards.metric.partial?'cobertura parcial':cards.included_count+' de '+cards.count+' considerados')};
+  const open=cards.open_balance.applicable||!cards.items.length;
+  const last=!cards.metric.included&&cards.preserved?.metric.included;
+  const metric=open?cards.open_balance:last?cards.preserved.metric:cards.metric;
+  const label=open?'Saldo em aberto dos cartões':'Crédito utilizado nos cartões';
+  const dates=metric.dates;
+  const context=[(open?metric.preserved:last)?'Inclui posições preservadas':'',metric.partial?'Cobertura parcial':''];
+  if(dates.length)context.push(dates.length===1?dateBR(dates[0]):dateBR(dates[0])+' a '+dateBR(dates.at(-1)));
+  return {metric,label,open,note:context.filter(Boolean).join(' · ')||'Sem referência informada'};
 }
 
 export function cardUsage(cards,esc,mode,identity){
   if(!cards)return '';
+  const primary=cardKpi(cards);
   const list=cards.items.map((card,index)=>{
     const visual=identity(card,esc);
     return '<li><button type="button" class="of-card-compact" data-overview-card="'+index+'">'+visual.mark+
       '<span><strong>'+esc(visual.label)+'</strong><small>'+esc(institutionName(card.institution))+
       (visual.network?' · <span class="of-card-network">'+esc(visual.network)+'</span>':'')+
       (visual.tail&&mode!=='full'?' · •••• '+esc(visual.tail):'')+'</small>'+
-      (card.position_state==='PRESERVED'?'<small>Última posição conhecida · '+esc(dateBR(card.reference_date||card.observed_at))+'</small>':'')+
-      '</span><span><strong>'+wealthMoney(card.used??card.preserved_used,card.currency,esc)+'</strong><small>Saldo utilizado</small>'+
-      '<small>Limite · '+wealthMoney(card.limit??card.reported_limit,card.currency,esc)+'</small>'+
-      (card.used==null&&card.preserved_used==null&&card.reported_balance!=null?
-        '<small>Saldo em aberto · '+wealthMoney(card.reported_balance,card.currency,esc)+'</small>':'')+'</span></button></li>';
+      (card.reference_date||card.position_state==='PRESERVED'?'<small>'+
+        (card.position_state==='PRESERVED'?'Última posição conhecida · ':'Referência · ')+
+        esc(card.reference_date?dateBR(card.reference_date):'coleta de '+dateBR(card.observed_at))+'</small>':'')+
+      '</span><span><strong data-card-open-balance>'+wealthMoney(primary.open?card.reported_balance:card.used??card.preserved_used,card.currency,esc)+'</strong>'+
+      '<small>'+(primary.open?'Saldo em aberto':'Crédito utilizado')+'</small></span></button></li>';
   }).join('');
   const totals=(position,label)=>{
-    const utilization=mode==='visible'?Object.entries(position.utilization_by_currency).map(([currency,value])=>{
+    const ratios=Object.entries(position.utilization_by_currency);
+    const utilization=mode==='visible'?ratios.map(([currency,value])=>{
       const percent=Number(value);
       return '<div class="of-card-utilization"><label>Utilização em '+esc(currency)+' '+esc(cardPercent.format(percent))+
         '<progress max="100" value="'+Math.min(100,Math.max(0,100*percent))+'"></progress></label></div>';
     }).join(''):'';
     return '<p>'+label+(position.metric.partial?' · cobertura parcial':'')+'</p><strong class="of-card-used-total">'+
-      metricValue(position.metric,esc)+'</strong><p>'+
-      (position.limit_metric.partial?'Subtotal de limites verificados':'Limite consolidado')+
-      ' <strong>'+metricValue(position.limit_metric,esc)+'</strong></p>'+utilization;
+      metricValue(position.metric,esc)+'</strong>'+
+      (ratios.length?'<p>Limite consolidado <strong>'+metricValue(position.limit_metric,esc)+'</strong></p>':'')+utilization;
   };
-  const preserved=cards.preserved,showPreserved=preserved&&(preserved.metric.included||preserved.limit_metric.included);
-  const showCurrent=!showPreserved||cards.metric.included||cards.limit_metric.included;
+  const preserved=cards.preserved;
   return '<section class="of-summary-card of-card-insight"><div class="of-section-heading"><div><h3>Cartões de crédito</h3><p>'+
     countBR.format(cards.active_count)+' cartões ativos informados</p></div><button type="button" class="of-link" data-all-overview-cards>Ver todos</button></div>'+
-    (showCurrent?totals(cards,'Saldo utilizado na posição atual'):'')+
-    (showPreserved?totals(preserved,'Saldo utilizado na última posição conhecida'):'')+
+    '<p>'+primary.label+'</p><strong class="of-card-open-total">'+metricValue(primary.metric,esc)+'</strong>'+
+    '<small>'+esc(primary.note)+'</small>'+
     (list?'<ul class="of-compact-cards">'+list+'</ul>':'<p>Nenhum cartão encontrado neste escopo.</p>')+
+    (cards.metric.included||preserved?.metric.included?'<details><summary>Crédito utilizado e limites</summary>'+
+      (cards.metric.included?totals(cards,'Crédito utilizado na posição atual'):'')+
+      (preserved?.metric.included?totals(preserved,'Crédito utilizado na última posição conhecida'):'')+'</details>':'')+
     cardDiagnostics(cards,esc)+'</section>';
 }

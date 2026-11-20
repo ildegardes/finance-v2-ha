@@ -1,3 +1,9 @@
+## 0.1.42-open-finance.1
+
+- KPI e lista de cartões exibem o saldo em aberto nativo, com posições preservadas, datas e cobertura parcial.
+- Conexões ativas têm preferência individual de coleta automática. Conexões arquivadas ficam em seção recolhível.
+- A arte aprovada do Finance V17 aparece no catálogo, no cabeçalho e nos ícones locais do navegador.
+
 ## 0.1.41-open-finance.1
 
 - Cartões exibem a última posição comprovada com a referência da coleta. A consolidação atual continua condicionada à auditoria de escopo e consentimento.

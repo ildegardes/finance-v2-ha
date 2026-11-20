@@ -8,7 +8,7 @@ from uuid import uuid4
 from .open_finance import SyncError
 from .open_finance_recovery import EXPECTED, SantanderBindingRecovery
 from .open_finance_recovery_checks import Blocked, dependencies, schema_check
-from .open_finance_registry import ACCESS_MODES, load_keyring, managed_connection
+from .open_finance_registry import ACCESS_MODES, legacy_auto_sync, load_keyring, managed_connection
 from .pluggy_access_policy import validate_access_context
 from .pluggy_client import PluggyError
 from .pluggy_config import PluggyConfigurationError, PluggyConnection
@@ -16,19 +16,22 @@ from .pluggy_coverage import CONTRACT, _expired, collection_batches
 from .pluggy_credential_protection import CredentialProtectionError
 
 
-def _event(db, connection_id, operation, previous, resulting, revision, stamp):
+def _event(db, connection_id, operation, previous, resulting, revision, stamp, *, binding=None):
+    event_id = uuid4().hex
+    if binding is not None:
+        event_id = binding + ':' + event_id
     db.execute(
         """INSERT INTO of_connection_admin_events
            (event_id,connection_id,actor,operation,previous_state,resulting_state,revision,recorded_at)
            VALUES (?,?,'UI:local',?,?,?,?,?)""",
-        (uuid4().hex, connection_id, operation, previous, resulting, revision, stamp),
+        (event_id, connection_id, operation, previous, resulting, revision, stamp),
     )
 
 
 def _registered_row(db, connection_id, revision, states):
     row = db.execute(
         """SELECT r.source,r.lifecycle,r.revision,r.label,r.replaces_id,
-                  c.sync_state,c.lease_token,c.binding_hash
+                  c.sync_state,c.lease_token,c.binding_hash,c.enabled
            FROM of_connection_registry r JOIN of_connections c ON c.id=r.connection_id
            WHERE r.connection_id=?""", (connection_id,),
     ).fetchone()
@@ -221,21 +224,53 @@ class RegistryAdmin:
         _,stamp=self.service._time()
         try:
             with closing(self.service._db()) as db,self.service._write(db):
+                config=self.service.config.get(connection_id)
+                if config and config.enabled and not db.execute(
+                        'SELECT 1 FROM of_connection_registry WHERE connection_id=?',(connection_id,)).fetchone():
+                    if revision:
+                        raise SyncError('CONNECTION_CONFIGURATION_CHANGED')
+                    binding=self.service._binding(config)
+                    current=db.execute('SELECT enabled,binding_hash FROM of_connections WHERE id=?',
+                                       (connection_id,)).fetchone()
+                    if current and (not current['enabled'] or current['binding_hash']!=binding):
+                        raise SyncError('CONNECTION_BINDING_CHANGED')
+                    if db.execute('SELECT 1 FROM of_connections WHERE id<>? AND binding_hash=?',
+                                  (connection_id,binding)).fetchone():
+                        raise SyncError('CONNECTION_BINDING_ALREADY_REGISTERED')
+                    if config.auto_sync_enabled==enabled:
+                        return {'id':connection_id,'auto_sync_enabled':enabled,'revision':0}
+                    if current is None:
+                        db.execute('INSERT INTO of_connections(id,institution,enabled,binding_hash,updated_at) '
+                                   'VALUES (?,?,1,?,?)',(connection_id,config.institution,binding,stamp))
+                    db.execute('INSERT INTO of_connection_registry(connection_id,source,lifecycle,label,updated_at) '
+                               "VALUES (?,'LEGACY','ACTIVE',?,?)",(connection_id,config.institution,stamp))
                 row=_registered_row(db,connection_id,revision,{'ACTIVE'})
                 self._idle(db,connection_id,row)
-                item=db.execute('SELECT auto_sync_enabled FROM of_managed_pluggy_items WHERE connection_id=?',
-                                (connection_id,)).fetchone() if row['source']=='MANAGED' else None
-                if not item:
-                    raise SyncError('MANAGED_CONNECTION_REQUIRED',409)
-                before=bool(item['auto_sync_enabled'])
+                if not row['enabled']:
+                    raise SyncError('CONNECTION_NOT_ACTIVE')
+                binding=None
+                if row['source']=='MANAGED':
+                    item=db.execute('SELECT auto_sync_enabled FROM of_managed_pluggy_items WHERE connection_id=?',
+                                    (connection_id,)).fetchone()
+                    if not item:
+                        raise SyncError('MANAGED_CONNECTION_REQUIRED',409)
+                    before=bool(item['auto_sync_enabled'])
+                    if before!=enabled:
+                        db.execute('UPDATE of_managed_pluggy_items SET auto_sync_enabled=? WHERE connection_id=?',
+                                   (enabled,connection_id))
+                else:
+                    if not config or not config.enabled:
+                        raise SyncError('CONNECTION_NOT_ACTIVE')
+                    binding=self.service._binding(config)
+                    if binding!=row['binding_hash']:
+                        raise SyncError('CONNECTION_BINDING_CHANGED')
+                    before=legacy_auto_sync(db,connection_id,binding,config.auto_sync_enabled)
                 if before!=enabled:
-                    db.execute('UPDATE of_managed_pluggy_items SET auto_sync_enabled=? WHERE connection_id=?',
-                               (enabled,connection_id))
                     db.execute('UPDATE of_connection_registry SET revision=revision+1,updated_at=? WHERE connection_id=?',
                                (stamp,connection_id))
                     revision+=1
                     _event(db,connection_id,'AUTO_SYNC_POLICY','ENABLED' if before else 'DISABLED',
-                           'ENABLED' if enabled else 'DISABLED',revision,stamp)
+                           'ENABLED' if enabled else 'DISABLED',revision,stamp,binding=binding)
         except sqlite3.Error:
             raise SyncError('REGISTRY_WRITE_FAILED',503) from None
         return {'id':connection_id,'auto_sync_enabled':enabled,'revision':revision}

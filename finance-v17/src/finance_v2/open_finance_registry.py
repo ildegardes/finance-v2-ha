@@ -32,10 +32,21 @@ class ConnectionView:
     lifecycle: str = "ACTIVE"
 
 
+def legacy_auto_sync(db, connection_id, binding, default):
+    """Read the policy for this exact binding from the schema-16 audit stream."""
+    row = db.execute(
+        """SELECT resulting_state FROM of_connection_admin_events
+           WHERE connection_id=? AND operation='AUTO_SYNC_POLICY'
+             AND substr(event_id,1,65)=? AND resulting_state IN ('ENABLED','DISABLED')
+           ORDER BY rowid DESC LIMIT 1""", (connection_id, binding + ':'),
+    ).fetchone()
+    return row["resulting_state"] == "ENABLED" if row else default
+
+
 def connection_views(db, settings):
     """Owner-facing metadata only, including retained historical connections."""
     legacy = {cfg.id: cfg for cfg in settings.pluggy_connections}
-    persisted = {row["id"]: row for row in db.execute("SELECT id,institution,enabled FROM of_connections")}
+    persisted = {row["id"]: row for row in db.execute("SELECT id,institution,enabled,binding_hash FROM of_connections")}
     views = {
         cid: ConnectionView(cid, cfg.institution, cfg.enabled and (cid not in persisted or bool(persisted[cid]["enabled"])),
                             False, cfg.access_mode, cfg.auto_sync_enabled)
@@ -62,7 +73,7 @@ def connection_views(db, settings):
             cfg = legacy.get(cid)
             mode = cfg.access_mode if cfg else None
             enabled = active and bool(cfg and cfg.enabled)
-            auto = bool(cfg and cfg.auto_sync_enabled)
+            auto = legacy_auto_sync(db,cid,persisted[cid]["binding_hash"],cfg.auto_sync_enabled) if cfg else False
         views[cid] = ConnectionView(
             cid, row["label"], enabled, row["lifecycle"] == "ARCHIVED" or mode is None,
             mode or "strict", auto and enabled, row["lifecycle"],

@@ -125,7 +125,7 @@ def _usage_scopes(db,settings,current,today):
             LEFT JOIN of_managed_pluggy_items i ON i.connection_id=c.id WHERE c.id=?""",(cid,)).fetchone()
         expected,reason=_local_binding(db,settings,legacy,cid,binding)
         if reason:
-            scopes[cid]=(reason,None,False)
+            scopes[cid]=(reason,None,None)
             continue
         evidence={row['resource']:row for row in db.execute("""SELECT resource,state,last_complete_run_id,error_code
             FROM of_collection_checkpoints WHERE connection_id=? AND parent_id=''
@@ -133,17 +133,17 @@ def _usage_scopes(db,settings,current,today):
         items=db.execute("""SELECT external_id,payload_json,last_run_id FROM of_resource_records
             WHERE connection_id=? AND resource='item' AND parent_id='' AND state='PRESENT' LIMIT 2""",(cid,)).fetchall()
         if not items:
-            scopes[cid]=('ITEM_RECORD_MISSING',None,False)
+            scopes[cid]=('ITEM_RECORD_MISSING',None,None)
             continue
         item=items[0]
         metadata=_object(json.loads(item['payload_json']))
         if len(items)!=1 or item['external_id']!=expected or metadata.get('id') not in (None,'',expected):
-            scopes[cid]=('ITEM_ASSOCIATION_MISMATCH',None,False)
+            scopes[cid]=('ITEM_ASSOCIATION_MISMATCH',None,None)
             continue
         expiry=metadata.get('consentExpiresAt')
         expiry_date=civil(expiry)
         connector=_object(metadata.get('connector'))
-        regulated=connector.get('isOpenFinance') is True
+        regulated=connector.get('isOpenFinance')
         audit=evidence.get('consents')
         if not metadata.get('id') or not metadata.get('status') or expiry is not None and not expiry_date:
             reason='ITEM_METADATA_INCOMPLETE'
@@ -196,6 +196,7 @@ def credit_usage(db,settings,accounts,current,views,values,parse_amount):
     credit_connections={cid for (cid,_),row in accounts.items() if cid in current and row['data'].get('type')=='CREDIT'}
     scopes=_usage_scopes(db,settings,credit_connections,values.today)
     cards=[]
+    open_rows=defaultdict(list)
     grouped=defaultdict(list)
     preserved=defaultdict(list)
     banks=defaultdict(set)
@@ -211,7 +212,7 @@ def credit_usage(db,settings,accounts,current,views,values,parse_amount):
         reference=civil(data.get('date') or data.get('updatedAt'))
         holder=credit.get('holderType')
         line,ambiguous=_line(credit,currency)
-        reason,binding,regulated=scopes.get(cid,('HISTORICAL_CONNECTION',None,False))
+        reason,binding,regulated=scopes.get(cid,('HISTORICAL_CONNECTION',None,None))
         local_error=None
         if not data.get('id') or not data.get('itemId'):
             local_error='ACCOUNT_METADATA_INCOMPLETE'
@@ -241,6 +242,9 @@ def credit_usage(db,settings,accounts,current,views,values,parse_amount):
         readable=bool(binding and not local_error)
         amount_reason=('AMOUNT_UNAVAILABLE' if used is None else 'NEGATIVE_REPORTED' if used<0 else None)
         current_reason=reason or local_error or amount_reason
+        open_balance=parse_amount(data.get('balance')) if readable and regulated is False else None
+        if open_balance is not None:
+            open_rows[(binding[0],account)].append({'amount':open_balance,'currency':currency,'reference':reference})
         blocked=current_reason in ('LOCAL_BINDING_MISMATCH','ITEM_ASSOCIATION_MISMATCH',
                                    'ACCOUNT_ID_MISMATCH','ACCOUNT_ITEM_MISMATCH')
         card={'connection_id':cid,'account_id':account,'institution':views[cid].institution,
@@ -253,7 +257,7 @@ def credit_usage(db,settings,accounts,current,views,values,parse_amount):
               'consolidation_reason':current_reason,'limit_reason':None,'limit':None,
               'provenance_verified':readable,'position_state':'CURRENT' if readable and not reason else
               'PRESERVED' if readable else 'UNAVAILABLE',
-              'reported_balance':_format(parse_amount(data.get('balance'))) if readable and not regulated else None}
+              'reported_balance':_format(open_balance),'open_balance_applicable':regulated is False}
         if readable and line_type!='CONSOLIDATED' and limit is not None and limit>=0:
             card['reported_limit']=_format(limit)
         if blocked:
@@ -283,11 +287,18 @@ def credit_usage(db,settings,accounts,current,views,values,parse_amount):
         if card['position_state']=='PRESERVED':
             previous=preserved_by_id[(card['connection_id'],card['account_id'])]
             card.update(preserved_used=previous['used'],limit=previous['limit'])
+    # A native balance is attributable to one Item and account. An overlapping
+    # observation is never added twice and conflicting copies are excluded.
+    balances=[rows[0] for rows in open_rows.values() if all(row==rows[0] for row in rows)]
+    open_balance=values.total(balances,partial=len(cards)!=len(balances),position=True)
+    open_balance.update(applicable=any(card['open_balance_applicable'] for card in cards),
+                        preserved=any(card['position_state']=='PRESERVED' and card['reported_balance'] is not None
+                                      for card in cards))
     diagnostics=Counter((card['consolidation_reason'] or 'INCLUDED',card['limit_reason']) for card in cards)
     return {'diagnostics':[{'usage':usage,'limit':limit,'count':count}
                            for (usage,limit),count in sorted(diagnostics.items(),key=lambda entry:(entry[0][0],entry[0][1] or ''))],
             'items':cards,'active_count':sum(card['status']=='ACTIVE' for card in cards),'count':len(cards),
-            'basis':'CREDIT_USED',**actual,'preserved':preserved_totals}
+            'basis':'CREDIT_USED',**actual,'preserved':preserved_totals,'open_balance':open_balance}
 
 
 def _totals(grouped,banks,cards,values,*,preserved=False):

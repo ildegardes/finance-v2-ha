@@ -1,4 +1,10 @@
-# Finance V17 0.1.41-open-finance.1
+# Finance V17 0.1.42-open-finance.1
+
+O Open Finance consolida o saldo em aberto nativo informado pela Pluggy, inclusive o da última posição comprovada. Em Conexões, a sessão administrativa privada permite habilitar ou pausar a coleta automática de cada conexão ativa. A preferência global e a política do add-on continuam sendo aplicadas.
+
+O add-on e a interface usam a arte aprovada do Finance V17. Consulte a [auditoria e o roteiro de homologação](../docs/open-finance/SALDO_POLITICA_042.md).
+
+## Finance V17 0.1.41-open-finance.1
 
 A Visão geral e a lista de cartões usam o mesmo registro de crédito importado. Quando a auditoria não confirma a posição atual, o último valor verificável aparece com sua referência. Faturas apresentam datas civis no resumo e conservam o horário e o fuso no detalhe.
 

@@ -16,8 +16,12 @@ def preferences(db, settings):
     return (bool(row['enabled']),row['interval_hours'],row['revision']) if row else (True,settings.open_finance_sync_interval_hours,0)
 
 
+def supervisor_allows(settings, connection):
+    return settings.open_finance_auto_sync_allowed is not False and connection.enabled
+
+
 def allowed(settings, connection):
-    return settings.open_finance_auto_sync_allowed is not False and connection.enabled and connection.auto_sync_enabled
+    return supervisor_allows(settings,connection) and connection.auto_sync_enabled
 
 
 def policy_reason(settings,connection,enabled):
@@ -87,7 +91,9 @@ def report(db,settings,now):
     enabled,interval,revision = preferences(db,settings)
     views = connection_views(db,settings)
     mismatched=legacy_binding_mismatches(db,settings)
-    permission = any(allowed(settings,view) and view.id not in mismatched for view in views.values())
+    revisions={row['connection_id']:row['revision'] for row in db.execute(
+        'SELECT connection_id,revision FROM of_connection_registry')}
+    permission = any(supervisor_allows(settings,view) and view.id not in mismatched for view in views.values())
     rows = []
     for view in views.values():
         reason=policy_reason(settings,view,enabled)
@@ -100,6 +106,9 @@ def report(db,settings,now):
         data = json.loads(item['payload_json']) if item else {}
         provider_next = _datetime(data.get('nextAutoSyncAt'))
         rows.append({'connection_id':view.id,'institution':view.institution,'effective':effective,'reason':reason,
+            'lifecycle':view.lifecycle,'requested_enabled':view.auto_sync_enabled,'revision':revisions.get(view.id,0),
+            'policy_editable':view.enabled and not view.historical and view.id not in mismatched
+                and (supervisor_allows(settings,view) or view.auto_sync_enabled),
             'action_required':latest['error_code'] if latest and latest['error_code'] in ACTION_REQUIRED else None,
             'last_pluggy_update':_iso(_datetime(data.get('lastUpdatedAt'))),
             'metadata_observed_at':item['observed_at'] if item else None,
@@ -124,7 +133,9 @@ def save(service,body):
         before,old_interval,revision = preferences(db,service.settings)
         if revision!=body['revision']:
             raise SyncError('SYNC_PREFERENCES_CHANGED',409)
-        if body['enabled'] and not any(allowed(service.settings,view) for view in connection_views(db,service.settings).values()):
+        mismatched=legacy_binding_mismatches(db,service.settings)
+        if body['enabled'] and not any(supervisor_allows(service.settings,view) and view.id not in mismatched
+                                      for view in connection_views(db,service.settings).values()):
             raise SyncError('AUTO_SYNC_DISABLED',403)
         interval = body['interval_hours']
         enabled = body['enabled']
