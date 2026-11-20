@@ -144,6 +144,8 @@ def _usage_scopes(db,settings,current,today):
         expiry_date=civil(expiry)
         connector=_object(metadata.get('connector'))
         regulated=connector.get('isOpenFinance')
+        if not isinstance(regulated,bool):
+            regulated=None
         audit=evidence.get('consents')
         if not metadata.get('id') or not metadata.get('status') or expiry is not None and not expiry_date:
             reason='ITEM_METADATA_INCOMPLETE'

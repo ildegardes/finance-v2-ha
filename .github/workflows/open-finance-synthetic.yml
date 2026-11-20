@@ -91,7 +91,14 @@ jobs:
       - name: Install synthetic browser test dependencies
         run: |
           npm install --no-save --ignore-scripts playwright@1.56.1
-          npx playwright install --with-deps chromium
+          npx playwright install chromium
+          # The hosted runner often already has the runtime libraries. Exercise
+          # the exact binary used below before installing system packages.
+          smoke='const {chromium}=require("playwright"); (async()=>{const browser=await chromium.launch({executablePath:chromium.executablePath()}); await browser.close()})().catch(error=>{console.error(error);process.exitCode=1})'
+          if ! node -e "$smoke"; then
+            npx playwright install-deps chromium
+            node -e "$smoke"
+          fi
           echo "PLAYWRIGHT_MODULE=$PWD/node_modules/playwright" >> "$GITHUB_ENV"
           echo "PLAYWRIGHT_CHROMIUM_EXECUTABLE=$(node -p "require('playwright').chromium.executablePath()")" >> "$GITHUB_ENV"
       - name: Connections, institutions and concurrency in browser

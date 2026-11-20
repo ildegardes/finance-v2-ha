@@ -245,7 +245,8 @@ def catalogs(c, configs):
                    for cid,row in connections.items()}
         for cid,cfg in configured.items():
             choices[cid] = dict(id=cid,institution=cfg.institution,enabled=cfg.enabled,
-                                historical=getattr(cfg,'historical',False))
+                                historical=getattr(cfg,'historical',False),
+                                lifecycle=getattr(cfg,'lifecycle',None))
         return dict(connections=sorted(choices.values(),key=lambda r:(r['institution'],r['id'])),
                     accounts=sorted(accounts.values(),key=lambda r:(r['connection_id'],r['external_id'])),
                     categories=sorted(categories.values(),key=lambda r:(r['connection_id'],r['category_key'])),
