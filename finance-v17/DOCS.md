@@ -1,4 +1,8 @@
-# Finance V17 0.1.42-open-finance.1
+# Finance V17 0.1.43-open-finance.1
+
+A Visão geral permite abrir as posições por classe e os registros por tipo de rendimento. O histórico de investimentos pode usar a data de coleta por instituição quando há mais observações completas nessa base. Consulte o [roteiro de atualização e homologação](../docs/open-finance/HISTORICO_INVESTIMENTOS_043.md).
+
+## Finance V17 0.1.42-open-finance.1
 
 O Open Finance consolida o saldo em aberto nativo informado pela Pluggy, inclusive o da última posição comprovada. Em Conexões, a sessão administrativa privada permite habilitar ou pausar a coleta automática de cada conexão ativa. A preferência global e a política do add-on continuam sendo aplicadas.
 

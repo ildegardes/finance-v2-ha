@@ -1,3 +1,9 @@
+## 0.1.43-open-finance.1
+
+- O gráfico de investimentos pode usar coletas completas da instituição quando os ativos têm datas financeiras distintas. O eixo identifica a data de coleta e a inspeção dos pontos mostra as referências originais.
+- A composição da carteira abre as posições filtradas por classe. As categorias de rendimentos abrem os créditos correspondentes, com o período e a moeda da Visão geral.
+- O add-on usa o mesmo slug e o schema 16.
+
 ## 0.1.42-open-finance.1
 
 - KPI e lista de cartões exibem o saldo em aberto nativo, com posições preservadas, datas e cobertura parcial.
