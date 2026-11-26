@@ -14,11 +14,15 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || path.join(process.env.
     page.on('request',r=>calls.push(new URL(r.url()).pathname));
     await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
     const shots=process.env.OF_CONSOLIDATION_SHOTS;
-    async function shot(name){
+    async function shot(name,element=null){
       if(!shots)return;
       fs.mkdirSync(shots,{recursive:true});
-      await page.evaluate(()=>window.scrollTo(0,0));
-      await page.screenshot({path:path.join(shots,name+'.png'),animations:'disabled',fullPage:true});
+      const target=path.join(shots,name+'.png');
+      if(element)await element.screenshot({path:target,animations:'disabled'});
+      else{
+        await page.evaluate(()=>window.scrollTo(0,0));
+        await page.screenshot({path:target,animations:'disabled',fullPage:true});
+      }
     }
     await page.goto(origin+'/app/unlock');
     await page.locator('input[name=token]').fill('synthetic-owner-only');
@@ -32,6 +36,27 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || path.join(process.env.
     const awaitAmount=async(name,amount)=>{await metric(name).getByText(amount,{exact:false}).first().waitFor();};
     try{await overview.locator('.of-six-kpis').waitFor();}catch(error){console.error(page.url(),await page.locator('body').innerText());throw error;}
     await selectPrivacy(page,'visible');
+    if(process.argv.includes('--mixed')){
+      const chart=overview.locator('.of-portfolio');
+      await chart.getByLabel('Instituição da série').selectOption({label:'Itaú'});
+      await chart.getByText(/Posições por data de coleta/).waitFor();
+      assert.equal(await chart.locator('svg circle').count(),2);
+      assert.match(await chart.locator('output').innerText(),/100\.350,00/);
+      await chart.getByLabel('Inspecionar observação').selectOption('0');
+      assert.match(await chart.locator('output').innerText(),/99\.300,00/);
+      assert.match(await chart.locator('output').innerText(),/18\/10\/2026/);
+      assert.equal(await chart.locator('.of-series-selected').getAttribute('data-series-marker'),'0');
+      await shot('itau-por-coleta',chart);
+      await page.setViewportSize({width:390,height:844});
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+      await shot('itau-por-coleta-mobile',chart);
+      await selectPrivacy(page,'full');
+      assert.equal(await chart.locator('svg').count(),0);
+      assert.doesNotMatch(await chart.innerHTML(),/100\.350,00|99\.300,00/);
+      assert.deepEqual(errors,[]);
+      console.log('PASS: Itaú collection dates, chart inspection, mobile and privacy');
+      return;
+    }
     if(process.argv.includes('--rounding')){
       const cases=await page.evaluate(async()=>{
         const {bankMoney,money,exchangeRate}=await import('/app/assets/privacy.js');
@@ -156,6 +181,28 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || path.join(process.env.
     assert.equal(await select.inputValue(),'original');
     await select.selectOption('USD');
     await awaitAmount('Investimentos','53.400,00');
+    await overview.getByRole('button',{name:'Renda variável',exact:true}).click();
+    const portfolio=page.locator('.of-wealth [data-wealth-result]');
+    await portfolio.getByText('FII sintético',{exact:true}).waitFor();
+    assert.equal(await portfolio.locator('.of-flow-item').count(),1);
+    await page.getByRole('button',{name:'Remover filtro da classe'}).click();
+    await portfolio.getByText('REAL',{exact:true}).waitFor();
+    await tab('Visão geral').click();
+    await overview.getByRole('button',{name:'Stocks',exact:true}).click();
+    await portfolio.locator('.of-flow-item').first().waitFor();
+    assert.equal(await portfolio.getByText('FII sintético',{exact:true}).count(),0);
+    assert.equal(await portfolio.getByText('REAL',{exact:true}).count(),0);
+    await tab('Visão geral').click();
+    await overview.getByRole('button',{name:'Juros sobre capital próprio',exact:true}).click();
+    const filteredIncome=page.locator('[data-income-result]');
+    await filteredIncome.getByText('Entrada COR JSCP MACA3',{exact:true}).waitFor();
+    assert.equal(await filteredIncome.locator('li').count(),1);
+    await tab('Visão geral').click();
+    await overview.getByRole('button',{name:'Distribuições de REITs',exact:true}).click();
+    await filteredIncome.getByText('Evento sintético',{exact:true}).waitFor();
+    assert.equal(await filteredIncome.locator('li').count(),1);
+    assert.match(await filteredIncome.innerText(),/Charles Schwab/);
+    await tab('Visão geral').click();
     await overview.getByRole('button',{name:'Ver rendimentos e proventos'}).click();
     const income=page.locator('.of-investment-income');
     await income.getByText('Impostos retidos no exterior',{exact:true}).first().waitFor();

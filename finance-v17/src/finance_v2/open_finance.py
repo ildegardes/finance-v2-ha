@@ -242,7 +242,7 @@ class OpenFinanceService:
                 if state=='SUCCEEDED':
                     from .open_finance_analytics import _amount
                     from .open_finance_portfolio import capture_snapshot
-                    capture_snapshot(c,config.id,run_id,_amount)
+                    capture_snapshot(c,config.id,run_id,_amount,collected_at=stamp)
                 c.execute('UPDATE of_sync_runs SET state=?,finished_at=?,error_code=? WHERE id=? AND state=\'RUNNING\'',
                           (state,stamp,error,run_id))
                 c.execute('UPDATE of_connections SET sync_state=?,lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=? AND lease_token=?',

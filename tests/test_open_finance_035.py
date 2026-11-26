@@ -258,6 +258,27 @@ class Release35Tests(unittest.TestCase):
             self.assertEqual(independent['institutions'][0]['connection_id'],'other-bank')
             self.assertEqual(independent['portfolio_history']['latest_position'],'235')
 
+    def test_identical_investment_values_are_retained_once_per_collection_day(self):
+        case=self.case
+        service=case.fixture.service
+        first_day=datetime(2026,10,27,13,tzinfo=timezone.utc)
+        provider=case.fixture.provider
+        original=provider.send
+        def send(method,path,*args):
+            status,payload=original(method,path,*args)
+            if path.startswith('/investments?') and status==200:
+                payload['results'][0].update(date='2026-10-25',balance=235)
+            return status,payload
+        provider.send=send
+        run_ids=[]
+        for hours in (0,2,24):
+            service.clock=FixedClock(first_day+timedelta(hours=hours),'UTC')
+            self.assertEqual((run:=case.fixture.sync())['state'],'SUCCEEDED')
+            run_ids.append(run['id'])
+        self.assertEqual(case.sql(
+            'SELECT run_id FROM of_portfolio_snapshots WHERE run_id IN (?,?,?) ORDER BY observed_at',
+            tuple(run_ids)),[(run_ids[0],),(run_ids[-1],)])
+
     def test_forward_migration_preserves_existing_snapshot_rows(self):
         case=self.case
         with closing(connect(case.db)) as db:

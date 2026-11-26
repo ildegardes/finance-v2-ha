@@ -12,12 +12,12 @@ from .open_finance_query import civil, read_view, search_key
 from .open_finance_registry import connection_views
 from .domain.clock import SystemClock
 from .open_finance_portfolio import portfolio_history
-from .open_finance_classification import AUTOMATIC, Classifier, Facts, NATURES, ORIGINS, normalize
+from .open_finance_classification import AUTOMATIC, Classifier, Facts, NATURES, ORIGINS, PROVENTS, normalize
 from .open_finance_insights import banking_insights, card_insights, classification_center, economic_evidence, masked_card_text
 from .open_finance_domain import _origin, _context_at_origin, _freshness
 
 PARAMS = {'start', 'end', 'connection_id', 'account_id', 'category', 'product',
-          'status', 'direction', 'currency', 'search', 'page', 'page_size', 'history', 'bill_id', 'nature', 'effective_category', 'origin', 'review', 'rule', 'bucket', 'group_by', 'group_order', 'center', 'effective_key', 'presentation', 'portfolio_window', 'portfolio_connection', 'investment', 'provent', 'sort', 'flow_component', 'card_economic'}
+          'status', 'direction', 'currency', 'search', 'page', 'page_size', 'history', 'bill_id', 'nature', 'effective_category', 'origin', 'review', 'rule', 'bucket', 'group_by', 'group_order', 'center', 'effective_key', 'presentation', 'portfolio_window', 'portfolio_connection', 'investment', 'provent', 'sort', 'flow_component', 'card_economic', 'income_kind', 'income_currency'}
 
 
 def _parameters(query):
@@ -57,6 +57,11 @@ def _parameters(query):
                'flow_component':{'operating','application','redemption','internal','card_payment','other','pending'},
                'card_economic':{'purchase','installment','recognized_purchase','credit','settlement'}}
     if any(key in q and q[key] not in allowed for key,allowed in choices.items()):
+        raise SyncError('INVALID_QUERY',422)
+    income_kinds=PROVENTS.keys() | {'stock_dividend','reit_distribution','etf_distribution','foreign_dividend','foreign_interest'}
+    if ('income_kind' in q or 'income_currency' in q) and (
+            'presentation' not in q or q.get('income_kind') not in income_kinds
+            or not re.fullmatch(r'[A-Z]{3}',q.get('income_currency',''))):
         raise SyncError('INVALID_QUERY',422)
     for key in ('effective_category','rule','effective_key','investment','provent'):
         if key in q and (len(q[key])>256 or not q[key].isprintable()):

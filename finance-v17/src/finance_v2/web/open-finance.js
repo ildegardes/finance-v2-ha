@@ -77,7 +77,7 @@ export function createOpenFinance({api,view,heading,esc,navigation=null,state={}
       onAssets:context=>{
         if(!consolidated||!context.income)wealth?.showLegacy();
         domains.updateAssets(context);selectTab('assets',true);
-        if(context.income)incomes.open();
+        if(context.income)incomes.open(context);
       },
       onCards:context=>{domains.updateCard(context);selectTab('cards',true);},
       onConnections:(id,diagnostic,broker)=>{

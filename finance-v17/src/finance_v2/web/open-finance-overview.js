@@ -2,7 +2,7 @@ import {bankMark,cardIdentity} from './open-finance-identity.js';
 import {overviewWealth,wealthMoney} from './open-finance-wealth.js';
 import {presentationPreference,savePresentation,presentationControl,metricValue,metricNote,
   institutionPositions,portfolioQuality,unifiedIncomeMarkup,cardKpi,cardUsage} from './open-finance-consolidated.js';
-import {portfolioPanel} from './open-finance-portfolio.js';
+import {portfolioPanel,selectPortfolioPoint} from './open-finance-portfolio.js';
 import {automaticPanel,bridgePanel,cardPanel,incomePanel} from './open-finance-insights.js';
 import {createQueryGeneration} from './query-generation.js';
 import {bankMoney,dateBR,privacyMode} from './privacy.js';
@@ -126,7 +126,7 @@ function flowChart(data,filters,grouping,page,mode,money,esc){
   return '<div class="of-chart-legend"><span>Entradas</span><span>Saídas</span></div><div class="of-chart-frame">'+axis+'<div class="of-chart-groups">'+columns+'</div></div>'+navigation+alternative;
 }
 
-function allocation(investments,mode,amount,esc,unified=false){
+function allocation(investments,mode,amount,esc,unified=false,originalCurrency=''){
   if(mode==='full')return '<p class="of-chart-placeholder">Composição oculta em privacidade total.</p>';
   const classes=investments.by_class||[];
   if(!classes.length)return '<p class="of-chart-placeholder">Distribuição indisponível para esta moeda.</p>';
@@ -145,7 +145,9 @@ function allocation(investments,mode,amount,esc,unified=false){
   const chart=proportional?'<div class="of-allocation-ring" style="--segments:conic-gradient('+bands.join(',')+')"><div><small>Total representado</small><strong>'+amount(decimal(total))+'</strong></div></div>':'';
   const legend=classes.map((item,index)=>{
     const share=values[index]===null||!proportional?'':'<small>'+esc(percentBR.format(fraction(values[index],total)))+'</small>';
-    const label=unified?'<span>'+esc(investmentClassLabel(item.type))+'</span>':'<button type="button" class="of-link" data-investment-class="'+esc(item.type)+'">'+esc(classLabel(item.type))+'</button>';
+    const label='<button type="button" class="of-link" '+(unified?
+      'data-asset-class="'+esc(item.type)+'" data-asset-currency="'+esc(originalCurrency)+'"':
+      'data-investment-class="'+esc(item.type)+'"')+'>'+esc(unified?investmentClassLabel(item.type):classLabel(item.type))+'</button>';
     return '<li><span class="of-allocation-dot" aria-hidden="true" style="--dot:'+palette[index%palette.length]+'"></span>'+label+'<strong>'+amount(item.value)+'</strong>'+share+'</li>';
   }).join('');
   return '<div class="of-allocation-layout">'+chart+'<ul class="of-allocation-legend">'+legend+'</ul></div>'+
@@ -170,7 +172,7 @@ function unifiedAllocation(view,mode,esc){
     }
   }
   return (view.investments.partial?'<p>'+esc(metricNote(view.investments))+'</p>':'')+
-    (groups.size?moneyGroups([...groups],(data,currency)=>allocation(data,mode,value=>wealthMoney(value,currency,esc),esc,true),view.currency==='original'):
+    (groups.size?moneyGroups([...groups],(data,currency)=>allocation(data,mode,value=>wealthMoney(value,currency,esc),esc,true,view.currency==='original'?currency:''),view.currency==='original'):
       '<p class="of-chart-placeholder">Composição indisponível para este escopo.</p>');
 }
 
@@ -295,7 +297,7 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
       value=>wealthMoney(value,currency,esc),esc,showAdjusted),grouped):categoryRanking(secondary,mode,amount,esc,showAdjusted);
     const incomeCard=shared?'<section class="of-summary-card of-income-insight"><div class="of-section-heading"><div><h3>Rendimentos de investimentos</h3>'+
       '<p>Créditos identificados no período</p></div><button type="button" class="of-link" data-open-income>Ver rendimentos e proventos</button></div>'+
-      unifiedIncomeMarkup(shared.income,esc)+moneyGroups(views.filter(([,view])=>Object.keys(view.insights.automatic.counts).length||view.insights.automatic.position!=null),
+      unifiedIncomeMarkup(shared.income,esc,{drilldown:true})+moneyGroups(views.filter(([,view])=>Object.keys(view.insights.automatic.counts).length||view.insights.automatic.position!=null),
         (view,currency)=>automaticPanel(view.insights.automatic,value=>wealthMoney(value,currency,esc),esc),grouped)+'</section>':incomePanel(insights,amount,mode,esc);
     result.innerHTML=(filters.history==='1'?'<p class="of-notice">Histórico completo · O fluxo inclui conexões arquivadas. As posições abaixo têm como referência somente conexões ativas.</p>':'')+
       '<div class="of-six-kpis"><section><h3>Posição financeira atual</h3><div class="of-metrics of-kpi-group">'+
@@ -463,6 +465,7 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
     else queries.cancel();
   });
   result.onchange=event=>{
+    if(event.target.matches('[data-portfolio-point]')){selectPortfolioPoint(event.target);return;}
     if(event.target.matches('[data-portfolio-connection]')){state.portfolioConnection=event.target.value;load();return;}
     if(event.target.matches('[data-wealth-presentation]')){state.wealthPresentation=event.target.value;load();return;}
     if(event.target.matches('[data-portfolio-window]')){state.portfolioWindow=event.target.value;load();return;}
@@ -491,6 +494,12 @@ export function mountAnalyticsOverview({host,api,esc,catalog,navigation,state,to
     const context={...filters,account_id:'',product:'BANK',status:'POSTED',direction:'all',category:'',search:'',bill_id:''};
     if(button.dataset.metric==='accounts'){
       const target=result.querySelector('[data-current-positions]');target.focus();target.scrollIntoView({block:'start'});
+    }else if(button.dataset.incomeKind){
+      onAssets({...context,income:true,income_kind:button.dataset.incomeKind,income_currency:button.dataset.incomeCurrency});
+    }else if(button.dataset.assetClass){
+      onUnified({view:'portfolio',presentation:presented,connection_id:filters.connection_id||'',account_id:'',
+        provider:'',market:'',kind:'',search:'',history:false,
+        asset_class:button.dataset.assetClass,currency:button.dataset.assetCurrency});
     }else if(button.matches('[data-open-income],[data-metric="income"]')){
       onAssets({...context,income:true});
     }else if(button.matches('[data-overview-card],[data-all-overview-cards],[data-metric="cards"]')){

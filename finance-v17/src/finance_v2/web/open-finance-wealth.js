@@ -134,8 +134,9 @@ export function mountWealth({host,api,esc,navigation,state,today,getPeriod,snapt
     '<label>Buscar<input name="search" type="search" maxlength="160"></label>'+
     '<label>De<input name="start" type="date"></label><label>Até<input name="end" type="date"></label>'+
     '<label><input name="history" type="checkbox"> Incluir histórico arquivado</label></div></details><button type="submit">Aplicar</button></form>'+
-    '<div data-wealth-result aria-live="polite"></div>';
+    '<div data-wealth-class hidden></div><div data-wealth-result aria-live="polite"></div>';
   const form=section.querySelector('form'),result=section.querySelector('[data-wealth-result]'),queries=createQueryGeneration(navigation);
+  const classFilter=section.querySelector('[data-wealth-class]');
   const names=['view','market','provider','connection_id','account_id','currency','presentation','kind','sort','search','start','end','group'];
   state.group||='month';state.view||='portfolio';state.presentation||='original';state.sort||='name';
   let loaded=null,filters={},accounts=[],page=1,asset=null;
@@ -204,6 +205,7 @@ export function mountWealth({host,api,esc,navigation,state,today,getPeriod,snapt
   function history(){
     const points=loaded.points||[];
     const note=loaded.state==='OVERLAP'?'Selecione uma conexão para resolver a possível sobreposição.':
+      loaded.basis==='COLLECTION_DATE'?'Posições por data de coleta (UTC). As referências financeiras dos ativos podem diferir.':
       loaded.state==='FORMING'?'Histórico patrimonial em formação.':'Observações com referências comparáveis.';
     const rows=mode()==='full'?'':points.map(point=>'<li><span>'+formatDate(point.date)+'</span>'+
       (point.original?Object.entries(point.original).map(([currency,value])=>'<strong>'+money(value,currency)+'</strong>').join(''):
@@ -242,7 +244,17 @@ export function mountWealth({host,api,esc,navigation,state,today,getPeriod,snapt
       for(const key of ['kind','market','search'])delete filters[key];
     }
     if(filters.view!=='income')delete filters.group;
-    if(filters.view==='portfolio'){delete filters.start;delete filters.end;}
+    if(filters.view==='portfolio'){
+      delete filters.start;delete filters.end;
+      if(state.asset_class)filters.asset_class=state.asset_class;
+    }
+    classFilter.hidden=!filters.asset_class;
+    classFilter.innerHTML=filters.asset_class?'<p>Classe · '+esc(investmentClassLabel(filters.asset_class))+
+      ' <button type="button" class="of-link">Remover filtro da classe</button></p>':'';
+    const clear=classFilter.querySelector('button');
+    if(clear)clear.onclick=()=>{
+      state.asset_class='';page=1;load();form.elements.kind.focus();
+    };
     const params=new URLSearchParams({...filters,page:String(page)});
     if(mode()==='full')params.set('sort','name');
     loaded=null;
@@ -266,6 +278,7 @@ export function mountWealth({host,api,esc,navigation,state,today,getPeriod,snapt
     event.preventDefault();
     for(const name of names)if(mode()!=='full'||name!=='sort')state[name]=form.elements[name].value;
     state.history=form.elements.history.checked;
+    if(form.elements.view.value!=='portfolio'||form.elements.kind.value)state.asset_class='';
     asset=null;page=1;load();
   };
   result.onclick=event=>{
@@ -293,7 +306,8 @@ export function mountWealth({host,api,esc,navigation,state,today,getPeriod,snapt
     fields();controlMode();load();
   });
   return {show(context){
-    Object.assign(state,context);
+    if(state.asset_class&&!context.asset_class)state.currency='';
+    Object.assign(state,{asset_class:''},context);
     for(const key of ['connection_id','account_id'])form.elements[key].value='';
     asset=null;page=1;
   },showLegacy(){legacy.open=true;}};

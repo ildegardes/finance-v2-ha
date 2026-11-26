@@ -87,19 +87,38 @@ export function portfolioQuality(view,esc){
     (rates?'<ul class="of-category-list">'+rates+'</ul>':'');
 }
 
-export function unifiedIncomeMarkup(income,esc,{details=false}={}){
+function incomeRecord(row,esc){
+  return '<li><strong>'+esc(row.description||incomes[row.kind]||row.kind)+'</strong><span>'+
+    wealthMoney(row.amount,row.currency,esc)+(row.presented!=null&&row.presentation_currency!==row.currency?
+      ' · '+wealthMoney(row.presented,row.presentation_currency,esc):'')+'</span><small>'+
+    esc([dateBR(row.date),row.institution,row.provider,row.asset,row.overlap?'Possível sobreposição':''].filter(Boolean).join(' · '))+
+    '</small></li>';
+}
+
+export function unifiedIncomeMarkup(income,esc,{details=false,drilldown=false}={}){
   const hasCredits=Object.keys(income.credits.amounts).length;
-  const lines=income.by_kind.map(row=>'<li><strong>'+esc(incomes[row.kind]||row.kind)+'</strong><span>'+
-    wealthMoney(row.value,row.currency,esc)+'</span></li>').join('');
+  if(income.detail){
+    const {kind,currency,items,page,total,has_more:more}=income.detail;
+    return '<div class="of-section-heading"><h3>'+esc(incomes[kind]||kind)+' · '+esc(currency)+'</h3>'+
+      '<button type="button" class="of-link" data-income-clear>Ver todos os rendimentos</button></div>'+
+      '<p>'+countBR.format(total)+' registros · Página '+countBR.format(page)+'</p>'+
+      (items.length?'<ul class="of-category-list">'+items.map(row=>incomeRecord(row,esc)).join('')+'</ul>':
+        '<p>Nenhum crédito correspondente a este filtro.</p>')+
+      (page>1||more?'<div class="actions"><button type="button" data-income-page="-1" '+(page===1?'disabled':'')+
+        '>Anterior</button><button type="button" data-income-page="1" '+(more?'':'disabled')+'>Próxima</button></div>':'');
+  }
+  const lines=income.by_kind.map(row=>{
+    const label=esc(incomes[row.kind]||row.kind);
+    const title=drilldown&&row.kind!=='foreign_tax'&&row.kind!=='foreign_withholding'?
+      '<button type="button" class="of-link" data-income-kind="'+esc(row.kind)+'" data-income-currency="'+esc(row.currency)+'">'+label+'</button>':
+      '<strong>'+label+'</strong>';
+    return '<li>'+title+'<span>'+wealthMoney(row.value,row.currency,esc)+'</span></li>';
+  }).join('');
   const notes=(income.credits.partial?'<p>Subtotal dos créditos com valor e câmbio disponíveis. Possíveis sobreposições ficam fora da soma.</p>':'')+
     (income.tax.total?'<p>Tributos e retenções no exterior <strong>'+metricValue(income.tax,esc)+'</strong></p>':'')+
     (income.event_count?'<p>Rendimento líquido indisponível sem vínculo entre créditos e retenções.</p>':'');
   const events=details?'<details><summary>Créditos e tributos registrados</summary><p>Até 300 registros recentes.</p><ul class="of-category-list">'+
-    income.events.map(row=>'<li><strong>'+esc(incomes[row.kind]||row.kind)+'</strong><span>'+
-      wealthMoney(row.amount,row.currency,esc)+(row.presented!=null&&row.presentation_currency!==row.currency?
-        ' · '+wealthMoney(row.presented,row.presentation_currency,esc):'')+'</span><small>'+
-      esc([dateBR(row.date),row.institution,row.provider,row.asset,row.overlap?'Possível sobreposição':''].filter(Boolean).join(' · '))+
-      '</small></li>').join('')+'</ul></details>':'';
+    income.events.map(row=>incomeRecord(row,esc)).join('')+'</ul></details>':'';
   const months=details&&income.months.length?'<details><summary>Histórico mensal de rendimentos</summary><ul class="of-category-list">'+
     income.months.map(row=>'<li><span>'+esc(dateBR(row.month+'-01').slice(3))+'</span><strong>'+
       wealthMoney(row.value,row.currency,esc)+'</strong></li>').join('')+'</ul></details>':'';

@@ -9,7 +9,7 @@ import re
 from .open_finance_query import civil
 
 
-def capture_snapshot(db, connection, run, parse_amount):
+def capture_snapshot(db, connection, run, parse_amount, *, collected_at=None):
     checkpoint = db.execute("""SELECT state,record_count FROM of_resource_coverage
         WHERE connection_id=? AND resource='investments' AND parent_id='' AND run_id=?""",
         (connection,run)).fetchone()
@@ -23,8 +23,9 @@ def capture_snapshot(db, connection, run, parse_amount):
         data = json.loads(item['payload_json'])
         status = data.get('statusDetail') or {}
         detail = status.get('investments') or {}
-        if (data.get('status')=='OUTDATED' or data.get('executionStatus') in ('PARTIAL_SUCCESS','ERROR')
-                or detail.get('isUpdated') is False):
+        execution=data.get('executionStatus')
+        if (data.get('status')=='OUTDATED' or execution=='ERROR' or detail.get('isUpdated') is False
+                or execution in ('PARTIAL_SUCCESS','PARTIAL SUCCESS') and detail.get('isUpdated') is not True):
             return
     records = db.execute("""SELECT external_id,payload_json,observed_at FROM of_resource_records
         WHERE connection_id=? AND resource='investments' AND parent_id='' AND state='PRESENT' AND last_run_id=?""",
@@ -39,10 +40,11 @@ def capture_snapshot(db, connection, run, parse_amount):
             return
         positions.append((run,connection,record['external_id'],currency,format(value,'f'),
                           civil(data.get('date')),record['observed_at']))
-    previous = db.execute('''SELECT p.run_id FROM of_portfolio_snapshots p
+    previous = db.execute('''SELECT p.run_id,r.finished_at FROM of_portfolio_snapshots p
         JOIN of_sync_runs r ON r.id=p.run_id WHERE p.connection_id=? AND r.state='SUCCEEDED'
         ORDER BY r.rowid DESC LIMIT 1''',(connection,)).fetchone()
-    if previous:
+    # Retain a complete observation on a new collection day, even when values are flat.
+    if previous and civil(previous['finished_at'])==civil(collected_at or positions[0][-1]):
         already = {tuple(row) for row in db.execute('''SELECT external_id,currency,value,reference_date
             FROM of_portfolio_snapshots WHERE run_id=? AND connection_id=?''',(previous['run_id'],connection))}
         if {(external,currency,Decimal(value),reference)

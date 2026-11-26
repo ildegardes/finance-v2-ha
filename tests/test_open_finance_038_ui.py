@@ -18,11 +18,16 @@ class DashboardBrowser(unittest.TestCase):
     def test_high_precision_money_and_sanitized_diagnostics(self):
         self.exercise_dashboard(rounding=True)
 
-    def exercise_dashboard(self,missing_fx=False,rounding=False):
+    def test_itau_mixed_reference_history(self):
+        self.exercise_dashboard(mixed=True)
+
+    def exercise_dashboard(self,missing_fx=False,rounding=False,mixed=False):
         scenario=features.DashboardTests('test_original_and_converted_kpis_card_dedup_and_economic_income')
         scenario.setUp()
         self.addCleanup(scenario.doCleanups)
         case=scenario.fixture
+        if mixed:
+            features.mixed_history(case)
         if missing_fx:
             case.case.write('DELETE FROM portfolio_fx_rates')
             case.case.write('UPDATE st_balances SET reference_at=NULL')
@@ -37,6 +42,8 @@ class DashboardBrowser(unittest.TestCase):
         thread.start()
         try:
             args=['node','tests/open_finance_consolidation_ui.cjs',f'http://127.0.0.1:{server.server_port}']
+            if mixed:
+                args.append('--mixed')
             if missing_fx:
                 args.append('--missing-fx')
             if rounding:

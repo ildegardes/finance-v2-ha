@@ -97,7 +97,7 @@ export function mountInvestmentIncome({host,api,esc,navigation,getScope,consolid
   panel.append(section);
   const details=section.querySelector('details'),form=section.querySelector('form'),result=section.querySelector('[data-income-result]');
   const queries=createQueryGeneration(navigation);
-  let snapshot=null,scope={};
+  let snapshot=null,scope={},selection={},page=1;
   function paint(){
     const mode=privacyMode(),order=form.elements.order;
     const amount=value=>{
@@ -107,8 +107,8 @@ export function mountInvestmentIncome({host,api,esc,navigation,getScope,consolid
     };
     if(consolidated){
       if(snapshot)result.innerHTML=unifiedIncomeMarkup(snapshot.income,esc,{details:true})+
-        Object.entries(snapshot.movements).map(([currency,view])=>automaticPanel(view.insights.automatic,
-          value=>value==null?'Indisponível':mode==='visible'?esc(bankMoney(value,currency)):'<span aria-label="Valor oculto">••••••</span>',esc)).join('');
+        (snapshot.income.detail?'':Object.entries(snapshot.movements).map(([currency,view])=>automaticPanel(view.insights.automatic,
+          value=>value==null?'Indisponível':mode==='visible'?esc(bankMoney(value,currency)):'<span aria-label="Valor oculto">••••••</span>',esc)).join(''));
       return;
     }
     order.querySelector('[value=value]').disabled=mode==='full';
@@ -145,7 +145,10 @@ export function mountInvestmentIncome({host,api,esc,navigation,getScope,consolid
   async function load(){
     const query=queries.begin();
     const filters={start:form.elements.start.value,end:form.elements.end.value,currency:form.elements.currency.value,product:'BANK',status:'POSTED'};
-    if(consolidated)filters.presentation=scope.presentation||'BRL';
+    if(consolidated){
+      filters.presentation=scope.presentation||'BRL';
+      if(selection.income_kind)Object.assign(filters,selection,{page});
+    }
     if(scope.connection_id)filters.connection_id=scope.connection_id;
     if(scope.history==='1')filters.history='1';
     scope={...scope,...filters};
@@ -165,7 +168,9 @@ export function mountInvestmentIncome({host,api,esc,navigation,getScope,consolid
     scope={...getScope()};
     for(const key of ['start','end','currency'])form.elements[key].value=scope[key]||'';
   }
-  function queryCurrentPeriod(){
+  function queryCurrentPeriod(context){
+    page=1;
+    selection=context?.income_kind?{income_kind:context.income_kind,income_currency:context.income_currency}:{};
     initialize();
     if(form.checkValidity())load();
   }
@@ -173,11 +178,19 @@ export function mountInvestmentIncome({host,api,esc,navigation,getScope,consolid
     if(details.open)queries.cancel();
     else queryCurrentPeriod();
   });
-  form.onsubmit=event=>{event.preventDefault();load();};
+  form.onsubmit=event=>{event.preventDefault();page=1;load();};
+  result.onclick=event=>{
+    const button=event.target.closest('button');
+    if(button?.matches('[data-income-clear]')){
+      selection={};page=1;details.querySelector('summary').focus();load();
+    }else if(button?.matches('[data-income-page]')){
+      page+=Number(button.dataset.incomePage);load();
+    }
+  };
   if(form.elements.order)form.elements.order.onchange=paint;
   host.addEventListener('finance-privacy-changed',paint);
   host.addEventListener('of-tab-selected',event=>{
     if(event.detail!=='assets'){queries.cancel();details.open=false;}
   });
-  return {open:()=>{details.open=true;queryCurrentPeriod();details.querySelector('summary').focus();section.scrollIntoView({block:'start'});}};
+  return {open:context=>{details.open=true;queryCurrentPeriod(context);details.querySelector('summary').focus();section.scrollIntoView({block:'start'});}};
 }

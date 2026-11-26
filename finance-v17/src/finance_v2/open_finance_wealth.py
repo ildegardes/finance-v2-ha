@@ -7,7 +7,7 @@ import json
 import re
 
 from .open_finance import SyncError
-from .open_finance_query import read_view
+from .open_finance_query import civil, read_view
 from .open_finance_registry import connection_views
 from .open_finance_classification import normalize
 from .portfolio_fx import FX
@@ -16,7 +16,7 @@ from .snaptrade_normalize import code, day, decimal, text
 
 MAX_ROWS=30000
 PARAMS={'provider','connection_id','account_id','currency','presentation','market','kind',
-        'start','end','search','sort','page','page_size','history','view','asset','group'}
+        'start','end','search','sort','page','page_size','history','view','asset','group','asset_class'}
 
 
 def parameters(query):
@@ -30,6 +30,9 @@ def parameters(query):
         if name in result and result[name] not in valid:
             raise SyncError('INVALID_QUERY',422)
     if 'currency' in result and not code(result['currency']):
+        raise SyncError('INVALID_QUERY',422)
+    if 'asset_class' in result and (result.get('view','portfolio')!='portfolio'
+            or len(result['asset_class'])>207 or not result['asset_class'].isprintable()):
         raise SyncError('INVALID_QUERY',422)
     for name in ('connection_id','account_id','asset','kind','search'):
         if name in result and (len(result[name])>200 or not result[name].isprintable()):
@@ -294,13 +297,16 @@ def _history(db,q,accounts,current,fx,today,has_overlap):
            AND reference_date BETWEEN ? AND ?''',((asset,) if asset else ())+(scope,start,end)):
         sources[row['reference_date']][row['account_id']][row['currency']]=Decimal(row['market_value'])
     runs={}
+    collection_scope=len(members)==1 and next(iter(members.values()))['provider']=='PLUGGY'
     for row in _execute(db,'''SELECT p.connection_id,p.currency,p.reference_date,p.value,p.external_id,p.run_id,
-           r.finished_at FROM of_portfolio_snapshots p JOIN of_sync_runs r ON p.run_id=r.id
+           r.finished_at FROM of_portfolio_snapshots p JOIN of_sync_runs r ON p.run_id=r.id AND p.connection_id=r.connection_id
            WHERE p.connection_id IN (SELECT value FROM json_each(?)) AND r.state='SUCCEEDED'
              AND (? IS NULL OR p.external_id=?) AND (? IS NULL OR p.currency=?)
-             AND EXISTS(SELECT 1 FROM of_portfolio_snapshots candidate WHERE candidate.run_id=p.run_id
-                        AND candidate.connection_id=p.connection_id AND candidate.reference_date BETWEEN ? AND ?)
-           ORDER BY r.finished_at,p.run_id''',(scope,asset,asset,q.get('currency'),q.get('currency'),start,end)):
+             AND ((? AND substr(r.finished_at,1,10) BETWEEN ? AND ?) OR EXISTS(
+                  SELECT 1 FROM of_portfolio_snapshots candidate WHERE candidate.run_id=p.run_id
+                  AND candidate.connection_id=p.connection_id AND candidate.reference_date BETWEEN ? AND ?))
+           ORDER BY r.finished_at,r.rowid,p.external_id''',
+            (scope,asset,asset,q.get('currency'),q.get('currency'),collection_scope,start,end,start,end)):
         runs.setdefault((row['connection_id'],row['run_id']),[]).append(row)
     for (account,_),rows in runs.items():
         dates={row['reference_date'] for row in rows}
@@ -341,7 +347,46 @@ def _history(db,q,accounts,current,fx,today,has_overlap):
             continue
         points.append({'date':reference,'value':_format(sum((value for value,_ in values),Decimal(0))),
                       'fx':next((rate for _,rate in values if rate),None)})
-    return {'state':'AVAILABLE' if len(points)>1 else 'FORMING','points':points}
+    basis='FINANCIAL_REFERENCE'
+    if collection_scope:
+        observed=_history_by_collection(runs,expected,target,fx,start,end,today)
+        if len(observed)>len(points):
+            points,basis=observed,'COLLECTION_DATE'
+    return {'state':'AVAILABLE' if len(points)>1 else 'FORMING','points':points,'basis':basis}
+
+
+def _history_by_collection(runs,expected,target,fx,start,end,today):
+    points={}
+    for (account,_),rows in runs.items():
+        collected=civil(rows[0]['finished_at'])
+        if (not collected or not start<=collected<=end
+                or {row['currency'] for row in rows}!=expected.get(account)):
+            continue
+        references={row['reference_date'] for row in rows if row['reference_date']}
+        if any(ref>today or ref>collected for ref in references):
+            continue
+        amounts=defaultdict(Decimal)
+        rates={}
+        for row in rows:
+            currency,value=row['currency'],Decimal(row['value'])
+            if target!='original':
+                value,quote=fx.convert(value,currency,target,row['reference_date'])
+                if value is None:
+                    break
+                currency=target
+                if quote:
+                    rates[quote['date']]=quote
+            amounts[currency]+=value
+        else:
+            point={'date':collected,'references':sorted(references),
+                   'undated':sum(row['reference_date'] is None for row in rows),'fx_rates':list(rates.values())}
+            if target=='original':
+                point['original']={key:_format(value) for key,value in amounts.items()}
+            else:
+                point['value']=_format(amounts[target])
+            points[collected]=point
+    return [points[key] for key in sorted(points)]
+
 
 
 def report(db,settings,query,today):
@@ -370,7 +415,9 @@ def report(db,settings,query,today):
             investment_ids={row['account_id'] for row in current}
             return _history(db,q,[row for row in accounts if row['id'] in investment_ids],current,fx,today,overlap)
         rows=[row for row in brazil+foreign if _scope(row,q) and (not q.get('asset') or row['instrument_id']==q['asset'])]
-        matched_balances=[row for row in balances if _scope(row,q)] if not q.get('asset') else []
+        if q.get('asset_class'):
+            rows=[row for row in rows if asset_class(row)==q['asset_class']]
+        matched_balances=[row for row in balances if _scope(row,q)] if not (q.get('asset') or q.get('asset_class')) else []
         missing_resources=db.execute('''SELECT count(*) FROM st_checkpoints
             WHERE state IN ('FAILED','UNAVAILABLE','PARTIAL') AND resource IN ('balances','positions')
               AND account_id IN (SELECT value FROM json_each(?))''',

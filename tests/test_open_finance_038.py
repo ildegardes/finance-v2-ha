@@ -9,6 +9,7 @@ import unittest
 
 from finance_v2.db import connect
 from finance_v2.open_finance_analytics import analytics
+from finance_v2.open_finance_wealth import report
 from finance_v2.pluggy_coverage import project
 from finance_v2.open_finance_relations import record_batch
 from finance_v2.portfolio_fx import refresh
@@ -132,6 +133,17 @@ def seed(test):
                                   for day,rate in [(BEFORE,4),(DATE,5)]])
 
 
+def mixed_history(test):
+    with closing(connect(test.case.db)) as db:
+        for run,observed,reference,value in (
+                ('a'*32,BEFORE,'2026-10-18','300'),('b'*32,DATE,BEFORE,'350')):
+            stamp=observed+'T17:00:00Z'
+            db.execute('UPDATE of_sync_runs SET started_at=?,finished_at=? WHERE id=?',(stamp,stamp,run))
+            db.execute('UPDATE of_portfolio_snapshots SET observed_at=? WHERE run_id=?',(stamp,run))
+            db.execute("""INSERT INTO of_portfolio_snapshots(run_id,connection_id,external_id,currency,value,reference_date,observed_at)
+                          VALUES (?,'bank-test','second-holding','BRL',?,?,?)""",(run,value,reference,stamp))
+
+
 class DashboardTests(unittest.TestCase):
     def setUp(self):
         self.fixture=fixture.SnapTradeTests('test_discovery_currency_and_cash_once')
@@ -182,6 +194,40 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(self.value(individual['investments'],'USD'),23400)
         self.assertEqual([Decimal(row['value']) for row in individual['history']['points']],[20000,23400])
         self.assertEqual(individual['accounts']['amounts'],{})
+
+    def test_institution_history_can_use_collection_day_for_mixed_references(self):
+        mixed_history(self.fixture)
+        view=self.view(portfolio_connection='bank-test')['history']
+        self.assertEqual((view['state'],view['basis']),('AVAILABLE','COLLECTION_DATE'))
+        self.assertEqual([(row['date'],Decimal(row['value'])) for row in view['points']],
+                         [(BEFORE,99300),(DATE,100350)])
+        self.assertEqual(view['points'][1]['references'],[BEFORE,DATE])
+        self.assertEqual(Decimal(view['change']),1050)
+        self.assertEqual(self.view()['history']['points'],[])
+        with closing(connect(self.fixture.case.db)) as db:
+            historical=report(db,self.fixture.settings,{'view':['history'],'connection_id':['bank-test'],
+                              'start':[BEFORE],'end':[DATE]},DATE)
+        self.assertEqual(historical['basis'],'COLLECTION_DATE')
+        self.assertEqual(historical['points'][-1]['original'],{'BRL':'100350'})
+
+    def test_class_and_income_record_filters_match_overview(self):
+        with closing(connect(self.fixture.case.db)) as db:
+            stocks=report(db,self.fixture.settings,{'asset_class':['STOCK']},DATE)
+            domestic=report(db,self.fixture.settings,{'asset_class':['PLUGGY:EQUITY'],'currency':['BRL']},DATE)
+        self.assertTrue(stocks['items'])
+        self.assertTrue(all(row['asset_class']=='STOCK' and row['provider']=='SNAPTRADE' for row in stocks['items']))
+        self.assertEqual([row['label'] for row in domestic['items']],['FII sintético'])
+        data=self.view(income_kind='reit_distribution',income_currency='BRL')['income']
+        detail=data['detail']
+        self.assertEqual(detail['total'],1)
+        self.assertEqual(detail['items'][0]['asset'],'REAL')
+        self.assertEqual(detail['items'][0]['description'],'Evento sintético')
+        group=next(row for row in data['by_kind'] if row['kind']=='reit_distribution')
+        self.assertEqual(sum(Decimal(row['presented']) for row in detail['items']),Decimal(group['value']))
+        domestic=self.view('original',income_kind='interest_equity',income_currency='BRL')['income']['detail']
+        self.assertEqual([row['description'] for row in domestic['items']],['Entrada COR JSCP MACA3'])
+        empty=self.view('original',income_kind='interest_equity',income_currency='USD')['income']['detail']
+        self.assertEqual(empty['total'],0)
 
     def test_missing_stale_and_future_rate_and_different_references(self):
         case=self.fixture.case

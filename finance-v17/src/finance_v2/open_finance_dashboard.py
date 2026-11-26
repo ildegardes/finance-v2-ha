@@ -59,7 +59,7 @@ def movements(items,values,coverage_state):
     return groups
 
 
-def investment_income(items,foreign,values,overlap):
+def investment_income(items,foreign,values,overlap,q):
     events=[]
     for row in items:
         classification=row['classification']
@@ -67,6 +67,7 @@ def investment_income(items,foreign,values,overlap):
                 and classification['nature']=='INVESTMENT_INCOME':
             events.append({'provider':'PLUGGY','institution':row['institution'],'connection_id':row['connection_id'],
                 'account_id':row['account_id'],'asset':classification.get('asset'),'date':row['date'],
+                'description':row['description'],
                 'currency':code(row['currency']),'amount':abs(Decimal(row['amount'])) if row['amount'] is not None else None,
                 'kind':classification.get('provent','other'),'tax':False})
     seen=set()
@@ -85,7 +86,7 @@ def investment_income(items,foreign,values,overlap):
             seen.add(identity)
         events.append({'provider':'SNAPTRADE','institution':row['institution'],'connection_id':row['connection_id'],
                        'account_id':row['account_id'],'asset':row['ticker'],'date':row['date'],'currency':row['currency'],
-                       'amount':abs(amount) if amount is not None else None,'kind':kind,'tax':tax})
+                       'amount':abs(amount) if amount is not None else None,'kind':kind,'tax':tax,'description':row['description']})
     summary=defaultdict(Decimal)
     months=defaultdict(Decimal)
     for row in events:
@@ -100,11 +101,21 @@ def investment_income(items,foreign,values,overlap):
                 months[(row['date'][:7],currency)]+=presented
         row.update(amount=_format(row['amount']),presented=_format(presented),presentation_currency=currency)
     usable=[row for row in events if not row['overlap']]
+    detail={}
+    if q.get('income_kind'):
+        ordered=sorted((row for row in usable if not row['tax'] and row['kind']==q['income_kind']
+                        and row['presentation_currency']==q['income_currency'] and row['presented'] is not None),
+                       key=lambda row:row['date'],reverse=True)
+        size,number=q['page_size'],q['page']
+        offset=(number-1)*size
+        detail={'kind':q['income_kind'],'currency':q['income_currency'],'page':number,
+                'total':len(ordered),'has_more':offset+size<len(ordered),'items':ordered[offset:offset+size]}
     return {'credits':values.total([r for r in usable if not r['tax']],partial=len(usable)!=len(events)),
             'tax':values.total([r for r in usable if r['tax']],partial=any(r['tax'] and r['overlap'] for r in events)),
             'net':None,'by_kind':[{'currency':c,'kind':k,'value':_format(v)} for (c,k),v in sorted(summary.items())],
             'months':[{'month':month,'currency':currency,'value':_format(value)} for (month,currency),value in sorted(months.items(),reverse=True)],
-            'events':sorted(events,key=lambda r:r['date'],reverse=True)[:300],'event_count':len(events)}
+            'events':sorted(events,key=lambda r:r['date'],reverse=True)[:300],'event_count':len(events),
+            **({'detail':detail} if detail else {})}
 
 
 def dashboard(db,settings,q,today,views,current,records,accounts,checkpoints,items,parse_amount,bank_coverage):
@@ -181,7 +192,8 @@ def dashboard(db,settings,q,today,views,current,records,accounts,checkpoints,ite
         first,last=history['points'][0],history['points'][-1]
         history['change']=_format(Decimal(last['value'])-Decimal(first['value']))
     for point in history['points']:
-        values.record_quote(point.get('fx'))
+        for quote in point.get('fx_rates') or [point.get('fx')]:
+            values.record_quote(quote)
     history.update(window=window,connection_id=pref,consolidated=True,
                    connections=[{'id':cid,'label':label,'eligible':cid in invested}
                                 for cid,label in history_options.items()])
@@ -189,7 +201,7 @@ def dashboard(db,settings,q,today,views,current,records,accounts,checkpoints,ite
     activity_q={key:q[key] for key in ('start','end') if key in q}
     activity=_activity_view(db,{**activity_q,'view':'income','page':1,'page_size':25},snap_index,foreign,values.fx,
                             all_income=True,asset_classifier=asset_class)
-    income=investment_income(items,activity['items'],values,blocked)
+    income=investment_income(items,activity['items'],values,blocked,q)
     adjusted=[r for r in items if r['product']=='BANK' and r['classification_bucket']=='operating']
     bank_groups=movements(items,values,bank_coverage)
     automatic=values.total([obs for row,obs in zip(positions,portfolio_obs) if row['provider']=='PLUGGY' and
